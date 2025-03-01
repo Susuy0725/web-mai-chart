@@ -1,1 +1,370 @@
 
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>muimui XD chart broker</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script>
+        let c, ctx;
+        let data;
+        let note = [];
+        let startTime;
+        let triggered = []
+        let T = 0;
+        let settings = {
+            'speed': 1,
+            'paused': true,
+            'disToMid': 0.3,
+            'noteThickness': 0.375
+        }
+
+        $(document).ready(function () {
+            settings.speed = parseFloat($("#speed").val());
+            $("#viewMode").prop("checked", settings.paused);
+            $("#time").prop("disabled", !settings.paused);
+            $("#editor")
+                .html(example)
+                .on("input", function () {
+                    data = $(this).val().replace(/(\r\n|\n|\r)/gm, "");
+                    decode(data);
+                });
+            $("#speed").on("input", function () {
+                settings.speed = parseFloat($(this).val());
+            });
+            $("#viewMode").on("input", function () {
+                settings.paused = $(this).prop("checked");
+                $("#time").prop("disabled", !settings.paused);
+                startTime = Date.now() - parseFloat($("#time").val());
+            });
+            c = $("#render")[0];
+            ctx = c.getContext("2d");
+            data = $("#editor").val().replace(/(\r\n|\n|\r)/gm, "");
+            decode(data);
+            requestAnimationFrame(render);
+        });
+
+        function decode(data) {
+            startTime = Date.now();
+            note = [];
+            triggered = []
+            let dataTemp = data.split(",");
+            let timeSum = 0;
+            let slice = 1;
+            let bpm = 60;
+
+            for (let i = 0; i < dataTemp.length; i++) {
+                let dat = dataTemp[i];
+
+                if (dat) {
+                    while (dat.includes("(") && dat.includes(")")) {
+                        bpm = parseFloat(dat.slice(dat.indexOf("(") + 1, dat.indexOf(")")));
+                        dat = dat.slice(0, dat.indexOf("(")) + dat.slice(dat.indexOf(")") + 1, dat.length);
+                    }
+                    dataTemp[i] = dat;
+
+                    while (dat.includes("{") && dat.includes("}")) {
+                        slice = parseFloat(dat.slice(dat.indexOf("{") + 1, dat.indexOf("}")));
+                        dat = dat.slice(dat.indexOf("}") + 1, dat.length);
+                    }
+                    dataTemp[i] = dat;
+
+                    if (dat.includes("/")) {
+                        dat = dat.split("/");
+                        for (let j = 0; j < dat.length; j++) {
+                            if (dat[j] == "") {
+                                continue;
+                            }
+                            note.push({ 'pos': dat[j], 'time': timeSum, bpm });
+                        }
+                    }
+                    dat = dataTemp[i];
+                }
+
+                if (!(dat.includes("/")) && dat) { note.push({ 'pos': dataTemp[i], 'time': timeSum, bpm }); }
+                timeSum += (1 / slice) * (60 / bpm) * 4000;
+            }
+
+            for (let i = 0; i < note.length; i++) {
+                let dat = note[i];
+
+                if (dat.pos.indexOf("h") != -1 && dat.pos.includes("[") && dat.pos.includes("]")) {
+                    let temp = dat.pos.split("[");
+                    temp[1] = temp[1].slice(0, temp[1].indexOf("]"));
+                    temp[1] = temp[1].split(":");
+                    temp[1][0] = parseFloat(temp[1][0]);
+                    temp[1][1] = parseFloat(temp[1][1]);
+                    temp[1] = temp[1][1] / temp[1][0];
+                    temp[1] == Infinity ? temp[1] = 0 : null;
+                    temp[0] = temp[0].split("h");
+                    temp[0] = temp[0][0];
+                    note[i] = ({ 'pos': temp[0], 'time': dat.time, 'holdTime': temp[1] * (60 / dat.bpm) * 4 });
+                }
+
+                if (dat.pos.includes("b")) {
+                    note[i].pos = dat.pos.slice(0, dat.pos.indexOf("b")) + dat.pos.slice(dat.pos.indexOf("b") + 1, dat.pos.length);
+                    note[i].break = true;
+                }
+
+                if (dat.pos.includes("x")) {
+                    note[i].pos = dat.pos.slice(0, dat.pos.indexOf("x")) + dat.pos.slice(dat.pos.indexOf("x") + 1, dat.pos.length);
+                    note[i].ex = true;
+                }
+
+                delete note[i].bpm;
+            }
+
+            for (let index = 0; index < note.length; index++) {
+                triggered.push(false);
+            }
+            if (note.length != 0) {
+                $("#time").prop("max", note[note.length - 1].time + 1000);
+            }
+
+            console.log(note);
+        }
+
+        function render() {
+            ctx.canvas.width = window.innerWidth / 2;
+            ctx.canvas.height = window.innerHeight;
+
+            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.shadowBlur = 3;
+            ctx.shadowColor = "#00000090";
+            ctx.lineWidth = ctx.canvas.width / 2 * 0.01;
+            ctx.beginPath();
+            ctx.arc(ctx.canvas.width / 2, ctx.canvas.height / 2, ctx.canvas.width / 2, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            if (settings.paused) {
+                T = parseFloat($("#time").val());
+            } else {
+                T = Date.now() - startTime;
+                $("#time").val(T);
+            }
+
+            for (let i = note.length - 1; i >= 0; i--) {
+                let n = note[i];
+                let t = (T - n.time) * (settings.speed) / 1000;
+
+                if (t >= -0.5/* && !isNaN(n.pos)*/ && t <= 0 || t <= n.holdTime) {
+                    if (n.holdTime != null) {
+                        hold(n.pos, ((- 0.5 - t) * ctx.canvas.width), n.holdTime * ctx.canvas.width, ctx.canvas.width / 2 * 0.15, n);
+                    } else {
+                        tap(n.pos, ((- 0.5 - t) * ctx.canvas.width), Math.abs(ctx.canvas.width / 2 * 0.15), n);
+                    }
+                }
+
+                if (t >= 0) {
+                    if (!triggered[i]) {
+                        $('#audio')[0].currentTime = 0;
+                        $('#audio')[0].play();
+                    }
+                    triggered[i] = true;
+                } else {
+                    triggered[i] = false;
+                }
+            }
+            ctx.beginPath();
+            ctx.strokeStyle = "black";
+            ctx.font = "10px Arial";
+            ctx.fillText("reading :" + triggered.indexOf(false), 10, 100);
+
+            requestAnimationFrame(render);
+        }
+
+        function tap(pos, t, r, no) {
+            pos = parseInt(pos[0]);
+            if (isNaN(pos)) {
+                return;
+            }
+            let ang = (0 - pos) / 8 * 2 * Math.PI + Math.PI / 8;
+            let midX = ctx.canvas.width / 2;
+            let midY = ctx.canvas.height / 2;
+            let ax = Math.sin(ang);
+            let ay = Math.cos(ang);
+            let d = 0 - midX * settings.disToMid;
+            let th = (1 - settings.noteThickness);
+            if (no.break) {
+                ctx.strokeStyle = "#FF5000";
+            } else {
+                let find = note.indexOf(note.find((element) => element.time == no.time));
+                if (note[find + 1] != null) {
+                    if (note[find] != no || (note[find + 1].time == no.time && note[find + 1])) {
+                        ctx.strokeStyle = "#FFDD00";
+                    } else {
+                        ctx.strokeStyle = "#FF00A0";
+                    }
+                } else {
+                    ctx.strokeStyle = "#FF00A0";
+                }
+            }
+            ctx.shadowBlur = 3;
+            ctx.shadowColor = "#00000090";
+            if (d > t) {
+                ctx.lineWidth = r * settings.noteThickness;
+                ctx.beginPath();
+                ctx.arc(midX + ax * t, midY + ay * t, Math.max(r * th, 0), 0, 2 * Math.PI);
+                ctx.stroke();
+            } else {
+                ctx.lineWidth = r * settings.noteThickness * t / d;
+                ctx.beginPath();
+                ctx.arc(midX + ax * d, midY + ay * d, Math.max(r * (t / d) * th, 0), 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+        }
+
+        function hold(pos, t, h, r, no) {
+            pos = parseInt(pos[0]);
+            if (isNaN(pos)) {
+                return;
+            }
+            let ang = (0 - pos) / 8 * 2 * Math.PI + Math.PI / 8;
+            let midX = ctx.canvas.width / 2;
+            let midY = ctx.canvas.height / 2;
+            let ax = Math.sin(ang);
+            let ay = Math.cos(ang);
+            let d = 0 - midX * settings.disToMid;
+            let th = (1 - settings.noteThickness);
+            if (no.break) {
+                ctx.strokeStyle = "#FF5000";
+            } else {
+                let find = note.indexOf(note.find((element) => element.time == no.time));
+                if (note[find + 1] != null) {
+                    if (note[find] != no || (note[find + 1].time == no.time && note[find + 1])) {
+                        ctx.strokeStyle = "#FFDD00";
+                    } else {
+                        ctx.strokeStyle = "#FF00A0";
+                    }
+                } else {
+                    ctx.strokeStyle = "#FF00A0";
+                }
+            }
+            ctx.shadowBlur = 3;
+            ctx.shadowColor = "#00000090";
+            if (d > t) {
+                ctx.lineWidth = r * settings.noteThickness;
+                ctx.beginPath();
+                ctx.moveTo(
+                    midX + ax * Math.max(t - r * th, 0 - midX - r * th),
+                    midY + ay * Math.max(t - r * th, 0 - midX - r * th));
+                ctx.lineTo(
+                    midX + ax * Math.max(t - r * th, 0 - midX - r * th) + Math.sin(ang - 60 * Math.PI / 180) * (r * th),
+                    midY + ay * Math.max(t - r * th, 0 - midX - r * th) + Math.cos(ang - 60 * Math.PI / 180) * (r * th));
+                ctx.lineTo(
+                    midX + ax * Math.min(t + h + r * th, d + r * th) + Math.sin(ang - 120 * Math.PI / 180) * (r * th),
+                    midY + ay * Math.min(t + h + r * th, d + r * th) + Math.cos(ang - 120 * Math.PI / 180) * (r * th));
+                ctx.lineTo(
+                    midX + ax * Math.min(t + h + r * th, d + r * th),
+                    midY + ay * Math.min(t + h + r * th, d + r * th));
+                ctx.lineTo(
+                    midX + ax * Math.min(t + h + r * th, d + r * th) + Math.sin(ang + 120 * Math.PI / 180) * (r * th),
+                    midY + ay * Math.min(t + h + r * th, d + r * th) + Math.cos(ang + 120 * Math.PI / 180) * (r * th));
+                ctx.lineTo(
+                    midX + ax * Math.max(t - r * th, 0 - midX - r * th) + Math.sin(ang + 60 * Math.PI / 180) * (r * th),
+                    midY + ay * Math.max(t - r * th, 0 - midX - r * th) + Math.cos(ang + 60 * Math.PI / 180) * (r * th));
+                ctx.lineTo(
+                    midX + ax * Math.max(t - r * th, 0 - midX - r * th),
+                    midY + ay * Math.max(t - r * th, 0 - midX - r * th));
+                ctx.lineTo(
+                    midX + ax * Math.max(t - r * th, 0 - midX - r * th) + Math.sin(ang - 60 * Math.PI / 180) * (r * th),
+                    midY + ay * Math.max(t - r * th, 0 - midX - r * th) + Math.cos(ang - 60 * Math.PI / 180) * (r * th));
+                ctx.stroke();
+            } else {
+                ctx.lineWidth = r * settings.noteThickness * t / d;
+                ctx.beginPath();
+                ctx.arc(
+                    midX + ax * d,
+                    midY + ay * d,
+                    Math.max(r * (t / d) * th, 0), 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+        }
+    </script>
+    <script>
+        let example = `(240){4}
+1h[4:1],2h[4:1],3h[4:1],4h[4:1],
+5h[4:1],6h[4:1],7h[4:1],8h[4:1],
+`;
+    </script>
+</head>
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+    }
+
+    #editor {
+        position: absolute;
+        left: 50%;
+        width: 50%;
+        height: 100vh;
+        line-height: 20px;
+        border: 2px solid #000;
+    }
+
+    #render {
+        position: absolute;
+        left: 0;
+        width: 50%;
+        height: 100vh;
+    }
+
+    .bruh {
+        position: absolute;
+        display: flex;
+        top: 0;
+        left: 0;
+        width: 50%;
+        height: auto;
+        background-color: #000;
+        color: #fff;
+        text-align: center;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .bruh div {
+        width: 100%;
+    }
+
+    .time-line {
+        position: absolute;
+        display: flex;
+        left: 0;
+        bottom: 0;
+        width: 50%;
+        height: auto;
+        background-color: #000;
+        color: #fff;
+        text-align: center;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .time-line>* {
+        width: 100%;
+    }
+</style>
+
+<body>
+    <canvas id="render"></canvas>
+    <textarea id="editor">
+    </textarea>
+    <audio id="audio" src="quak.mp3"></audio>
+    <div class="bruh">
+        <div>
+            速度
+            <input type="range" id="speed" value="1" min="0" max="10" step="0.1">
+        </div>
+    </div>
+    <div class="time-line">
+        <div><input type="checkbox" id="viewMode">暫停</div>
+        <div><input type="checkbox" id="loop" disabled>循環</div>
+        <input type="range" id="time" value="0" min="0" max="8" step="10" disabled>
+    </div>
+</body>
+
+</html>
