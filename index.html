@@ -20,7 +20,8 @@
             'paused': true,
             'disToMid': 0.3,
             'noteThickness': 0.375,
-            'offset': 0
+            'offset': 0,
+            'touchSpeed': 1
         }
         let bgm;
         let timeLine;
@@ -37,7 +38,7 @@
 
             $("#offset").on("input", function () {
                 settings.offset = parseFloat($(this).val());
-                if(isNaN(settings.offset)){
+                if (isNaN(settings.offset)) {
                     settings.offset = 0;
                 }
                 if (!isNaN(bgm[0].duration)) {
@@ -54,7 +55,7 @@
                 reader.readAsDataURL(file);
                 bgm[0].load();
 
-                if(!settings.paused){
+                if (!settings.paused) {
                     bgm[0].currentTime = T / 1000 + settings.offset;
                     bgm[0].play();
                 }
@@ -274,6 +275,14 @@
                         }
                     }
                 }
+
+                if (t >= -0.5 / (settings.touchSpeed) && (t <= 0 || t <= n.holdTime)) {
+                    if (n.holdTime != null) {
+                        touch(n.pos, ((- 0.5 - t * settings.touchSpeed) * ctx.canvas.width), n.touch, n);
+                    } else {
+                        touch(n.pos, ((- 0.5 - t * settings.touchSpeed) * ctx.canvas.width), n.touch, n);
+                    }
+                }
             }
             ctx.beginPath();
             ctx.strokeStyle = "black";
@@ -421,43 +430,50 @@
         }
 
         function touch(pos, t, typ, no) {
-            let ang;
             let midX = ctx.canvas.width / 2;
             let midY = ctx.canvas.height / 2;
+            let rs = { 'A': 2, 'B': 1, 'C': 0, 'D': 2, 'E': 1.5 };
+            let ang = (4 - pos) / 8 * 2 * Math.PI + Math.PI / 8;
+            if (typ == 'D' || typ == 'E') {
+                ang += Math.PI / 8;
+            }
             let ax = Math.sin(ang);
             let ay = Math.cos(ang);
-            let d = 0 - midX * settings.disToMid;
-            let th = (1 - settings.noteThickness);
+            let l = (ctx.canvas.width / 2) * 0.2;
+            let ht = (- 0.5 - t) / settings.touchSpeed;
 
             let find = note.indexOf(note.find((element) => element.time == no.time));
-            if (note[find + 1] != null) {
-                if (note[find] != no || (note[find + 1].time == no.time && note[find + 1])) {
-                    ctx.strokeStyle = "#FFDD00";
+            if (no.holdTime != null) {
+                ctx.strokeStyle = "#FF0000";
+            } else {
+                if (note[find + 1] != null) {
+                    if (note[find] != no || (note[find + 1].time == no.time && note[find + 1])) {
+                        ctx.strokeStyle = "#FFDD00";
+                    } else {
+                        ctx.strokeStyle = "#00A2E8";
+                    }
                 } else {
                     ctx.strokeStyle = "#00A2E8";
                 }
-            } else {
-                ctx.strokeStyle = "#00A2E8";
             }
+
             ctx.shadowBlur = 3;
             ctx.shadowColor = "#00000090";
-            if (d > t) {
-                ctx.lineWidth = r * settings.noteThickness;
-                ctx.beginPath();
-                ctx.arc(midX + ax * t, midY + ay * t, Math.max(r * th, 0), 0, 2 * Math.PI);
-                ctx.stroke();
-            } else {
-                ctx.lineWidth = r * settings.noteThickness * t / d;
-                ctx.beginPath();
-                ctx.arc(midX + ax * d, midY + ay * d, Math.max(r * (t / d) * th, 0), 0, 2 * Math.PI);
-                ctx.stroke();
-            }
+            ctx.lineWidth = l * 0.25;
+
+            ctx.beginPath();
+            ctx.strokeRect(midX - l / 2 + ax * (rs[typ] / 4 * ctx.canvas.width), midY - l / 2 + ay * (rs[typ] / 4 * ctx.canvas.width), l, l)
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.strokeStyle = "black";
+            ctx.font = "10px Arial";
+            ctx.fillText(ht ,midX - l / 2 + ax * (rs[typ] / 4 * ctx.canvas.width), midY - l / 2 + ay * (rs[typ] / 4 * ctx.canvas.width));
         }
     </script>
     <script>
         let example = `(240){4}
-1h[4:1],2h[4:1],3h[4:1],4h[4:1],
-5h[4:1],6h[4:1],7h[4:1],8h[4:1],
+A1,B1,C,D1,E1
 `;
     </script>
 </head>
