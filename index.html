@@ -1,4 +1,3 @@
-
 <html lang="en">
 
 <head>
@@ -13,41 +12,101 @@
         let startTime;
         let triggered = []
         let T = 0;
+        let sfxs = {
+            'guide': null
+        }
         let settings = {
             'speed': 1,
             'paused': true,
             'disToMid': 0.3,
-            'noteThickness': 0.375
+            'noteThickness': 0.375,
+            'offset': 0
         }
+        let bgm;
+        let timeLine;
 
         $(document).ready(function () {
             settings.speed = parseFloat($("#speed").val());
+            sfxs.guide = $("#sfx-guide")[0];
+            bgm = $("#audio");
+            timeLine = $("#time");
+            bgm.volume = 0.8;
+
             $("#viewMode").prop("checked", settings.paused);
             $("#time").prop("disabled", !settings.paused);
+
+            $("#offset").on("input", function () {
+                settings.offset = parseFloat($(this).val());
+                if(isNaN(settings.offset)){
+                    settings.offset = 0;
+                }
+                if (!isNaN(bgm[0].duration)) {
+                    bgm[0].currentTime = T / 1000 + settings.offset;
+                }
+            });
+
+            $("#music").on("input", function () {
+                let file = $(this)[0].files[0];
+                let reader = new FileReader();
+                reader.onload = function (e) {
+                    bgm.attr('src', e.target.result);
+                }
+                reader.readAsDataURL(file);
+                bgm[0].load();
+
+                if(!settings.paused){
+                    bgm[0].currentTime = T / 1000 + settings.offset;
+                    bgm[0].play();
+                }
+            });
+
             $("#editor")
                 .html(example)
                 .on("input", function () {
                     data = $(this).val().replace(/(\r\n|\n|\r)/gm, "");
-                    decode(data);
+                    try {
+                        note = simai_decode(data);
+                    } catch (error) {
+                        console.log(error);
+                    }
+                    if (!isNaN(bgm[0].duration)) {
+                        bgm[0].load();
+                        bgm[0].currentTime = T / 1000 + settings.offset;
+                    }
+                    settings.paused = true;
+                    $("#viewMode").prop("checked", settings.paused);
+                    $("#time").prop("disabled", !settings.paused);
+                    startTime = Date.now() - parseFloat($("#time").val());
+                    $("#time").val(0);
                 });
+
             $("#speed").on("input", function () {
                 settings.speed = parseFloat($(this).val());
             });
+
             $("#viewMode").on("input", function () {
                 settings.paused = $(this).prop("checked");
                 $("#time").prop("disabled", !settings.paused);
+                if (!isNaN(bgm[0].duration)) {
+                    settings.paused ? bgm[0].pause() : bgm[0].play();
+                }
                 startTime = Date.now() - parseFloat($("#time").val());
             });
+
             c = $("#render")[0];
             ctx = c.getContext("2d");
             data = $("#editor").val().replace(/(\r\n|\n|\r)/gm, "");
-            decode(data);
+            try {
+                note = simai_decode(data);
+            } catch (error) {
+                console.log(error);
+            }
             requestAnimationFrame(render);
         });
 
-        function decode(data) {
+        function simai_decode(data) {
             startTime = Date.now();
-            note = [];
+            let tempNote = [];
             triggered = []
             let dataTemp = data.split(",");
             let timeSum = 0;
@@ -60,12 +119,16 @@
                 if (dat) {
                     while (dat.includes("(") && dat.includes(")")) {
                         bpm = parseFloat(dat.slice(dat.indexOf("(") + 1, dat.indexOf(")")));
-                        dat = dat.slice(0, dat.indexOf("(")) + dat.slice(dat.indexOf(")") + 1, dat.length);
+                        if (dat.lastIndexOf("(") < dat.indexOf(")")) {
+                            dat = dat.slice(0, dat.slice(0, dat.indexOf(")")).lastIndexOf("(")) + dat.slice(dat.indexOf(")") + 1, dat.length);
+                        } else {
+                            break;
+                        }
                     }
                     dataTemp[i] = dat;
 
                     while (dat.includes("{") && dat.includes("}")) {
-                        slice = parseFloat(dat.slice(dat.indexOf("{") + 1, dat.indexOf("}")));
+                        slice = parseFloat(dat.slice(dat.lastIndexOf("{") + 1, dat.indexOf("}")));
                         dat = dat.slice(dat.indexOf("}") + 1, dat.length);
                     }
                     dataTemp[i] = dat;
@@ -76,18 +139,18 @@
                             if (dat[j] == "") {
                                 continue;
                             }
-                            note.push({ 'pos': dat[j], 'time': timeSum, bpm });
+                            tempNote.push({ 'pos': dat[j], 'time': timeSum, bpm });
                         }
                     }
                     dat = dataTemp[i];
                 }
 
-                if (!(dat.includes("/")) && dat) { note.push({ 'pos': dataTemp[i], 'time': timeSum, bpm }); }
+                if (!(dat.includes("/")) && dat) { tempNote.push({ 'pos': dataTemp[i], 'time': timeSum, bpm }); }
                 timeSum += (1 / slice) * (60 / bpm) * 4000;
             }
 
-            for (let i = 0; i < note.length; i++) {
-                let dat = note[i];
+            for (let i = 0; i < tempNote.length; i++) {
+                let dat = tempNote[i];
 
                 if (dat.pos.indexOf("h") != -1 && dat.pos.includes("[") && dat.pos.includes("]")) {
                     let temp = dat.pos.split("[");
@@ -99,30 +162,65 @@
                     temp[1] == Infinity ? temp[1] = 0 : null;
                     temp[0] = temp[0].split("h");
                     temp[0] = temp[0][0];
-                    note[i] = ({ 'pos': temp[0], 'time': dat.time, 'holdTime': temp[1] * (60 / dat.bpm) * 4 });
+                    tempNote[i] = ({ 'pos': temp[0], 'time': dat.time, 'holdTime': temp[1] * (60 / dat.bpm) * 4 });
+                    dat = tempNote[i];
                 }
 
                 if (dat.pos.includes("b")) {
-                    note[i].pos = dat.pos.slice(0, dat.pos.indexOf("b")) + dat.pos.slice(dat.pos.indexOf("b") + 1, dat.pos.length);
-                    note[i].break = true;
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("b")) + dat.pos.slice(dat.pos.indexOf("b") + 1, dat.pos.length);
+                    tempNote[i].break = true;
                 }
 
                 if (dat.pos.includes("x")) {
-                    note[i].pos = dat.pos.slice(0, dat.pos.indexOf("x")) + dat.pos.slice(dat.pos.indexOf("x") + 1, dat.pos.length);
-                    note[i].ex = true;
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("x")) + dat.pos.slice(dat.pos.indexOf("x") + 1, dat.pos.length);
+                    tempNote[i].ex = true;
                 }
 
-                delete note[i].bpm;
+                if (dat.pos.includes("f")) {
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("f")) + dat.pos.slice(dat.pos.indexOf("f") + 1, dat.pos.length);
+                    tempNote[i].hibana = true;
+                }
+
+                if (dat.pos[0] == 'A') {
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("A")) + dat.pos.slice(dat.pos.indexOf("A") + 1, dat.pos.length);
+                    tempNote[i].touch = 'A';
+                }
+
+                if (dat.pos[0] == 'B') {
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("B")) + dat.pos.slice(dat.pos.indexOf("B") + 1, dat.pos.length);
+                    tempNote[i].touch = 'B';
+                }
+
+                if (dat.pos[0] == 'C') {
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("C")) + dat.pos.slice(dat.pos.indexOf("C") + 1, dat.pos.length);
+                    if (tempNote[i].pos == '') {
+                        tempNote[i].pos = '1';
+                    }
+                    tempNote[i].touch = 'C';
+                }
+
+                if (dat.pos[0] == 'D') {
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("D")) + dat.pos.slice(dat.pos.indexOf("D") + 1, dat.pos.length);
+                    tempNote[i].touch = 'D';
+                }
+
+                if (dat.pos[0] == 'E') {
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("E")) + dat.pos.slice(dat.pos.indexOf("E") + 1, dat.pos.length);
+                    tempNote[i].touch = 'E';
+                }
+
+                delete tempNote[i].bpm;
             }
 
-            for (let index = 0; index < note.length; index++) {
+            for (let index = 0; index < tempNote.length; index++) {
                 triggered.push(false);
             }
-            if (note.length != 0) {
-                $("#time").prop("max", note[note.length - 1].time + 1000);
+            if (tempNote.length != 0) {
+                $("#time").prop("max", Math.max(tempNote[tempNote.length - 1].time + 1000, isNaN(bgm[0].duration) ? 0 : bgm[0].duration * 1000));
             }
 
-            console.log(note);
+            console.log(tempNote);
+            return tempNote;
         }
 
         function render() {
@@ -140,31 +238,41 @@
 
             if (settings.paused) {
                 T = parseFloat($("#time").val());
+                bgm[0].currentTime = T / 1000 + settings.offset;
             } else {
                 T = Date.now() - startTime;
                 $("#time").val(T);
             }
 
+
             for (let i = note.length - 1; i >= 0; i--) {
                 let n = note[i];
-                let t = (T - n.time) * (settings.speed) / 1000;
-
-                if (t >= -0.5/* && !isNaN(n.pos)*/ && t <= 0 || t <= n.holdTime) {
-                    if (n.holdTime != null) {
-                        hold(n.pos, ((- 0.5 - t) * ctx.canvas.width), n.holdTime * ctx.canvas.width, ctx.canvas.width / 2 * 0.15, n);
-                    } else {
-                        tap(n.pos, ((- 0.5 - t) * ctx.canvas.width), Math.abs(ctx.canvas.width / 2 * 0.15), n);
-                    }
-                }
+                let t = (T - n.time) / 1000;
 
                 if (t >= 0) {
                     if (!triggered[i]) {
-                        $('#audio')[0].currentTime = 0;
-                        $('#audio')[0].play();
+                        sfxs.guide.currentTime = 0;
+                        sfxs.guide.play();
                     }
                     triggered[i] = true;
                 } else {
                     triggered[i] = false;
+                }
+
+                if (t >= -0.5 / (settings.speed)/* && !isNaN(n.pos)*/ && (t <= 0 || t <= n.holdTime)) {
+                    if (n.holdTime != null) {
+                        if (n.touch) {
+
+                        } else {
+                            hold(n.pos, ((- 0.5 - t * (settings.speed)) * ctx.canvas.width), n.holdTime * ctx.canvas.width * (settings.speed), ctx.canvas.width / 2 * 0.15, n);
+                        }
+                    } else {
+                        if (n.touch) {
+
+                        } else {
+                            tap(n.pos, ((- 0.5 - t * (settings.speed)) * ctx.canvas.width), Math.abs(ctx.canvas.width / 2 * 0.15), n);
+                        }
+                    }
                 }
             }
             ctx.beginPath();
@@ -201,6 +309,7 @@
                     ctx.strokeStyle = "#FF00A0";
                 }
             }
+
             ctx.shadowBlur = 3;
             ctx.shadowColor = "#00000090";
             if (d > t) {
@@ -214,6 +323,12 @@
                 ctx.arc(midX + ax * d, midY + ay * d, Math.max(r * (t / d) * th, 0), 0, 2 * Math.PI);
                 ctx.stroke();
             }
+
+            ctx.strokeStyle = ctx.strokeStyle + '30';
+            ctx.lineWidth = r * Math.max(0.5 * t / d, 0.5) / 10;
+            ctx.beginPath();
+            ctx.arc(midX, midY, Math.max(0 - t, 0 - d), (Math.PI / -2 - Math.max(0.5 * t / d, 0.5)) - (ang), (Math.PI / -2 + Math.max(0.5 * t / d, 0.5)) - (ang));
+            ctx.stroke();
         }
 
         function hold(pos, t, h, r, no) {
@@ -272,13 +387,69 @@
                     midX + ax * Math.max(t - r * th, 0 - midX - r * th) + Math.sin(ang - 60 * Math.PI / 180) * (r * th),
                     midY + ay * Math.max(t - r * th, 0 - midX - r * th) + Math.cos(ang - 60 * Math.PI / 180) * (r * th));
                 ctx.stroke();
+
             } else {
                 ctx.lineWidth = r * settings.noteThickness * t / d;
                 ctx.beginPath();
-                ctx.arc(
-                    midX + ax * d,
-                    midY + ay * d,
-                    Math.max(r * (t / d) * th, 0), 0, 2 * Math.PI);
+                ctx.beginPath();
+                ctx.moveTo(
+                    midX + ax * (d + r * th * t / d),
+                    midY + ay * (d + r * th * t / d));
+                ctx.lineTo(
+                    midX + ax * (d + r * th * t / d) + Math.sin(ang + 120 * Math.PI / 180) * (r * th * t / d),
+                    midY + ay * (d + r * th * t / d) + Math.cos(ang + 120 * Math.PI / 180) * (r * th * t / d));
+                ctx.lineTo(
+                    midX + ax * (d + r * th * -t / d) + Math.sin(ang + 60 * Math.PI / 180) * (r * th * t / d),
+                    midY + ay * (d + r * th * -t / d) + Math.cos(ang + 60 * Math.PI / 180) * (r * th * t / d));
+                ctx.lineTo(
+                    midX + ax * (d + r * th * -t / d),
+                    midY + ay * (d + r * th * -t / d));
+                ctx.lineTo(
+                    midX + ax * (d + r * th * -t / d) + Math.sin(ang - 60 * Math.PI / 180) * (r * th * t / d),
+                    midY + ay * (d + r * th * -t / d) + Math.cos(ang - 60 * Math.PI / 180) * (r * th * t / d));
+                ctx.lineTo(
+                    midX + ax * (d + r * th * t / d) + Math.sin(ang - 120 * Math.PI / 180) * (r * th * t / d),
+                    midY + ay * (d + r * th * t / d) + Math.cos(ang - 120 * Math.PI / 180) * (r * th * t / d));
+                ctx.lineTo(
+                    midX + ax * (d + r * th * t / d),
+                    midY + ay * (d + r * th * t / d));
+                ctx.lineTo(
+                    midX + ax * (d + r * th * t / d) + Math.sin(ang + 120 * Math.PI / 180) * (r * th * t / d),
+                    midY + ay * (d + r * th * t / d) + Math.cos(ang + 120 * Math.PI / 180) * (r * th * t / d));
+                ctx.stroke();
+            }
+        }
+
+        function touch(pos, t, typ, no) {
+            let ang;
+            let midX = ctx.canvas.width / 2;
+            let midY = ctx.canvas.height / 2;
+            let ax = Math.sin(ang);
+            let ay = Math.cos(ang);
+            let d = 0 - midX * settings.disToMid;
+            let th = (1 - settings.noteThickness);
+
+            let find = note.indexOf(note.find((element) => element.time == no.time));
+            if (note[find + 1] != null) {
+                if (note[find] != no || (note[find + 1].time == no.time && note[find + 1])) {
+                    ctx.strokeStyle = "#FFDD00";
+                } else {
+                    ctx.strokeStyle = "#00A2E8";
+                }
+            } else {
+                ctx.strokeStyle = "#00A2E8";
+            }
+            ctx.shadowBlur = 3;
+            ctx.shadowColor = "#00000090";
+            if (d > t) {
+                ctx.lineWidth = r * settings.noteThickness;
+                ctx.beginPath();
+                ctx.arc(midX + ax * t, midY + ay * t, Math.max(r * th, 0), 0, 2 * Math.PI);
+                ctx.stroke();
+            } else {
+                ctx.lineWidth = r * settings.noteThickness * t / d;
+                ctx.beginPath();
+                ctx.arc(midX + ax * d, midY + ay * d, Math.max(r * (t / d) * th, 0), 0, 2 * Math.PI);
                 ctx.stroke();
             }
         }
@@ -347,22 +518,54 @@
     .time-line>* {
         width: 100%;
     }
+
+    .a1 {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        overflow-x: scroll;
+    }
+
+    #offset {
+        width: 50px;
+    }
+
+    #music {
+        width: 100px;
+    }
+
+    #bgm-time {
+        width: 100px;
+        font-family: monospace;
+    }
 </style>
 
 <body>
     <canvas id="render"></canvas>
     <textarea id="editor">
     </textarea>
-    <audio id="audio" src="quak.mp3"></audio>
+    <audio id="audio"></audio>
+    <audio id="sfx-guide" src="answer.wav"></audio>
     <div class="bruh">
-        <div>
-            速度
-            <input type="range" id="speed" value="1" min="0" max="10" step="0.1">
+        <div class="a1">
+            <div>
+                速度
+                <input type="range" id="speed" value="1" min="0.025" max="10" step="0.025">
+            </div>
+            <div>
+                音樂偏移
+                <input type="number" id="offset" value="0">
+            </div>
         </div>
+
     </div>
     <div class="time-line">
-        <div><input type="checkbox" id="viewMode">暫停</div>
-        <div><input type="checkbox" id="loop" disabled>循環</div>
+        <div class="a1">
+            <div><input type="checkbox" id="viewMode">暫停</div>
+            <div><input type="checkbox" id="loop" disabled>循環</div>
+            <div id="bgm-time">0:00/0:00</div>
+            <div><input type="file" id="music" accept="audio/*">背景音</div>
+        </div>
         <input type="range" id="time" value="0" min="0" max="8" step="10" disabled>
     </div>
 </body>
