@@ -1,0 +1,106 @@
+body {
+    margin: 0;
+    padding: 0;
+    overflow: clip;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#editor {
+    position: absolute;
+    left: 50%;
+    width: 50%;
+    height: 100vh;
+    line-height: 20px;
+    clip-path: rect(0 100% 100% 0);
+    transition: all ease 0.5s;
+    box-shadow: 0 0 5px #0000005e inset;
+}
+
+#render {
+    position: absolute;
+    left: 0;
+    width: 50%;
+    height: 100vh;
+    transition: width ease 0.5s;
+}
+
+.bruh {
+    position: absolute;
+    display: flex;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: auto;
+    background-color: #4d85ff70;
+    color: #fff;
+    text-align: center;
+    flex-direction: column;
+    align-items: flex-start;
+    transition: width ease 0.5s;
+    backdrop-filter: blur(2px);
+}
+
+.bruh div {
+    width: 100%;
+}
+
+.time-line {
+    position: absolute;
+    display: flex;
+    left: 0;
+    bottom: 0;
+    width: 50%;
+    height: auto;
+    background-color: #4d85ff70;
+    color: #fff;
+    text-align: center;
+    flex-direction: column;
+    align-items: flex-start;
+    transition: width ease 0.5s;
+    backdrop-filter: blur(2px);
+}
+
+.time-line>* {
+    width: calc(100% - 5px);
+    left: 5px;
+}
+
+.a1 {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    overflow-x: scroll;
+}
+
+#offset {
+    width: 50px;
+}
+
+#music {
+    width: 100px;
+}
+
+#bgm-time {
+    width: 100px;
+    font-family: monospace;
+}
+
+.imgs {
+    display: none;
+}
+
+#collapse {
+    width: 50px;
+    height: 80%;
+    transform: translateY(10%);
+    background-color: #ffffff7b;
+    border: none;
+    border-radius: 10px;
+    font-size: 20px;
+    color: #fff;
+    box-shadow: 0 2px 3px 0 #0000005e;
+}
+
+textarea {
+    resize: none;
+}

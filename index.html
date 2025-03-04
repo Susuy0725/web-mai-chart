@@ -78,12 +78,14 @@
             $("#collapse").on("click", function () {
                 if (settings.collaps) {
                     $("#editor").css("transform", "translateX(0)");
+                    $("#editor").css("width", "50%");
                     $("#render").css("width", "50%");
                     $(".time-line").css("width", "50%");
                     $(".bruh").css("width", "50%");
                     $(this).html(">");
                 } else {
                     $("#editor").css("transform", "translateX(100%)");
+                    $("#editor").css("width", "0");
                     $("#render").css("width", "100%");
                     $(".time-line").css("width", "100%");
                     $(".bruh").css("width", "100%");
@@ -259,6 +261,10 @@
                 if (dat.pos[0] == 'E') {
                     tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("E")) + dat.pos.slice(dat.pos.indexOf("E") + 1, dat.pos.length);
                     tempNote[i].touch = 'E';
+                }
+
+                if (dat.pos.includes("-")) {
+                    tempNote[i].pos = dat.pos.slice(0, dat.pos.indexOf("-")) + dat.pos.slice(dat.pos.indexOf("-") + 1, dat.pos.length);
                 }
 
                 delete tempNote[i].bpm;
@@ -624,6 +630,10 @@
     </script>
 </head>
 <style>
+    html {
+        width: 1vw;
+    }
+
     body {
         margin: 0;
         padding: 0;
@@ -638,7 +648,7 @@
         height: 100vh;
         line-height: 20px;
         border: 2px solid #000;
-        transition: transform ease 0.5s;
+        transition: width, transform ease 0.5s;
     }
 
     #render {
@@ -724,6 +734,10 @@
         font-size: 20px;
         color: #fff;
         box-shadow: 0 2px 3px 0 #0000005e;
+    }
+
+    textarea {
+        resize: none;
     }
 </style>
 
