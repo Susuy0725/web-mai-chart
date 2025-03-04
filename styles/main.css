@@ -9,7 +9,7 @@ body {
     position: absolute;
     left: 50%;
     width: 50%;
-    height: 100vh;
+    height: 100%;
     line-height: 20px;
     clip-path: rect(0 100% 100% 0);
     transition: all ease 0.5s;
@@ -60,8 +60,9 @@ body {
     backdrop-filter: blur(2px);
 }
 
-.time-line>* {
-    width: calc(100% - 5px);
+.time-line> input[type='range'] {
+    position: relative;
+    width: calc(100% - 10px);
     left: 5px;
 }
 
