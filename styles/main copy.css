@@ -13,7 +13,7 @@ body {
     line-height: 20px;
     clip-path: rect(0 100% 100% 0);
     transition: all ease 0.5s;
-    box-shadow: 5px 0px 3px -5px #000000c4 inset;
+    box-shadow: 0 0 5px #0000005e inset;
 }
 
 #render {
@@ -22,38 +22,7 @@ body {
     width: 50%;
     height: 100vh;
     transition: width ease 0.5s;
-    z-index: -10;
 }
-
-#timeline {
-    position: absolute;
-    -webkit-appearance: none;
-    appearance: none;
-    width: 50%;
-    height: 15px;
-    left: 0;
-    background: #ffffff89;
-    outline: none;
-    margin: 0;
-    top: 100%;
-    transform: translateY(-100%);
-    box-shadow: 0 0 3px #0000005e inset;
-}
-
-#timeline::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    /* Override default look */
-    appearance: none;
-    width: 10px;
-    /* Set a specific slider handle width */
-    height: 100%;
-    /* Slider handle height */
-    background: #ff3a3a;
-    /* Green background */
-    cursor: pointer;
-    /* Cursor on hover */
-}
-
 
 .bruh {
     position: absolute;
@@ -91,7 +60,7 @@ body {
     backdrop-filter: blur(2px);
 }
 
-.time-line>input[type='range'] {
+.time-line> input[type='range'] {
     position: relative;
     width: calc(100% - 10px);
     left: 5px;
