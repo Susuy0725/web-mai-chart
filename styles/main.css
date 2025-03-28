@@ -1,3 +1,17 @@
+@font-face {
+    font-family: 'Icon';
+    src: url('../Fonts/SEGOEICONS.TTF') format('truetype');
+}
+
+* {
+    -webkit-user-select: none;
+    /* Safari */
+    -ms-user-select: none;
+    /* IE 10 and IE 11 */
+    user-select: none;
+    /* Standard syntax */
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -9,35 +23,64 @@ body {
     position: absolute;
     left: 50%;
     width: 50%;
-    height: 100%;
+    height: calc(100% - 30px);
     line-height: 20px;
     clip-path: rect(0 100% 100% 0);
     transition: all ease 0.5s;
     box-shadow: 5px 0px 3px -5px #000000c4 inset;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 #render {
     position: absolute;
     left: 0;
     width: 50%;
-    height: 100vh;
+    height: calc(100% - 60px);
     transition: width ease 0.5s;
     z-index: -10;
 }
 
-#timeline {
+.controls {
     position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 60px;
+    width: 50%;
+}
+
+.controls-btns {
+    display: flex;
+    height: calc(100% - 20px);
+    width: 100%;
+    align-items: center;
+    justify-content: space-around;
+}
+
+#playBtn {
+    position: absolute;
+    font-family: Icon;
+    width: 25px;
+    height: 25px;
+    box-shadow: 0 0 2px black;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#timeline {
     -webkit-appearance: none;
     appearance: none;
-    width: 50%;
-    height: 15px;
+    width: 100%;
+    height: 20px;
     left: 0;
-    background: #ffffff89;
+    background: #ffe9e989;
     outline: none;
     margin: 0;
     top: 100%;
-    transform: translateY(-100%);
+    /*transform: translateY(-100%);*/
     box-shadow: 0 0 3px #0000005e inset;
+    border-radius: 2px;
 }
 
 #timeline::-webkit-slider-thumb {
@@ -45,15 +88,25 @@ body {
     /* Override default look */
     appearance: none;
     width: 10px;
-    /* Set a specific slider handle width */
     height: 100%;
-    /* Slider handle height */
-    background: #ff3a3a;
-    /* Green background */
+    background: #ff3232;
     cursor: pointer;
     /* Cursor on hover */
+    border-radius: 2px;
+    transition: all ease .2s;
+    box-shadow: 0 0 2px #0000005e;
 }
 
+#timeline::-webkit-slider-thumb:hover {
+    width: 15px;
+    height: calc(100% + 5px);
+    border-radius: 4px;
+    background: #ff6464;
+}
+
+#timeline:focus {
+    border: solid #0000005e 1px;
+}
 
 .bruh {
     position: absolute;
