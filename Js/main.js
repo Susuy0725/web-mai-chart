@@ -6,6 +6,8 @@ let settings = {
     'speed': 2,
     'pinkStar': false,
     'touchSpeed': 3,
+    //showSlide
+    //noEffects
 },
     play = {
         'pause': true,
