@@ -21,6 +21,7 @@ body {
 
 #editor {
     position: absolute;
+    bottom: 0;
     left: 50%;
     width: 50%;
     height: calc(100% - 30px);
@@ -33,11 +34,19 @@ body {
 
 #render {
     position: absolute;
+    top: 30px;
     left: 0;
     width: 50%;
-    height: calc(100% - 60px);
+    height: calc(100% - (60px + 30px));
     transition: width ease 0.5s;
     z-index: -10;
+}
+
+.actions{
+    position: absolute;
+    height: 30px;
+    width: 100%;
+    background: rgb(68, 78, 93);
 }
 
 .controls {

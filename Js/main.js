@@ -30,7 +30,6 @@ $(document).ready(function () {
         doc_height = $(document).height();
 
     let $editor = $("#editor"),
-        $answer = $("#sfx-guide")[0],
         data = example;
 
     let _sliderColor = ['#ff3232', '#FFE9E9'],
@@ -47,8 +46,7 @@ $(document).ready(function () {
             'touch': $("#sfx-touch")[0],
         };
 
-    ctx.canvas.width = doc_width;
-    ctx.canvas.height = (doc_height - $('.controls').height()) * 2;
+    _updCanvasRes();
 
     controls.play.text(icons[0 + play.btnPause]);
 
@@ -101,9 +99,13 @@ $(document).ready(function () {
     $(window).on("resize", function (e) {
         doc_width = $(document).width(),
             doc_height = $(document).height(),
-            ctx.canvas.width = doc_width,
-            ctx.canvas.height = (doc_height - $('.controls').height()) * 2;
+            _updCanvasRes();
     })
+
+    function _updCanvasRes() {
+        ctx.canvas.width = doc_width,
+            ctx.canvas.height = (doc_height - ($('.controls').height() + $('.actions').height())) * 2;
+    }
 
     function update() {
         if (!play.pause) controls.timeline.val((Date.now() - startTime) / 1000);
