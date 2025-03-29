@@ -8,8 +8,12 @@ let settings = {
     'touchSpeed': 3,
 },
     play = {
-        'pause': false,
-        'btnPause': false,
+        'pause': true,
+        'btnPause': true,
+    },
+    soundSettings = {
+        'answer': true,
+        'sfxs': true,
     };
 
 let notes = [{}],
@@ -24,6 +28,7 @@ $(document).ready(function () {
         doc_height = $(document).height();
 
     let $editor = $("#editor"),
+        $answer = $("#sfx-guide")[0],
         data = example;
 
     let _sliderColor = ['#ff3232', '#FFE9E9'],
@@ -31,12 +36,19 @@ $(document).ready(function () {
         controls = {
             'timeline': $("#timeline"),
             'play': $('#playBtn'),
+        },
+        sounds = {
+            'answer': $("#sfx-guide")[0],
+            'tap': $("#sfx-tap")[0],
+            'break': $("#sfx-break")[0],
+            'break_woo': $("#sfx-sound-break")[0],
+            'touch': $("#sfx-touch")[0],
         };
 
     ctx.canvas.width = doc_width;
     ctx.canvas.height = (doc_height - $('.controls').height()) * 2;
 
-    controls.play.text(icons[0]);
+    controls.play.text(icons[0 + play.btnPause]);
 
     $editor.on("input", function (e) {
         data = $editor.val()
@@ -54,7 +66,7 @@ $(document).ready(function () {
             play.pause = true;
         })
         .on("mouseup touchend", function () {
-            startTime = Date.now() - $(this).val() * 1000
+            startTime = Date.now() - $(this).val() * 1000;
             play.pause = play.btnPause;
         })
         .on("input", function () {
@@ -67,6 +79,7 @@ $(document).ready(function () {
         play.btnPause = !play.btnPause;
         play.pause = play.btnPause;
         $(this).text(icons[0 + play.btnPause]);
+        startTime = Date.now() - controls.timeline.val() * 1000;
     });
 
     $editor.html(example);
@@ -77,29 +90,33 @@ $(document).ready(function () {
         console.error(error);
     }
 
-    controls.timeline.prop("max", notes[notes.length - 1].time / 1000);
+    controls.timeline.prop("max", notes[notes.length - 1].time / 1000 + 1);
 
     startTime = Date.now();
 
     let noteImages = getImgs();
 
     $(window).on("resize", function (e) {
-        doc_width = $(document).width(), doc_height = $(document).height();
+        doc_width = $(document).width(),
+            doc_height = $(document).height(),
+            ctx.canvas.width = doc_width,
+            ctx.canvas.height = (doc_height - $('.controls').height()) * 2;
     })
 
     function update() {
         if (!play.pause) controls.timeline.val((Date.now() - startTime) / 1000);
+
         const t = controls.timeline.val() * 1000;
+        _currentTime = t;
         let _p = controls.timeline.val() / (controls.timeline.prop('max') - controls.timeline.prop('min')) * 100;
+
         controls.timeline.css('background',
             `linear-gradient(to right ,
             ${_sliderColor[0]} 0%,
             ${_sliderColor[0]} ${_p}%,
             ${_sliderColor[1]} ${_p}%,
              ${_sliderColor[1]} 100%)`
-        ),
-            ctx.canvas.width = doc_width,
-            ctx.canvas.height = (doc_height - $('.controls').height()) * 2;
+        );
 
         let w = ctx.canvas.width,
             h = ctx.canvas.height,
@@ -113,11 +130,15 @@ $(document).ready(function () {
             //hbw means half of it
             ;
 
-        ctx.drawImage(noteImages.outline,
-            (h > w ? -7 : (w - h) / 2), (h > w ? (h - w) / 2 - 7 : 0),
-            bw * 1.0175, bw * 1.0175);
-
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
         ctx.drawImage(noteImages.sensor,
+            (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
+            bw, bw);
+        ctx.shadowColor = '#00000000';
+        ctx.shadowBlur = 0;
+
+        ctx.drawImage(noteImages.outline,
             (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
             bw, bw);
 
@@ -149,7 +170,17 @@ $(document).ready(function () {
                     }
                 }
 
-                if (_t >= (settings.distanceToMid - 2) / settings.speed && _t <= (note.holdTime ?? 0)) {
+                if (_t >= (settings.distanceToMid - 2) / settings.speed && _t < (note.holdTime ?? 0)) {
+                    if (!triggered[i].length) {
+                        triggered[i] = false;
+                    } else {
+                        if (_t < 0) {
+                            triggered[i][0] = false;
+                        }
+                        if (_t < note.holdTime) {
+                            triggered[i][1] = false;
+                        }
+                    }
                     let d = (1 - settings.distanceToMid);
                     let nang = (parseInt(note.pos[0]) - 1) % 8;
                     nang = nang < 0 ? 0 : nang;
@@ -178,6 +209,45 @@ $(document).ready(function () {
                     }
                     //ctx.font = "50px Segoe UI";
                     //ctx.fillText((Math.min(_t, 0) + (d / settings.speed)) / (d / settings.speed), np.x, np.y);
+                }
+
+                function _play(hold) {
+                    if (soundSettings.answer) {
+                        sounds.answer.currentTime = 0;
+                        sounds.answer.play();
+                    }
+                    if (soundSettings.sfxs) {
+                        if (note.break && !hold) {
+                            sounds.break_woo.currentTime = 0;
+                            sounds.break.currentTime = 0;
+                            sounds.break_woo.play();
+                            sounds.break.play();
+                        } else {
+                            sounds.tap.currentTime = 0;
+                            sounds.tap.play();
+                        }
+                    }
+                }
+                if (_t >= 0) {
+                    if (!triggered[i].length) {
+                        if (!triggered[i]) {
+                            _play();
+                        }
+                        triggered[i] = true;
+                    } else {
+                        if (!triggered[i][0]) {
+                            _play();
+                        }
+                        triggered[i][0] = true;
+                    }
+                }
+                if (_t >= (note.holdTime ?? 0)) {
+                    if (triggered[i].length) {
+                        if (!triggered[i][1]) {
+                            _play(true);
+                        }
+                        triggered[i][1] = true;
+                    }
                 }
             }
         }
@@ -214,9 +284,29 @@ $(document).ready(function () {
                 }
 
                 if (_t >= -2 / settings.touchSpeed && _t <= (note.touchTime ?? 0)) {
-                    drawTouch(note.pos, 0.8, color, note.touch, ani1(_t < 0 ? -_t : 0) * 0.65);
+                    drawTouch(note.pos, 0.8, color, note.touch, ani1(_t < 0 ? -_t : 0) * 0.65, 8 - (_t / (-2 / settings.touchSpeed)) * 8);
                     //ctx.font = "50px Segoe UI";
                     //ctx.fillText((Math.min(_t, 0) + (d / settings.speed)) / (d / settings.speed), np.x, np.y);
+                }
+                function _play(hold) {
+                    if (soundSettings.answer) {
+                        sounds.answer.currentTime = 0;
+                        sounds.answer.play();
+                    }
+                    if (soundSettings.sfxs) {
+                        if (!hold) {
+
+                        } else {
+                            sounds.touch.currentTime = 0;
+                            sounds.touch.play();
+                        }
+                    }
+                }
+                if (_t >= (note.touchTime ?? 0)) {
+                    if (!triggered[i]) {
+                        _play();
+                    }
+                    triggered[i] = true;
                 }
             }
         }
@@ -321,7 +411,9 @@ $(document).ready(function () {
             str();
         }
 
-        function drawTouch(pos, size, color, type, distance) {
+        function drawTouch(pos, size, color, type, distance, opacity) {
+            opacity = Math.min(Math.max(opacity, 0), 1);
+            color = 'rgba(' + parseInt(color.substring(1, 3), 16) + ',' + parseInt(color.substring(3, 5), 16) + ',' + parseInt(color.substring(5, 7), 16) + ',' + opacity + ')'
             let s = hbw * settings.noteSize;
             size = size * s;
             size = Math.max(size, 0);
@@ -342,10 +434,10 @@ $(document).ready(function () {
             let ang = (pos - 0.5 - touchAngleOffset[type]) / 4 * Math.PI;
             let np = calAng(ang);
             ctx.shadowBlur = s * 0.2;
-            ctx.shadowColor = 'black';
+            ctx.shadowColor = 'rgba(0,0,0,' + opacity + ')';
             ctx.lineWidth = size * 0.6;
             distance += 0.6;
-            ctx.strokeStyle = 'white';
+            ctx.strokeStyle = 'rgba(255,255,255,' + opacity + ')';
             function str() {
                 ctx.beginPath();
                 ctx.moveTo(
@@ -663,7 +755,7 @@ function simai_decode(_data) {
         const flags = {
             "b": "break",
             "x": "ex",
-            "f": "hibana",
+            "f": "hanabi",
             "$": "star",
         };
         for (let flag in flags) {
@@ -698,7 +790,11 @@ function simai_decode(_data) {
     // 初始化 triggered 陣列（依 note 數量建立對應布林值）
     triggered = [];
     for (let index = 0; index < tempNote.length; index++) {
-        triggered.push(false);
+        if (tempNote[index].holdTime) {
+            triggered.push([false, false]);
+        } else {
+            triggered.push(false);
+        }
     }
 
     console.log(tempNote);
