@@ -42,11 +42,29 @@ body {
     z-index: -10;
 }
 
-.actions{
+.actions {
+    display: flex;
     position: absolute;
     height: 30px;
     width: 100%;
     background: rgb(68, 78, 93);
+    align-items: center;
+}
+
+.actions div {
+    margin-left: 4px;
+    height: 24px;
+    width: 70px;
+    background: #ffffff20;
+    border-radius: 4px;
+    border: 1px gray solid;
+    transition: background 100ms;
+    color: white;
+    text-align: center;
+}
+
+.actions div:hover {
+    background: #00000083;
 }
 
 .controls {
@@ -197,4 +215,31 @@ body {
 
 textarea {
     resize: none;
+}
+
+.dropdownlist {
+    position: absolute;
+    top: 30px;
+    width: 200px;
+}
+
+.dropdownlist ul {
+    padding: 2px;
+    margin: 0;
+    background: #00000083;
+    border-radius: 0 0 10px 10px;
+    box-shadow: 0 0 4px #0000005e;
+}
+
+.dropdownlist ul li {
+    background: #00000000;
+    color: white;
+    list-style-type: none;
+    padding: 5;
+    margin: 3px;
+    border-radius: 5px;
+}
+
+.dropdownlist ul li:hover{
+    background: #00000060;
 }
