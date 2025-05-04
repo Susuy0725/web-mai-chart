@@ -52,6 +52,7 @@ body {
 }
 
 .actions div {
+    display: flex;
     margin-left: 4px;
     height: 24px;
     width: 70px;
@@ -61,10 +62,19 @@ body {
     transition: background 100ms;
     color: white;
     text-align: center;
+    font-size: 16px;
+    font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
+    justify-content: center;
+    align-items: center;
+    text-shadow: 0 0 3px black;
 }
 
 .actions div:hover {
     background: #00000083;
+}
+
+.actions div:active {
+    background: #00000020;
 }
 
 .controls {
@@ -221,9 +231,12 @@ textarea {
     position: absolute;
     top: 30px;
     width: 200px;
+    font-size: 16px;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
 }
 
 .dropdownlist ul {
+    box-sizing: border-box;
     padding: 2px;
     margin: 0;
     background: #00000083;
@@ -238,8 +251,11 @@ textarea {
     padding: 5;
     margin: 3px;
     border-radius: 5px;
+    text-shadow: 0 2px 5px black;
+    transition: all 100ms;
 }
 
-.dropdownlist ul li:hover{
-    background: #00000060;
+.dropdownlist ul li:hover {
+    background: #4d505a;
+    text-shadow: 0 0 3px white;
 }

@@ -3,14 +3,15 @@ import { simai_decode } from "../Js/decode.js";
 let settings = {
     'distanceToMid': 0.28,
     'useStroke': true,
+    'roundStroke': true,
     'noteSpeed': 1,
     'noteSize': 0.09,
     'speed': 2,
     'pinkStar': false,
     'touchSpeed': 3,
     'holdEndNoSound': false,
-    //showSlide: true,
-    'noEffects': true,
+    //'showSlide': true,
+    //'noEffects': true,
 },
     play = {
         'pause': true,
@@ -181,7 +182,7 @@ $(document).ready(function () {
 
     $editor.html(example);
 
-    ababab()
+    ababab();
 
     startTime = Date.now();
 
@@ -218,6 +219,7 @@ $(document).ready(function () {
             hw = w / 2,
             hh = h / 2;
         ctx.clearRect(0, 0, w, h);
+        ctx.lineJoin = settings.roundStroke ? 'round' : 'butt';
 
         let bw = (h > w ? w : h),
             //bw means circle screen width
@@ -372,7 +374,7 @@ $(document).ready(function () {
                             triggered[i][1] = false;
                         }
                     }
-                    drawTouch(note.pos, 0.8, color, note.touch, ani1(_t < 0 ? -_t : 0) * 0.65, 8 - (_t / (-2 / settings.touchSpeed)) * 8, note.touchTime ?? false);
+                    drawTouch(note.pos, 0.8, color, note.touch, ani1(_t < 0 ? -_t : 0) * 0.65, 8 - (_t / (-2 / settings.touchSpeed)) * 8, note.touchTime, _t);
                     //ctx.font = "50px Segoe UI";
                     //ctx.fillText((Math.min(_t, 0) + (d / settings.speed)) / (d / settings.speed), np.x, np.y);
                 }
@@ -501,7 +503,7 @@ $(document).ready(function () {
             str();
         }
 
-        function drawTouch(pos, size, color, type, distance, opacity, hold = false) {
+        function drawTouch(pos, size, color, type, distance, opacity, holdtime, t = 0) {
             opacity = Math.min(Math.max(opacity, 0), 1);
             color = 'rgba(' + parseInt(color.substring(1, 3), 16) + ',' + parseInt(color.substring(3, 5), 16) + ',' + parseInt(color.substring(5, 7), 16) + ',' + opacity + ')'
             let s = hbw * settings.noteSize;
@@ -603,9 +605,9 @@ $(document).ready(function () {
 
                 _arc(hw + np.x * touchDisToMid[type] * hbw, hh + np.y * touchDisToMid[type] * hbw, size * 0.15)
             }
-            function strCh() {
-                ctx.strokeStyle = 'red';
-                ctx.fillStyle = 'red';
+            function strCh(fill = false) {
+                ctx.fillStyle = 'rgba(250,73,4,' + opacity + ')';
+                if (fill) ctx.strokeStyle = 'rgba(250,73,4,' + opacity + ')';
                 ctx.beginPath();
                 ctx.moveTo(
                     hw + np.x * touchDisToMid[type] * hbw + size * distance,
@@ -622,11 +624,11 @@ $(document).ready(function () {
                 ctx.lineTo(
                     hw + np.x * touchDisToMid[type] * hbw + size * distance,
                     hh + np.y * touchDisToMid[type] * hbw - size * (1 + distance) * Math.sqrt(2));
+                if (fill) ctx.fill();
                 ctx.stroke();
-                ctx.fill();
 
-                ctx.strokeStyle = 'blue';
-                ctx.fillStyle = 'blue';
+                ctx.fillStyle = 'rgba(0,141,244,' + opacity + ')';
+                if (fill) ctx.strokeStyle = 'rgba(0,141,244,' + opacity + ')';
                 ctx.beginPath();
                 ctx.moveTo(
                     hw + np.x * touchDisToMid[type] * hbw - size * distance,
@@ -643,10 +645,11 @@ $(document).ready(function () {
                 ctx.lineTo(
                     hw + np.x * touchDisToMid[type] * hbw - size * distance,
                     hh + np.y * touchDisToMid[type] * hbw - size * (1 + distance) * Math.sqrt(2));
+                if (fill) ctx.fill();
                 ctx.stroke();
 
-                ctx.strokeStyle = 'yellow';
-                ctx.fillStyle = 'yellow';
+                ctx.fillStyle = 'rgba(245,238,0,' + opacity + ')';
+                if (fill) ctx.strokeStyle = 'rgba(245,238,0,' + opacity + ')';
                 ctx.beginPath();
                 ctx.moveTo(
                     hw + np.x * touchDisToMid[type] * hbw + size * distance,
@@ -663,10 +666,11 @@ $(document).ready(function () {
                 ctx.lineTo(
                     hw + np.x * touchDisToMid[type] * hbw + size * distance,
                     hh + np.y * touchDisToMid[type] * hbw + size * (1 + distance) * Math.sqrt(2));
+                if (fill) ctx.fill();
                 ctx.stroke();
 
-                ctx.strokeStyle = 'green';
-                ctx.fillStyle = 'green';
+                ctx.fillStyle = 'rgba(17,167,105,' + opacity + ')';
+                if (fill) ctx.strokeStyle = 'rgba(17,167,105,' + opacity + ')';
                 ctx.beginPath();
                 ctx.moveTo(
                     hw + np.x * touchDisToMid[type] * hbw - size * distance,
@@ -683,11 +687,78 @@ $(document).ready(function () {
                 ctx.lineTo(
                     hw + np.x * touchDisToMid[type] * hbw - size * distance,
                     hh + np.y * touchDisToMid[type] * hbw + size * (1 + distance) * Math.sqrt(2));
+                if (fill) ctx.fill();
                 ctx.stroke();
 
-                _arc(hw + np.x * touchDisToMid[type] * hbw, hh + np.y * touchDisToMid[type] * hbw, size * 0.15)
+                ctx.strokeStyle = color;
+                _arc(hw + np.x * touchDisToMid[type] * hbw, hh + np.y * touchDisToMid[type] * hbw, size * 0.15);
             }
-            if (hold) {
+            function strPrg(t) {
+                ctx.lineWidth = size * 0.8;
+                let dis_1 = t, dis_2 = t - 0.25, dis_3 = t - 0.5, dis_4 = t - 0.75;
+                dis_1 = dis_1 < 0 ? 0 : dis_1;
+                dis_2 = dis_2 < 0 ? 0 : dis_2;
+                dis_3 = dis_3 < 0 ? 0 : dis_3;
+                dis_4 = dis_4 < 0 ? 0 : dis_4;
+                if (t >= 0) {
+                    dis_1 = dis_1 >= 0.25 ? 0.25 : dis_1;
+                    dis_1 = dis_1 / 0.25;
+                    dis_1 *= size * (3 + distance) * Math.sqrt(2);
+                    dis_2 = dis_2 >= 0.25 ? 0.25 : dis_2;
+                    dis_2 = dis_2 / 0.25;
+                    dis_2 *= size * (3 + distance) * Math.sqrt(2);
+                    dis_3 = dis_3 >= 0.25 ? 0.25 : dis_3;
+                    dis_3 = dis_3 / 0.25;
+                    dis_3 *= size * (3 + distance) * Math.sqrt(2);
+                    dis_4 = dis_4 >= 0.25 ? 0.25 : dis_4;
+                    dis_4 = dis_4 / 0.25;
+                    dis_4 *= size * (3 + distance) * Math.sqrt(2);
+
+                    ctx.strokeStyle = 'rgb(250,73,4)';
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        hw + np.x * touchDisToMid[type] * hbw,
+                        hh + np.y * touchDisToMid[type] * hbw - size * (3 + distance));
+                    ctx.lineTo(
+                        hw + np.x * touchDisToMid[type] * hbw + calAng(Math.PI * 0.75).x * dis_1,
+                        hh + np.y * touchDisToMid[type] * hbw - size * (3 + distance) + calAng(Math.PI * 0.75).y * dis_1);
+                    ctx.stroke();
+
+                    ctx.strokeStyle = 'rgb(245,238,0)';
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        hw + np.x * touchDisToMid[type] * hbw + size * (3 + distance),
+                        hh + np.y * touchDisToMid[type] * hbw);
+                    ctx.lineTo(
+                        hw + np.x * touchDisToMid[type] * hbw + size * (3 + distance) + calAng(Math.PI * 1.25).x * dis_2,
+                        hh + np.y * touchDisToMid[type] * hbw + calAng(Math.PI * 1.25).y * dis_2);
+                    ctx.stroke();
+
+                    ctx.strokeStyle = 'rgb(17,167,105)';
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        hw + np.x * touchDisToMid[type] * hbw,
+                        hh + np.y * touchDisToMid[type] * hbw + size * (3 + distance));
+                    ctx.lineTo(
+                        hw + np.x * touchDisToMid[type] * hbw + calAng(Math.PI * 1.75).x * dis_3,
+                        hh + np.y * touchDisToMid[type] * hbw + size * (3 + distance) + calAng(Math.PI * 1.75).y * dis_3);
+                    ctx.stroke();
+
+                    ctx.strokeStyle = 'rgb(0,141,244)';
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        hw + np.x * touchDisToMid[type] * hbw - size * (3 + distance),
+                        hh + np.y * touchDisToMid[type] * hbw);
+                    ctx.lineTo(
+                        hw + np.x * touchDisToMid[type] * hbw - size * (3 + distance) + calAng(Math.PI * 0.25).x * dis_4,
+                        hh + np.y * touchDisToMid[type] * hbw + calAng(Math.PI * 0.25).y * dis_4);
+                    ctx.stroke();
+                }
+            }
+            if (holdtime) {
+                strPrg(t / holdtime);
+                ctx.lineWidth = size * 0.6;
+                ctx.strokeStyle = 'rgba(255,255,255,' + opacity + ')';
                 strCh();
             } else {
                 str();
@@ -696,8 +767,8 @@ $(document).ready(function () {
             ctx.shadowColor = '#00000000';
             ctx.lineWidth = size * 0.35;
             ctx.strokeStyle = color;
-            if (hold) {
-                strCh();
+            if (holdtime) {
+                strCh(true);
             } else {
                 str();
             }
