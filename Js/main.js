@@ -99,13 +99,19 @@ function _playEffect(note, hold = false) {
 
 $(document).ready(function () {
     $('.file-menu-button').on('click', function () {
+        $('.dropdownlist .diff-menu').hide();
         $('.dropdownlist .file-menu').toggle();
+    });
+    $('.diff-menu-button').on('click', function () {
+        $('.dropdownlist .file-menu').hide();
+        $('.dropdownlist .diff-menu').toggle();
     });
 
     // Optional: Hide the dropdown when clicking outside of it
     $(document).on('click', function (event) {
         if (!$(event.target).closest('.actions').length && !$(event.target).closest('.dropdownlist').length) {
             $('.dropdownlist .file-menu').hide();
+            $('.dropdownlist .diff-menu').hide();
         }
     });
 
@@ -125,6 +131,42 @@ $(document).ready(function () {
             'timeline': $("#timeline"),
             'play': $('#playBtn'),
         };
+
+    let bgm = $("#bgm");
+
+    // 監聽 "Open Music" 按鈕的點擊事件
+    $('#openMusicBtn').on('click', function () {
+        // 隱藏下拉選單
+        $('.dropdownlist .file-menu').hide();
+
+        // 創建一個隱藏的檔案輸入元素
+        let fileInput = $('<input type="file" accept="audio/*" style="display: none;">');
+        $('body').append(fileInput); // 將輸入元素添加到 body 中
+
+        // 監聽檔案選擇事件
+        fileInput.on('change', function (event) {
+            const file = event.target.files[0]; // 取得選擇的檔案
+            if (file) {
+                const objectURL = URL.createObjectURL(file); // 為檔案創建 Object URL
+                bgm.attr('src', objectURL); // 設定 #bgm 的 src 屬性
+
+                // 當音樂載入後，更新時間軸並選擇性地播放
+                bgm.on('loadedmetadata', function () {
+                    maxTime = maxTime >= (bgm[0].duration + 1) * 1000 ? maxTime : (bgm[0].duration + 1) * 1000; // 更新最大時間 (毫秒)
+                    controls.timeline.prop("max", bgm[0].duration); // 更新時間軸的最大值 (秒)
+                    controls.timeline.val(0); // 重設時間軸到開頭
+                    // 更新時間軸背景
+                    controls.timeline.trigger('input');
+                });
+
+                bgm[0].load(); // 載入新的音訊來源
+            }
+            fileInput.remove(); // 移除檔案輸入元素
+        });
+
+        // 觸發檔案輸入元素的點擊事件，打開檔案選擇對話框
+        fileInput.click();
+    });
 
     _updCanvasRes();
 
@@ -156,16 +198,24 @@ $(document).ready(function () {
 
     $editor.on("input", function (e) {
         data = $editor.val()
-        ababab()
+        ababab();
     });
 
     controls.timeline
         .on("mousedown touchstart", function () {
             play.pause = true;
+            bgm[0].pause();
         })
         .on("mouseup touchend", function () {
             startTime = Date.now() - $(this).val() * 1000;
             play.pause = play.btnPause;
+            if (!play.pause) {
+                bgm[0].currentTime = parseFloat(controls.timeline.val());
+                bgm[0].play();
+            } else {
+                bgm[0].currentTime = parseFloat(controls.timeline.val());
+                bgm[0].pause();
+            };
         })
         .on("input", function () {
             startTime = Date.now() - $(this).val() * 1000;
@@ -177,7 +227,14 @@ $(document).ready(function () {
         play.btnPause = !play.btnPause;
         play.pause = play.btnPause;
         $(this).text(icons[0 + play.btnPause]);
-        startTime = Date.now() - controls.timeline.val() * 1000;
+        startTime = Date.now() - parseFloat(controls.timeline.val()) * 1000;
+        if (!play.pause) {
+            bgm[0].currentTime = parseFloat(controls.timeline.val());
+            bgm[0].play();
+        } else {
+            bgm[0].currentTime = parseFloat(controls.timeline.val());
+            bgm[0].pause();
+        };
     });
 
     $editor.html(example);

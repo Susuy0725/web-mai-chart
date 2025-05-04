@@ -130,7 +130,7 @@
 <body>
     <canvas id="render"></canvas>
     <textarea id="editor"></textarea>
-    <audio id="audio"></audio>
+    <audio id="bgm"></audio>
     <div class="controls">
         <input type="range" id="timeline" value="0.0" min="0" max="8" step="0.01">
         <div class="controls-btns">
@@ -139,12 +139,21 @@
     </div>
     <div class="actions">
         <div class="file-menu-button"><span>File</span></div>
+        <div class="diff-menu-button"><span>Difficulty</span></div>
     </div>
     <div class="dropdownlist">
         <ul class="file-menu" style="display: none;">
             <li>New</li>
-            <li>Open Music</li>
+            <li id="loadSimaiBtn">Open maidata</li>
+            <li id="openMusicBtn">Open Music</li>
             <li>Save</li>
+        </ul>
+        <ul class="diff-menu" style="display: none;">
+            <li>EASY</li>
+            <li>ADVANCED</li>
+            <li>EXPERT</li>
+            <li>MASTER</li>
+            <li>RE:MASTER</li>
         </ul>
     </div>
     <!--<div class="bruh">
