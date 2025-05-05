@@ -1,6 +1,6 @@
 import { simai_decode } from "../Js/decode.js";
 
-let settings = {
+export let settings = {
     'distanceToMid': 0.28,
     'useStroke': true,
     'roundStroke': true,
@@ -9,11 +9,17 @@ let settings = {
     'speed': 2,
     'pinkStar': false,
     'touchSpeed': 3,
+    'slideSpeed': 3,
     'holdEndNoSound': false,
     //'showSlide': true,
     //'noEffects': true,
 },
     play = {
+        'pauseBoth': function (btn, icons) {
+            play.btnPause = true;
+            play.pause = true;
+            $(btn).text(icons[0 + play.btnPause]);
+        },
         'pause': true,
         'btnPause': true,
     },
@@ -147,19 +153,20 @@ $(document).ready(function () {
         fileInput.on('change', function (event) {
             const file = event.target.files[0]; // 取得選擇的檔案
             if (file) {
+                play.pauseBoth(controls.play, icons);
+                bgm.attr('src', '');
                 const objectURL = URL.createObjectURL(file); // 為檔案創建 Object URL
                 bgm.attr('src', objectURL); // 設定 #bgm 的 src 屬性
+                bgm[0].load(); // 載入新的音訊來源
 
                 // 當音樂載入後，更新時間軸並選擇性地播放
                 bgm.on('loadedmetadata', function () {
                     maxTime = maxTime >= (bgm[0].duration + 1) * 1000 ? maxTime : (bgm[0].duration + 1) * 1000; // 更新最大時間 (毫秒)
-                    controls.timeline.prop("max", bgm[0].duration); // 更新時間軸的最大值 (秒)
+                    controls.timeline.prop("max", maxTime / 1000 + 1); // 更新時間軸的最大值 (秒)
                     controls.timeline.val(0); // 重設時間軸到開頭
                     // 更新時間軸背景
                     controls.timeline.trigger('input');
                 });
-
-                bgm[0].load(); // 載入新的音訊來源
             }
             fileInput.remove(); // 移除檔案輸入元素
         });
@@ -189,8 +196,9 @@ $(document).ready(function () {
             }
             maxTime += 1;
 
-            startTime = Date.now();
             controls.timeline.prop("max", maxTime / 1000 + 1);
+            play.pauseBoth(controls.play, icons);
+            bgm[0].pause();
         } catch (error) {
             console.error(error);
         }
@@ -296,11 +304,66 @@ $(document).ready(function () {
             (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
             bw, bw);
 
-        //tap and hold render
+
+        // slide render
         for (let i = notes.length - 1; i >= 0; i--) {
             let note = notes[i];
 
-            if (!note.starTime && !note.touch) {
+            if (note.slide) {
+                let notePosition = [];
+                for (let i = 0; i < 8; i++) {
+                    let ang = (i + 0.5) / 4 * Math.PI;
+                    notePosition.push(calAng(ang));
+                }
+
+                let _t = ((t - note.time) / 1000);
+                let color = '#009FF9';
+                if (note.break) {
+                    color = '#FF6C0C';
+                } else {
+                    let double = notes.findIndex((_note) => _note.time == note.time && notes.indexOf(_note) != i && _note.slide);
+                    if (double != -1) {
+                        color = '#FFD900';
+                    }
+                }
+
+                if (_t >= -1 / settings.slideSpeed && _t <= note.delay + note.slideTime) {
+                    triggered[i] = false;
+
+                    let d = (1 - settings.distanceToMid);
+                    let nang = (parseInt(note.slideHead[0]) - 1) % 8;
+                    let nang2 = (parseInt(note.slideEnd[0]) - 1) % 8;
+                    let np = notePosition[isNaN(nang) ? 0 : nang];
+                    np.x = hw + hbw * np.x;
+                    np.y = hh + hbw * np.y;
+                    nang = nang < 0 ? 0 : nang;
+                    nang2 = nang2 < 0 ? 0 : nang2;
+
+                    if (_t >= 0) {
+                        drawSlidePath(nang, nang2, note.slideType, color, _t / (note.delay + note.slideTime));
+                        drawStar(np.x, np.y, 1, color, (nang) / -4 * Math.PI);
+                    } else {
+                        drawSlidePath(nang, nang2, note.slideType, color, _t * settings.slideSpeed);
+                    }
+
+                    //ctx.font = "50px Segoe UI";
+                    //ctx.fillText((Math.min(_t, 0) + (d / settings.speed)) / (d / settings.speed), np.x, np.y);
+                }
+
+                if (_t >= 0) {
+                    triggered[i] = true;
+                }
+                if (_t >= (note.slideTime ?? 0)) {
+
+                }
+            }
+        }
+
+        //tap ,star and hold render
+        for (let i = notes.length - 1; i >= 0; i--) {
+            let note = notes[i];
+
+            if (!note.starTime && !note.touch && !note.slide) {
                 let notePosition = [];
                 for (let i = 0; i < 8; i++) {
                     let ang = (i + 0.5) / 4 * Math.PI;
@@ -318,7 +381,7 @@ $(document).ready(function () {
                 if (note.break) {
                     color = '#FF6C0C';
                 } else {
-                    let double = notes.findIndex((_note) => _note.time == note.time && notes.indexOf(_note) != i && !_note.starTime);
+                    let double = notes.findIndex((_note) => _note.time == note.time && notes.indexOf(_note) != i && !_note.slide);
                     if (double != -1) {
                         color = '#FFD900';
                     }
@@ -350,6 +413,8 @@ $(document).ready(function () {
                         } else {
                             drawTap(np.x, np.y, 1, color);
                         }
+                        //ctx.font = "50px Segoe UI";
+                        //ctx.fillText(i, np.x, np.y);
                     } else {
                         np.x = hw + hbw * np.x * (1 - d);
                         np.y = hh + hbw * np.y * (1 - d);
@@ -420,7 +485,7 @@ $(document).ready(function () {
                     return Math.log(99 * (t / settings.touchSpeed) + 1) / 2;
                 }
 
-                if (_t >= -2 / settings.touchSpeed && _t <= (note.touchTime ?? 0)) {
+                if (_t >= -1 / settings.touchSpeed && _t <= (note.touchTime ?? 0)) {
                     if (!triggered[i].length) {
                         triggered[i] = false;
                     } else {
@@ -520,6 +585,123 @@ $(document).ready(function () {
             ctx.lineWidth = size * 0.35;
             ctx.strokeStyle = color;
             str();
+        }
+
+        function drawSlidePath(startNp, endNp, type, color, t) {
+            PathRecorder
+            function PathRecorder() {
+                this.commands = [];
+                this.ctxPath = new Path2D();
+
+                this.moveTo = (x, y) => {
+                    this.commands.push(`M ${x} ${y}`);
+                    this.ctxPath.moveTo(x, y);
+                };
+
+                this.lineTo = (x, y) => {
+                    this.commands.push(`L ${x} ${y}`);
+                    this.ctxPath.lineTo(x, y);
+                };
+
+                this.bezierCurveTo = (cp1x, cp1y, cp2x, cp2y, x, y) => {
+                    this.commands.push(`C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x} ${y}`);
+                    this.ctxPath.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
+                };
+
+                this.toSVGPath = () => this.commands.join(' ');
+            }
+
+
+            function drawArrow(pathRecorder, spacing, drawArrowCallback) {
+                // 建立 SVG path 元素（離畫面可見區域外）
+                const svgNS = "http://www.w3.org/2000/svg";
+                const tempSvg = document.createElementNS(svgNS, "svg");
+                tempSvg.setAttribute("width", 0);
+                tempSvg.setAttribute("height", 0);
+                const pathEl = document.createElementNS(svgNS, "path");
+                pathEl.setAttribute("d", pathRecorder.toSVGPath());
+                tempSvg.appendChild(pathEl);
+                document.body.appendChild(tempSvg); // 插入 DOM 才能使用 getTotalLength
+
+                const totalLen = pathEl.getTotalLength();
+
+                for (let len = 0; len < totalLen; len += spacing) {
+                    const p1 = pathEl.getPointAtLength(len);
+                    const p2 = pathEl.getPointAtLength(len + 0.01); // 用一點點微小距離取方向
+
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const angle = Math.atan2(dy, dx); // 弧度
+
+                    drawArrowCallback(p1.x, p1.y, angle); // 交給使用者畫箭頭
+                }
+
+                // 清除臨時 SVG
+                document.body.removeChild(tempSvg);
+            }
+
+            let notePosition = [];
+            for (let i = 0; i < 8; i++) {
+                let ang = (i + 0.5) / 4 * Math.PI;
+                notePosition.push(calAng(ang));
+            }
+
+            let np = [notePosition[isNaN(startNp) ? 0 : startNp], notePosition[isNaN(endNp) ? 0 : endNp]]
+            np[0].x = hw + hbw * np[0].x;
+            np[0].y = hh + hbw * np[0].y;
+            np[1].x = hw + hbw * np[1].x;
+            np[1].y = hh + hbw * np[1].y;
+
+            let s = hbw * settings.noteSize;
+            let size = s;
+            ctx.shadowBlur = s * 0.2;
+            ctx.shadowColor = 'black';
+            ctx.lineWidth = size * 0.75;
+            ctx.font = "50px Segoe UI";
+            ctx.strokeStyle = color;
+            if (t < 0) {
+                color = color + (Math.floor((t + 1) / 2 * 255)).toString(16).padStart(2, '0');
+            }
+
+            switch (type) {
+                case '-':
+                    const a = new PathRecorder();
+                    a.moveTo(np[0].x, np[0].y);
+                    a.lineTo(np[1].x, np[1].y);
+                    drawArrow(a, s * 1.25, (x, y, angle) => {
+                        ctx.save();
+                        ctx.translate(x, y);
+                        ctx.rotate(angle);
+                        ctx.beginPath();
+                        ctx.moveTo(s, 0);       // 箭頭尖端
+                        ctx.lineTo(s * 0.6, s * -0.8);
+                        ctx.lineTo(0, s * -0.8);
+                        ctx.lineTo(s * 0.4, 0);
+                        ctx.lineTo(0, s * 0.8);
+                        ctx.lineTo(s * 0.6, s * 0.8);
+                        ctx.closePath();
+                        ctx.fillStyle = color;
+                        ctx.fill();
+                        ctx.restore();
+                    });
+                    break;
+                case '^':
+                    ctx.beginPath();
+                    ctx.arc(hw, hh, hbw,
+                        (startNp - 1.5) / 4 * Math.PI,
+                        (endNp - 1.5) / 4 * Math.PI,
+                        startNp - 1.5 > endNp - 1.5
+                    );
+                    ctx.stroke();
+                    break;
+                default:
+                    ctx.beginPath();
+                    ctx.moveTo(np[0].x, np[0].y);
+                    ctx.lineTo(np[1].x, np[1].y);
+                    ctx.stroke();
+                    break;
+            }
+
         }
 
         function drawHold(x, y, size, color, ang, l) {

@@ -12,8 +12,8 @@ export function simai_decode(_data) {
         let data = dataTemp[i];
         if (data) {
             // 解析 BPM 設定：用括號包住的數字，例如 "(120)"
-            let match = [data.match(/\(\d+\)|\(\d+.\d+\)/), data.match(/\{\d+\}|\{\d+.\d+\}/)];
-            console.log(match);
+            //let match = [data.match(/\(\d+\)|\(\d+.\d+\)/), data.match(/\{\d+\}|\{\d+.\d+\}/)];
+            //console.log(match);
             while (data.includes("(") && data.includes(")")) {
                 bpm = parseFloat(data.slice(data.indexOf("(") + 1, data.indexOf(")")));
                 if (data.lastIndexOf("(") < data.indexOf(")")) {
@@ -40,6 +40,28 @@ export function simai_decode(_data) {
                     tempNote.push({ pos: data[j], time: timeSum, bpm });
                 }
             }
+
+            if (data.includes("`")) {
+                const split = 256;
+                data = data.split("`");
+                for (let j = 0; j < data.length; j++) {
+                    if (data[j] === "") continue;
+                    tempNote.push({ pos: data[j], time: timeSum + j / split * (60 / bpm) * 4000, bpm });
+                }
+            }
+
+            // 1-2[4:1]*-3[4:1]*-4[4:1]
+            if (data.includes("*")) {
+                data = data.split("*");
+                //1-2[4:1]
+                //-3[4:1]
+                //-4[4:1]
+                for (let j = 0; j < data.length; j++) {
+                    if (data[j] === "") continue;
+                    tempNote.push({ pos: data[j], time: timeSum, bpm, head: data[0][0] });
+                }
+            }
+
             if (data.length > 1 && !isNaN(data)) {
                 for (let j = 0; j < data.length; j++) {
                     tempNote.push({ pos: data[j], time: timeSum, bpm });
@@ -47,7 +69,7 @@ export function simai_decode(_data) {
             }
             data = dataTemp[i];
         }
-        if (!(data.includes("/")) && data && !(data.length > 1 && !isNaN(data))) {
+        if (!(data.includes("`")) && !(data.includes("*")) && !(data.includes("/")) && data && !(data.length > 1 && !isNaN(data))) {
             tempNote.push({ pos: dataTemp[i], time: timeSum, bpm });
         }
         // 累加時間：此處公式依 slice 與 bpm 計算，4000 為單位比例，可依需求調整
@@ -56,36 +78,99 @@ export function simai_decode(_data) {
 
     // ──────────────────────────────
     // 輔助函式：解析 [參數] 部分，支援多種格式
-    function parseParameter(param, currentBpm) {
-        // 格式 4： x##y → BPM override 與直接秒數
+    function parseParameter(param, currentBpm) { // 確保函式是 export 的
+        let delay = 0; // 延遲時間，初始化為 0 毫秒
+        let durationStr = param; // 用於解析持續時間的部分
+        let duration = NaN; // 持續時間，初始化為 NaN 毫秒
+        delay = (60 / currentBpm) * 0.25;
+
+        // 1. 檢查是否包含延遲 (## 分隔)
         if (param.includes("##")) {
-            let [bpmOverride, sec] = param.split("##");
-            return { time: parseFloat(sec), bpmOverride: parseFloat(bpmOverride), type: "direct" };
+            const parts = param.split("##");
+            if (parts.length === 2) {
+                const delayInSeconds = parseFloat(parts[0]);
+                if (!isNaN(delayInSeconds)) {
+                    delay = delayInSeconds; // 將秒轉換為毫秒
+                } else {
+                    console.warn(`解析延遲時間失敗: ${parts[0]} (參數: ${param})`);
+                    delay = 0; // 解析失敗則延遲為 0
+                }
+                durationStr = parts[1]; // ## 後面的部分是持續時間參數
+            } else {
+                // 如果 ## 格式不符合預期，發出警告並將整個參數視為持續時間
+                console.warn(`## 格式不符合預期，將整個參數視為持續時間: ${param}`);
+                delay = 0;
+                durationStr = param;
+            }
         }
-        // 格式 2： x#y:z → BPM override 及拍數計算（x#y:z）
-        else if (param.includes("#") && param.includes(":")) {
-            let parts = param.split("#");
-            let bpmOverride = parseFloat(parts[0]);
-            let [beatCount, noteDiv] = parts[1].split(":").map(Number);
-            return { time: (60 / bpmOverride) * (beatCount / (noteDiv / 4)), bpmOverride, type: "beats" };
+
+        let bpmOverride = undefined; // 記錄是否有指定的 BPM
+
+        // 2. 解析持續時間參數 (durationStr) - 判斷順序很重要！
+        if (durationStr.includes("#") && durationStr.includes(":")) {
+            // 格式: BPM#拍數:音符單位 (例如 160#8:3) - 最優先檢查
+            const parts = durationStr.split("#");
+            if (parts.length === 2) {
+                const bpmOverrideVal = parseFloat(parts[0]);
+                const beatsParts = parts[1].split(":");
+                if (beatsParts.length === 2) {
+                    const beatCount = parseFloat(beatsParts[0]);
+                    const noteDiv = parseFloat(beatsParts[1]);
+                    if (!isNaN(bpmOverrideVal) && !isNaN(beatCount) && !isNaN(noteDiv) && noteDiv !== 0) {
+                        bpmOverride = bpmOverrideVal;
+                        duration = (60 / bpmOverride) * (beatCount / (noteDiv / 4)); // 計算持續時間 (毫秒)
+                    } else {
+                        console.warn(`解析 BPM#拍數:音符單位 格式失敗: ${durationStr} (參數: ${param})`);
+                    }
+                } else {
+                    console.warn(`#後面的拍數:音符單位格式不符預期: ${parts[1]} (參數: ${param})`);
+                }
+            } else {
+                console.warn(`包含 # 和 : 的持續時間格式不符預期: ${durationStr} (參數: ${param})`);
+            }
+        } else if (durationStr.includes(":")) {
+            // 格式: 拍數:音符單位 (例如 8:3) - 使用目前的 BPM 計算
+            const parts = durationStr.split(":");
+            if (parts.length === 2) {
+                const noteDiv = parseFloat(parts[0]);
+                const beatCount = parseFloat(parts[1]);
+                if (!isNaN(noteDiv) && !isNaN(beatCount) && noteDiv !== 0) {
+                    duration = (60 / currentBpm) * (beatCount / (noteDiv / 4)); // 計算持續時間 (毫秒)
+                } else {
+                    console.warn(`解析 拍數:音符單位 格式失敗: ${durationStr} (參數: ${param})`);
+                }
+            } else {
+                console.warn(`包含 : 的持續時間格式不符預期: ${durationStr} (參數: ${param})`);
+            }
+        } else if (durationStr.startsWith("#")) {
+            // 格式: #秒數 (例如 #2) - 新增的格式
+            const secondsStr = durationStr.substring(1); // 移除開頭的 '#'
+            const durationInSeconds = parseFloat(secondsStr);
+            if (!isNaN(durationInSeconds)) {
+                duration = durationInSeconds; // 將秒轉換為毫秒
+            } else {
+                console.warn(`解析 #秒數 格式失敗: ${durationStr} (參數: ${param})`);
+            }
+        } else if (!isNaN(parseFloat(durationStr)) && isFinite(durationStr)) {
+            // 格式: 直接秒數 (例如 1.5) - 作為最終數字格式的檢查
+            const durationInSeconds = parseFloat(durationStr);
+            duration = durationInSeconds; // 將持續時間轉換為毫秒
+        } else {
+            // 未知的持續時間格式
+            console.warn(`未知的持續時間格式: ${durationStr} (參數: ${param})`);
+            duration = NaN; // 確保持續時間為 NaN
         }
-        // 格式 3： x#y → 延遲與秒數（直接用秒數）
-        else if (param.includes("#")) {
-            let [delay, sec] = param.split("#");
-            return { delay: parseFloat(delay), time: parseFloat(sec), type: "delay" };
-        }
-        // 格式 1： x:y → 以當前 bpm 及拍數計算
-        else if (param.includes(":")) {
-            let [noteDiv, beatCount] = param.split(":").map(Number);
-            return { time: (60 / currentBpm) * (beatCount / (noteDiv / 4)), type: "beats" };
-        }
-        else {
-            return { time: NaN, type: "unknown" };
-        }
+
+        const effectiveBpm = bpmOverride !== undefined ? bpmOverride : currentBpm;
+
+        return {
+            delay: delay, // 延遲時間，單位為毫秒
+            duration: duration, // 持續時間，單位為毫秒
+            bpm: effectiveBpm, // 計算時使用的 BPM (如果指定) 或目前的 BPM
+        };
     }
     // ──────────────────────────────
 
-    // 第二階段：針對每個 note 解析各種附加標記（hold、slide、Touch、flags、星型連線）
     for (let i = 0; i < tempNote.length; i++) {
         let data = tempNote[i];
 
@@ -96,6 +181,116 @@ export function simai_decode(_data) {
             "f": "hanabi",
             "$": "star",
         };
+
+        const timeMatch = data.pos.match(/h\[([ -~]+?)\]/);
+        if (timeMatch) {
+            const result = parseParameter(timeMatch[1], data.bpm);
+            tempNote[i].holdTime = result.duration;
+        }
+
+        const miniHold = data.pos.match(/\dh$/);
+        if (miniHold) {
+            tempNote[i].holdTime = 1E-64;
+        }
+
+        const touchMatch = data.pos.match(/([ABCDE])(\d)|(C)/);
+        if (touchMatch) {
+            tempNote[i].pos = touchMatch[2];
+            tempNote[i].touch = touchMatch[1];
+            if (tempNote[i].holdTime) {
+                tempNote[i].touchTime = tempNote[i].holdTime;
+                delete tempNote[i].holdTime;
+            }
+        }
+
+        if (timeMatch && !touchMatch) {
+            tempNote[i].pos = tempNote[i].pos[0];
+        }
+
+        const slideMatch = data.pos.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
+        if (slideMatch) {
+            let temp = data.pos;
+            let sp = { data: [], slideInfo: [] };
+            slideMatch.forEach(e => {
+                let a = temp.indexOf(e);
+                sp.data.push(temp.slice(0, a));
+                temp = temp.slice(a);
+            });
+            sp.data.push(temp);
+
+            for (let j = 0; j < sp.data.length; j++) {
+                if (sp.data[0] && j == 0) {
+                    sp.head = sp.data[0];
+                }
+
+                const slideMatch = sp.data[j].match(/(?:pp)|(?:qq)|[-<>^vpqszVw]/);
+                if (slideMatch && sp.data[j]) {
+                    let g = sp.data[j].split(slideMatch[0])[1];
+                    if (g) {
+                        sp.data[j] = [slideMatch[0], g];
+                        sp.slideInfo[j] = parseParameter(g.match(/\[([ -~]+?)\]/)[1], data.bpm);
+                    } else {
+                        console.warn("找不到時間：[]");
+                    }
+                }
+            }
+
+            for (let j = 1; j < sp.data.length; j++) {
+                const element = sp.data[j];
+                element[1] = element[1].slice(0, element[1].indexOf("[")) + element[1].slice(element[1].indexOf("]") + 1);
+            }
+            sp.slideInfo[0] = {};
+
+            for (let flag in flags) {
+                for (let j = 1; j < sp.data.length; j++) {
+                    const element = sp.data[j];
+                    if (element[1].includes(flag)) {
+                        //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
+                        //tempNote[i][flags[flag]] = true;
+                        element[1] = element[1].replaceAll(flag, "");
+                        sp.slideInfo[j][flags[flag]] = true;
+                    }
+
+                    if (sp.data[0].includes(flag)) {
+                        //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
+                        //tempNote[i][flags[flag]] = true;
+                        sp.data[0] = sp.data[0].replaceAll(flag, "");
+                        sp.slideInfo[0][flags[flag]] = true;
+                    }
+                }
+            }
+
+            if (sp.head) {
+                tempNote[i].pos = sp.head;
+                tempNote[i].star = true;
+            }
+
+            let qqq = [];
+
+            for (let j = 1; j < sp.data.length; j++) {
+                qqq.push({
+                    time: tempNote[i].time + ((j - 1) < 1 ? 0 : sp.slideInfo[j - 1].duration),
+                    bpm: sp.slideInfo[j].bpm,
+                    delay: sp.slideInfo[j].delay,
+                    slide: true,
+                    slideHead: sp.data[0],
+                    slideType: sp.data[j][0],
+                    slideEnd: sp.data[j][1],
+                    slideTime: sp.slideInfo[j].duration,
+                });
+            }
+
+            for (let flag in sp.data.flags) {
+                qqq[flag] = true;
+            }
+
+            qqq.forEach(e => {
+                tempNote.splice(i, 0, e);
+            });
+
+            i += sp.data.length - 1;
+        }
+
         for (let flag in flags) {
             if (data.pos.includes(flag)) {
                 //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
@@ -104,140 +299,6 @@ export function simai_decode(_data) {
                 data[flags[flag]] = true;
             }
         }
-
-        // ── 解析 Hold ──
-        // 支援格式： xh[4:1] 與 xh[##3]
-        console.log(data.pos.match(/\[[\w:#]*\]/g));
-        const holdMatch1 = data.pos.match(/(\d)h\[(\d+:\d+)\]/);
-        const holdMatch2 = data.pos.match(/(\d)h\[(##\d+)\]/);
-        if (holdMatch1) {
-            const startPos = holdMatch1[1];
-            const paramStr = holdMatch1[2]; // 如 "4:1"
-            const result = parseParameter(paramStr, data.bpm);
-            tempNote[i].holdTime = result.time;
-        } else if (holdMatch2) {
-            const startPos = holdMatch2[1];
-            const paramStr = holdMatch2[2]; // 如 "##3"
-            const result = parseParameter(paramStr, data.bpm);
-            tempNote[i].holdTime = result.time;
-        }
-
-        // ── 解析 Slide ──
-        // 定義單一 slide 正則：起始數字、slide 類型（支援多字元 pp、qq 或單一符號）、目標位置，後面以 [參數] 表示
-        const slideRegex = /^(\d)((?:pp)|(?:qq)|[-<>^vpqszVw])(\d)\[([^\]]+)\]/;
-        const chainIndicator = "*";
-        if (data.pos.includes(chainIndicator) && data.pos.includes("[")) {
-            // 鏈式 slide 範例： 1-2[4:1]*<3[4:1]*>4[4:1]
-            let parts = data.pos.split(chainIndicator);
-            let mainMatch = parts[0].match(slideRegex);
-            if (mainMatch) {
-                let startPos = mainMatch[1],
-                    slideType = mainMatch[2],
-                    firstConnect = mainMatch[3],
-                    paramStr = mainMatch[4];
-                let result = parseParameter(paramStr, data.bpm);
-                let chainSegments = [];
-                chainSegments.push({
-                    type: slideType,
-                    connect: String(firstConnect),
-                    slideTime: result.time,
-                    ...(result.delay !== undefined ? { slideDelay: result.delay } : {}),
-                    ...(result.bpmOverride !== undefined ? { slideBpm: result.bpmOverride } : {})
-                });
-                // 後續每段格式： ?{slideType}{目標}[參數]
-                for (let j = 1; j < parts.length; j++) {
-                    let segMatch = parts[j].match(/^((?:pp)|(?:qq)|[-<>^vpqszVw])(\d)\[([^\]]+)\]/);
-                    if (segMatch) {
-                        let segType = segMatch[1],
-                            segConnect = segMatch[2],
-                            segParam = segMatch[3];
-                        let resultSeg = parseParameter(segParam, data.bpm);
-                        chainSegments.push({
-                            type: segType,
-                            connect: String(segConnect),
-                            slideTime: resultSeg.time,
-                            ...(resultSeg.delay !== undefined ? { slideDelay: resultSeg.delay } : {}),
-                            ...(resultSeg.bpmOverride !== undefined ? { slideBpm: resultSeg.bpmOverride } : {})
-                        });
-                    }
-                }
-                tempNote[i] = {
-                    pos: String(startPos),
-                    time: data.time,
-                    slide: true,
-                    chain: chainSegments
-                };
-            }
-        } else if (data.pos.includes("[") && data.pos.match(slideRegex)) {
-            // 單一 slide 範例： 1-2[4:1] 或 1-2[##2]
-            let slideMatch = data.pos.match(slideRegex);
-            if (slideMatch) {
-                const startPos = slideMatch[1],
-                    slideType = slideMatch[2],
-                    endPos = slideMatch[3],
-                    paramStr = slideMatch[4];
-                let result = parseParameter(paramStr, data.bpm);
-                tempNote[i] = {
-                    pos: String(startPos),
-                    time: data.time,
-                    slide: true,
-                    type: slideType,
-                    connect: String(endPos),
-                    slideTime: result.time,
-                    ...(result.delay !== undefined ? { slideDelay: result.delay } : {}),
-                    ...(result.bpmOverride !== undefined ? { slideBpm: result.bpmOverride } : {})
-                };
-            }
-        }
-
-        // ── 解析 Touch ──
-        // Touch 格式：A1~8、B1~8、C、D1~8、E1~8，若有參數則用 h[參數] 表示
-        // 例：A3h[4:1] → 起始位置 3，touch 類型 A，touchTime 依 [參數] 計算
-        const touchMatch = data.pos.match(/^([ABCDE])([1-8])?(?:h\[(.+)\])?/);
-        if (touchMatch) {
-            let letter = touchMatch[1],
-                digit = touchMatch[2] || ""; // 若無數字，例如 C，則預設後續處理
-            // 當有參數括號時，解析參數；若無則 touchTime 預設為 0
-            if (touchMatch[3]) {
-                let paramStr = touchMatch[3];
-                let result = parseParameter(paramStr, data.bpm);
-                tempNote[i] = {
-                    pos: digit || "1",
-                    time: data.time,
-                    touch: letter,
-                    touchTime: result.time
-                };
-            } else {
-                // 無參數情況下，僅標記 touch，並以數字或預設 "1" 當作 pos
-                tempNote[i] = {
-                    pos: digit || "1",
-                    time: data.time,
-                    touch: letter
-                };
-            }
-        }
-
-
-        // ── 處理星型連線 ──
-        // 格式範例： 123-456[4:1] 中的 star 可透過特殊符號解析（此處維持原邏輯）
-        const starMatch = data.pos.match(/(\d+)([-^v<>VqQpPszw]+)(\d+)\[(\d+):(\d+)\]/);
-        if (starMatch) {
-            const [, startPos, symbol, endPos, x, y] = starMatch;
-            const ratio = isFinite(y / x) ? y / x : 0;
-            const starTime = ratio * (60 / data.bpm) * 4;
-            tempNote[i].pos = startPos;
-            tempNote[i].star = true;
-            tempNote.splice(i + 1, 0, {
-                pos: startPos,
-                time: data.time,
-                starTime,
-                type: symbol,
-                connect: endPos,
-            });
-            i++;
-        }
-
-        delete tempNote[i].bpm;
     }
 
     console.log(tempNote);
