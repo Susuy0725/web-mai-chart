@@ -2,15 +2,15 @@ import { simai_decode } from "../Js/decode.js";
 
 export let settings = {
     'distanceToMid': 0.28,
-    'useStroke': true,
     'roundStroke': true,
     'noteSpeed': 1,
     'noteSize': 0.09,
     'speed': 2,
     'pinkStar': false,
     'touchSpeed': 3,
-    'slideSpeed': 3,
+    'slideSpeed': 2,
     'holdEndNoSound': false,
+    //'useStroke': true,
     //'showSlide': true,
     //'noEffects': true,
 },
@@ -216,6 +216,7 @@ $(document).ready(function () {
             try {
                 const newSettings = JSON.parse($('#settings-textarea').val());
                 settings = newSettings;
+                console.log(settings);
                 console.log("新的設定：", settings);
             } catch (e) {
                 alert("JSON 格式錯誤！");
@@ -246,6 +247,10 @@ $(document).ready(function () {
                 }
             }
             maxTime += 1;
+            if (bgm[0].duration) {
+                maxTime = maxTime >= (bgm[0].duration + 1) * 1000 ? maxTime : (bgm[0].duration + 1) * 1000; // 更新最大時間 (毫秒)
+            }
+            maxTime = isNaN(maxTime) ? 1 : maxTime;
 
             controls.timeline.prop("max", maxTime / 1000 + 1);
             play.pauseBoth(controls.play, icons);
@@ -733,12 +738,12 @@ $(document).ready(function () {
                     ctx.translate(x, y);
                     ctx.rotate(angle);
                     ctx.beginPath();
-                    ctx.moveTo(s, 0); // 箭頭尖端
-                    ctx.lineTo(s * 0.6, s * -0.8);
+                    ctx.moveTo(s * 1.1, 0); // 箭頭尖端
+                    ctx.lineTo(s * 0.7, s * -0.8);
                     ctx.lineTo(0, s * -0.8);
                     ctx.lineTo(s * 0.4, 0);
                     ctx.lineTo(0, s * 0.8);
-                    ctx.lineTo(s * 0.6, s * 0.8);
+                    ctx.lineTo(s * 0.7, s * 0.8);
                     ctx.closePath();
                     ctx.fillStyle = color;
                     ctx.fill();

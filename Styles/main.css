@@ -17,6 +17,7 @@ body {
     padding: 0;
     overflow: clip;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: lightgray;
 }
 
 #editor {
@@ -89,6 +90,7 @@ body {
     width: 100%;
     align-items: center;
     justify-content: space-around;
+    background: white;
 }
 
 #playBtn {
