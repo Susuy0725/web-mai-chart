@@ -82,7 +82,7 @@ export function simai_decode(_data) {
         let delay = 0; // 延遲時間，初始化為 0 毫秒
         let durationStr = param; // 用於解析持續時間的部分
         let duration = NaN; // 持續時間，初始化為 NaN 毫秒
-        delay = (60 / currentBpm) * 0.25;
+        delay = (60 / currentBpm);
 
         // 1. 檢查是否包含延遲 (## 分隔)
         if (param.includes("##")) {
@@ -228,7 +228,10 @@ export function simai_decode(_data) {
                     let g = sp.data[j].split(slideMatch[0])[1];
                     if (g) {
                         sp.data[j] = [slideMatch[0], g];
-                        sp.slideInfo[j] = parseParameter(g.match(/\[([ -~]+?)\]/)[1], data.bpm);
+                        g = g.match(/\[([ -~]+?)\]/);
+                        if (g) {
+                            sp.slideInfo[j] = parseParameter(g[1], data.bpm);
+                        }
                     } else {
                         console.warn("找不到時間：[]");
                     }
@@ -265,18 +268,23 @@ export function simai_decode(_data) {
                 tempNote[i].star = true;
             }
 
+            if (!sp.data[0]) {
+                sp.data[0] = tempNote[i].head;
+                delete tempNote[i].head;
+            }
+
             let qqq = [];
 
             for (let j = 1; j < sp.data.length; j++) {
                 qqq.push({
                     time: tempNote[i].time + ((j - 1) < 1 ? 0 : sp.slideInfo[j - 1].duration),
-                    bpm: sp.slideInfo[j].bpm,
-                    delay: sp.slideInfo[j].delay,
+                    bpm: (sp.slideInfo[j] ?? '').bpm,
+                    delay: (sp.slideInfo[j] ?? '').delay,
                     slide: true,
                     slideHead: sp.data[0],
                     slideType: sp.data[j][0],
                     slideEnd: sp.data[j][1],
-                    slideTime: sp.slideInfo[j].duration,
+                    slideTime: (sp.slideInfo[j] ?? '').duration,
                 });
             }
 

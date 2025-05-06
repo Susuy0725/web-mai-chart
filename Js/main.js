@@ -317,7 +317,7 @@ $(document).ready(function () {
                 }
 
                 let _t = ((t - note.time) / 1000);
-                let color = '#009FF9';
+                let color = '#5BCCFF';
                 if (note.break) {
                     color = '#FF6C0C';
                 } else {
@@ -330,9 +330,8 @@ $(document).ready(function () {
                 if (_t >= -1 / settings.slideSpeed && _t <= note.delay + note.slideTime) {
                     triggered[i] = false;
 
-                    let d = (1 - settings.distanceToMid);
-                    let nang = (parseInt(note.slideHead[0]) - 1) % 8;
-                    let nang2 = (parseInt(note.slideEnd[0]) - 1) % 8;
+                    let nang = (parseInt((note.slideHead ?? '')[0]) - 1) % 8;
+                    let nang2 = (parseInt((note.slideEnd ?? '')[0]) - 1) % 8;
                     let np = notePosition[isNaN(nang) ? 0 : nang];
                     np.x = hw + hbw * np.x;
                     np.y = hh + hbw * np.y;
@@ -340,12 +339,11 @@ $(document).ready(function () {
                     nang2 = nang2 < 0 ? 0 : nang2;
 
                     if (_t >= 0) {
-                        drawSlidePath(nang, nang2, note.slideType, color, _t / (note.delay + note.slideTime));
-                        drawStar(np.x, np.y, 1, color, (nang) / -4 * Math.PI);
+                        drawSlidePath(nang, nang2, note.slideType, color, _t <= 0 ? _t * settings.slideSpeed : Math.max(_t - note.delay, 0) / note.slideTime);
+                        //drawStar(np.x, np.y, 1, color, (nang) / -4 * Math.PI);
                     } else {
                         drawSlidePath(nang, nang2, note.slideType, color, _t * settings.slideSpeed);
                     }
-
                     //ctx.font = "50px Segoe UI";
                     //ctx.fillText((Math.min(_t, 0) + (d / settings.speed)) / (d / settings.speed), np.x, np.y);
                 }
@@ -588,31 +586,85 @@ $(document).ready(function () {
         }
 
         function drawSlidePath(startNp, endNp, type, color, t) {
-            PathRecorder
-            function PathRecorder() {
-                this.commands = [];
-                this.ctxPath = new Path2D();
+            startNp = parseInt(startNp);
+            endNp = parseInt(endNp);
 
-                this.moveTo = (x, y) => {
+            class PathRecorder {
+                constructor() {
+                    this.commands = [];
+                    this.ctxPath = new Path2D();
+                    this.lastX = null;
+                    this.lastY = null;
+                }
+
+                // 格式化数字，避免太多小数位
+                _fmt(v) { return +v.toFixed(3); }
+
+                moveTo(x, y) {
+                    x = this._fmt(x); y = this._fmt(y);
                     this.commands.push(`M ${x} ${y}`);
                     this.ctxPath.moveTo(x, y);
-                };
+                    this.lastX = x; this.lastY = y;
+                }
 
-                this.lineTo = (x, y) => {
+                lineTo(x, y) {
+                    x = this._fmt(x); y = this._fmt(y);
                     this.commands.push(`L ${x} ${y}`);
                     this.ctxPath.lineTo(x, y);
-                };
+                    this.lastX = x; this.lastY = y;
+                }
 
-                this.bezierCurveTo = (cp1x, cp1y, cp2x, cp2y, x, y) => {
-                    this.commands.push(`C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x} ${y}`);
-                    this.ctxPath.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
-                };
+                bezierCurveTo(c1x, c1y, c2x, c2y, x, y) {
+                    [c1x, c1y, c2x, c2y, x, y] = [c1x, c1y, c2x, c2y, x, y].map(v => this._fmt(v));
+                    this.commands.push(`C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x} ${y}`);
+                    this.ctxPath.bezierCurveTo(c1x, c1y, c2x, c2y, x, y);
+                    this.lastX = x; this.lastY = y;
+                }
 
-                this.toSVGPath = () => this.commands.join(' ');
+                arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
+                    // 画在 Canvas 上
+                    this.ctxPath.arc(cx, cy, r, startAngle, endAngle, anticlockwise);
+
+                    // 计算总旋转量，并根据方向修正到 (−2π,2π)
+                    let delta = endAngle - startAngle;
+                    if (!anticlockwise && delta < 0) delta += 2 * Math.PI;
+                    if (anticlockwise && delta > 0) delta -= 2 * Math.PI;
+
+                    // 拆段数量，每段 ≤ π
+                    const segments = Math.ceil(Math.abs(delta) / Math.PI);
+                    const segAngle = delta / segments;
+
+                    for (let i = 0; i < segments; i++) {
+                        const a0 = startAngle + segAngle * i;
+                        const a1 = startAngle + segAngle * (i + 1);
+
+                        const sx = this._fmt(cx + r * Math.cos(a0));
+                        const sy = this._fmt(cy + r * Math.sin(a0));
+                        const ex = this._fmt(cx + r * Math.cos(a1));
+                        const ey = this._fmt(cy + r * Math.sin(a1));
+
+                        // large‑arc‑flag: 若这一段跨越 π 就写 1，否则 0
+                        const laf = Math.abs(segAngle) > Math.PI ? 1 : 0;
+                        // sweep‑flag: 顺时针 1，逆时针 0
+                        const sf = anticlockwise ? 0 : 1;
+
+                        // 若上一段结束点 ≠ 本段起点，就补一个 M
+                        if (this.lastX !== sx || this.lastY !== sy) {
+                            this.commands.push(`M ${sx} ${sy}`);
+                        }
+                        this.commands.push(`A ${this._fmt(r)} ${this._fmt(r)} 0 ${laf} ${sf} ${ex} ${ey}`);
+
+                        this.lastX = ex;
+                        this.lastY = ey;
+                    }
+                }
+
+                toSVGPath() {
+                    return this.commands.join(" ");
+                }
             }
 
-
-            function drawArrow(pathRecorder, spacing, drawArrowCallback) {
+            function drawArrow(pathRecorder, spacing, _t) {
                 // 建立 SVG path 元素（離畫面可見區域外）
                 const svgNS = "http://www.w3.org/2000/svg";
                 const tempSvg = document.createElementNS(svgNS, "svg");
@@ -622,6 +674,22 @@ $(document).ready(function () {
                 pathEl.setAttribute("d", pathRecorder.toSVGPath());
                 tempSvg.appendChild(pathEl);
                 document.body.appendChild(tempSvg); // 插入 DOM 才能使用 getTotalLength
+                function drawArrowCallback(x, y, angle) {
+                    ctx.save();
+                    ctx.translate(x, y);
+                    ctx.rotate(angle);
+                    ctx.beginPath();
+                    ctx.moveTo(s, 0); // 箭頭尖端
+                    ctx.lineTo(s * 0.6, s * -0.8);
+                    ctx.lineTo(0, s * -0.8);
+                    ctx.lineTo(s * 0.4, 0);
+                    ctx.lineTo(0, s * 0.8);
+                    ctx.lineTo(s * 0.6, s * 0.8);
+                    ctx.closePath();
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                    ctx.restore();
+                }
 
                 const totalLen = pathEl.getTotalLength();
 
@@ -633,7 +701,7 @@ $(document).ready(function () {
                     const dy = p2.y - p1.y;
                     const angle = Math.atan2(dy, dx); // 弧度
 
-                    drawArrowCallback(p1.x, p1.y, angle); // 交給使用者畫箭頭
+                    if (len / totalLen > _t) drawArrowCallback(p1.x, p1.y, angle); // 畫箭頭
                 }
 
                 // 清除臨時 SVG
@@ -655,50 +723,53 @@ $(document).ready(function () {
             let s = hbw * settings.noteSize;
             let size = s;
             ctx.shadowBlur = s * 0.2;
-            ctx.shadowColor = 'black';
+            ctx.shadowColor = '#000000';
             ctx.lineWidth = size * 0.75;
             ctx.font = "50px Segoe UI";
             ctx.strokeStyle = color;
             if (t < 0) {
                 color = color + (Math.floor((t + 1) / 2 * 255)).toString(16).padStart(2, '0');
+                ctx.shadowColor = '#000000' + (Math.floor((t + 1) / 2 * 255)).toString(16).padStart(2, '0');
             }
 
+            const a = new PathRecorder();
             switch (type) {
                 case '-':
-                    const a = new PathRecorder();
                     a.moveTo(np[0].x, np[0].y);
                     a.lineTo(np[1].x, np[1].y);
-                    drawArrow(a, s * 1.25, (x, y, angle) => {
-                        ctx.save();
-                        ctx.translate(x, y);
-                        ctx.rotate(angle);
-                        ctx.beginPath();
-                        ctx.moveTo(s, 0);       // 箭頭尖端
-                        ctx.lineTo(s * 0.6, s * -0.8);
-                        ctx.lineTo(0, s * -0.8);
-                        ctx.lineTo(s * 0.4, 0);
-                        ctx.lineTo(0, s * 0.8);
-                        ctx.lineTo(s * 0.6, s * 0.8);
-                        ctx.closePath();
-                        ctx.fillStyle = color;
-                        ctx.fill();
-                        ctx.restore();
-                    });
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
                     break;
                 case '^':
-                    ctx.beginPath();
-                    ctx.arc(hw, hh, hbw,
+                    a.arc(hw, hh, hbw,
                         (startNp - 1.5) / 4 * Math.PI,
                         (endNp - 1.5) / 4 * Math.PI,
-                        startNp - 1.5 > endNp - 1.5
+                        ((endNp - startNp + 8) % 8) > 4
                     );
-                    ctx.stroke();
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
+                    break;
+                case '>':
+                    a.arc(hw, hh, hbw,
+                        (startNp - 1.5) / 4 * Math.PI,
+                        (endNp - 1.5) / 4 * Math.PI,
+                        startNp < endNp
+                    );
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
+                    break;
+                case '<':
+                    a.arc(hw, hh, hbw,
+                        (startNp - 1.5) / 4 * Math.PI,
+                        (endNp - 1.5) / 4 * Math.PI,
+                        startNp > endNp
+                    );
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
                     break;
                 default:
                     ctx.beginPath();
                     ctx.moveTo(np[0].x, np[0].y);
                     ctx.lineTo(np[1].x, np[1].y);
                     ctx.stroke();
+                    ctx.font = "30px Segoe UI";
+                    ctx.fillText(startNp + '' + type + '' + endNp, np[1].x, np[1].y);
                     break;
             }
 
