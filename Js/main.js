@@ -20,6 +20,7 @@ export let settings = {
             play.pause = true;
             $(btn).text(icons[0 + play.btnPause]);
         },
+        'lastPauseTime': 0,
         'pause': true,
         'btnPause': true,
     },
@@ -381,12 +382,15 @@ $(document).ready(function () {
                     triggered[i] = false;
 
                     let nang = (parseInt((note.slideHead ?? '')[0]) - 1) % 8;
-                    let nang2 = (parseInt((note.slideEnd ?? '')[0]) - 1) % 8;
+                    let nang2 = note.slideEnd;
+                    if (!(note.slideEnd.length > 1)) {
+                        nang2 = (parseInt((note.slideEnd ?? '')[0]) - 1) % 8;
+                    }
                     let np = notePosition[isNaN(nang) ? 0 : nang];
                     np.x = hw + hbw * np.x;
                     np.y = hh + hbw * np.y;
                     nang = nang < 0 ? 0 : nang;
-                    nang2 = nang2 < 0 ? 0 : nang2;
+                    if (!(note.slideEnd.length > 1)) nang2 = nang2 < 0 ? 0 : nang2;
 
                     if (_t >= 0) {
                         drawSlidePath(nang, nang2, note.slideType, color, _t <= 0 ? _t * settings.slideSpeed : Math.max(_t - note.delay, 0) / note.slideTime);
@@ -648,7 +652,7 @@ $(document).ready(function () {
                 }
 
                 // 格式化数字，避免太多小数位
-                _fmt(v) { return +v.toFixed(3); }
+                _fmt(v) { return +v.toFixed(4); }
 
                 moveTo(x, y) {
                     x = this._fmt(x); y = this._fmt(y);
@@ -760,11 +764,25 @@ $(document).ready(function () {
 
             let notePosition = [];
             for (let i = 0; i < 8; i++) {
-                let ang = (i + 0.5) / 4 * Math.PI;
-                notePosition.push(calAng(ang));
+                notePosition.push(calAng(getNotePos(i, 0)));
             }
 
-            let np = [notePosition[isNaN(startNp) ? 0 : startNp], notePosition[isNaN(endNp) ? 0 : endNp]]
+            let touchDisToMid = {
+                "A": 1,
+                "B": 0.475,
+                "C": 0,
+                "D": 1,
+                "E": 0.675,
+            };
+            let touchAngleOffset = {
+                "A": 1,
+                "B": 0,
+                "C": 0,
+                "D": 0.5,
+                "E": 0.5,
+            }
+
+            let np = [notePosition[isNaN(startNp) ? 0 : startNp % 8], notePosition[isNaN(endNp) ? 0 : (endNp > 9 ? (Math.floor(endNp / 10) - 1) : endNp) % 8]]
             np[0].x = hw + hbw * np[0].x;
             np[0].y = hh + hbw * np[0].y;
             np[1].x = hw + hbw * np[1].x;
@@ -782,7 +800,16 @@ $(document).ready(function () {
                 ctx.shadowColor = '#000000' + (Math.floor((t + 1) / 2 * 255)).toString(16).padStart(2, '0');
             }
 
+            let npTouch, npTouch1;
+
             const a = new PathRecorder();
+
+            function getNotePos(a, offset = 0) {
+                return ((a + offset) + 0.5) / 4 * Math.PI;
+            }
+            function getTouchPos(a, offset = 0, type) {
+                return ((a + offset) % 8 - 0.5 - touchAngleOffset[type]) / 4 * Math.PI;
+            }
             switch (type) {
                 case '-':
                     a.moveTo(np[0].x, np[0].y);
@@ -799,18 +826,56 @@ $(document).ready(function () {
                     break;
                 case '>':
                     a.arc(hw, hh, hbw,
-                        (startNp - 1.5) / 4 * Math.PI,
-                        (endNp - 1.5) / 4 * Math.PI,
-                        startNp < endNp
+                        (startNp - 1.5 + 8 * (startNp == endNp && (startNp >= 2 && startNp <= 5))) / 4 * Math.PI,
+                        (endNp - 1.5 + 8 * (startNp == endNp && !(startNp >= 2 && startNp <= 5))) / 4 * Math.PI,
+                        false ^ (startNp >= 2 && startNp <= 5)
                     );
                     drawArrow(a, s * 1.25, t < 0 ? 0 : t);
                     break;
                 case '<':
                     a.arc(hw, hh, hbw,
-                        (startNp - 1.5) / 4 * Math.PI,
-                        (endNp - 1.5) / 4 * Math.PI,
-                        startNp > endNp
+                        (startNp - 1.5 + 8 * (startNp == endNp && !(startNp >= 2 && startNp <= 5))) / 4 * Math.PI,
+                        (endNp - 1.5 + 8 * (startNp == endNp && (startNp >= 2 && startNp <= 5))) / 4 * Math.PI,
+                        true ^ (startNp >= 2 && startNp <= 5)
                     );
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
+                    break;
+                case 'v':
+                    a.moveTo(np[0].x, np[0].y);
+                    a.lineTo(hw, hh);
+                    a.lineTo(np[1].x, np[1].y);
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
+                    break;
+                case 'z':
+                    npTouch = calAng(getTouchPos(startNp, 3, 'B'));
+                    npTouch1 = calAng(getTouchPos(startNp, 7, 'B'));
+
+                    a.moveTo(np[0].x, np[0].y);
+                    a.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw,
+                        hh + npTouch.y * touchDisToMid['B'] * hbw);
+                    a.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw,
+                        hh + npTouch1.y * touchDisToMid['B'] * hbw);
+                    a.lineTo(np[1].x, np[1].y);
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
+                    break;
+                case 's':
+                    npTouch = calAng(getTouchPos(startNp, 7, 'B'));
+                    npTouch1 = calAng(getTouchPos(startNp, 3, 'B'));
+
+                    a.moveTo(np[0].x, np[0].y);
+                    a.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw,
+                        hh + npTouch.y * touchDisToMid['B'] * hbw);
+                    a.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw,
+                        hh + npTouch1.y * touchDisToMid['B'] * hbw);
+                    a.lineTo(np[1].x, np[1].y);
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
+                    break;
+                case 'V':
+                    a.moveTo(np[0].x, np[0].y);
+                    a.lineTo(np[1].x, np[1].y);
+                    a.lineTo(
+                        hw + hbw * calAng(getNotePos((Math.round(endNp / 10 % 1 * 10) - 1) % 8, 0)).x,
+                        hh + hbw * calAng(getNotePos((Math.round(endNp / 10 % 1 * 10) - 1) % 8, 0)).y);
                     drawArrow(a, s * 1.25, t < 0 ? 0 : t);
                     break;
                 default:
@@ -822,7 +887,8 @@ $(document).ready(function () {
                     ctx.fillText(startNp + '' + type + '' + endNp, np[1].x, np[1].y);
                     break;
             }
-
+            ctx.font = "30px Segoe UI";
+            ctx.fillText((startNp + 1) + '' + type + '' + (endNp + 1), np[0].x, np[0].y);
         }
 
         function drawHold(x, y, size, color, ang, l) {
