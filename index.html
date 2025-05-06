@@ -96,13 +96,14 @@
     <div class="actions">
         <div class="file-menu-button"><span>File</span></div>
         <div class="diff-menu-button"><span>Difficulty</span></div>
+        <div class="sett-menu-button"><span>Settings</span></div>
     </div>
     <div class="dropdownlist">
         <ul class="file-menu" style="display: none;">
-            <li>New</li>
-            <li id="loadSimaiBtn">Open maidata</li>
-            <li id="openMusicBtn">Open Music</li>
-            <li>Save</li>
+            <li class="a-btn0">New</li>
+            <li class="a-btn1">Open maidata</li>
+            <li class="a-btn2">Open Music</li>
+            <li class="a-btn3">Save</li>
         </ul>
         <ul class="diff-menu" style="display: none;">
             <li>EASY</li>
@@ -112,6 +113,21 @@
             <li>RE:MASTER</li>
         </ul>
     </div>
+    <!-- 黑色遮罩 -->
+    <div id="settings-overlay" style="display: none; position: fixed; top: 0; left: 0;
+width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 9998;"></div>
+
+    <!-- 彈出視窗 -->
+    <div id="settings-popup" style="display: none; position: fixed; top: 20%; left: 50%; transform: translateX(-50%);
+width: 500px; background: white; border: 1px solid #ccc; padding: 1em; z-index: 9999;">
+        <h3>編輯設定 JSON</h3>
+        <textarea id="settings-textarea" style="width: 100%; height: 200px;"></textarea>
+        <div style="margin-top: 1em; text-align: right;">
+            <button id="save-settings-btn">儲存</button>
+            <button id="cancel-settings-btn">取消</button>
+        </div>
+    </div>
+
     <!--<div class="bruh">
         <div class="a1">
             <div>

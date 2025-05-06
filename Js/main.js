@@ -31,7 +31,8 @@ export let settings = {
         'touchVol': 0.2,
         'breakVol': 0.3,
         'sfxs': true,
-    };
+    },
+    maidata;
 
 let notes = [{}],
     triggered = [],
@@ -141,7 +142,7 @@ $(document).ready(function () {
     let bgm = $("#bgm");
 
     // 監聽 "Open Music" 按鈕的點擊事件
-    $('#openMusicBtn').on('click', function () {
+    $('.file-menu .a-btn2').on('click', function () {
         // 隱藏下拉選單
         $('.dropdownlist .file-menu').hide();
 
@@ -173,6 +174,55 @@ $(document).ready(function () {
 
         // 觸發檔案輸入元素的點擊事件，打開檔案選擇對話框
         fileInput.click();
+    });
+
+    $('.file-menu .a-btn1').on('click', function () {
+        $('.dropdownlist .file-menu').hide();
+
+        let fileInput = $('<input type="file" accept="text/*" style="display: none;">');
+        $('body').append(fileInput);
+
+        fileInput.on('change', function (event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    maidata = e.target.result;
+                    console.log("檔案內容：", maidata);
+                    // 你可以在這裡處理文字內容，例如 JSON.parse(content)
+                };
+
+                reader.readAsText(file); // 讀取文字內容
+            }
+
+            fileInput.remove(); // 移除輸入元素
+        });
+
+        // 觸發對話框
+        fileInput.click();
+    });
+
+    $('.sett-menu-button').on('click', function () {
+        $('.dropdownlist .file-menu').hide();
+        $('#settings-textarea').val(JSON.stringify(settings, null, 4)); // 美化輸出
+        $('#settings-popup').show();
+        $('#settings-overlay').show();
+    });
+
+    $('#save-settings-btn, #cancel-settings-btn').on('click', function () {
+        if (this.id === "save-settings-btn") {
+            try {
+                const newSettings = JSON.parse($('#settings-textarea').val());
+                settings = newSettings;
+                console.log("新的設定：", settings);
+            } catch (e) {
+                alert("JSON 格式錯誤！");
+                return; // 格式錯誤就不關閉
+            }
+        }
+        $('#settings-popup').hide();
+        $('#settings-overlay').hide();
     });
 
     _updCanvasRes();
