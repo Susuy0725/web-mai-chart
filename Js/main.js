@@ -233,6 +233,7 @@ $(document).ready(function () {
 
     function ababab() {
         try {
+            maxTime = 1;
             notes = simai_decode(data);
 
             triggered = [];
@@ -758,7 +759,8 @@ $(document).ready(function () {
 
                     const dx = p2.x - p1.x;
                     const dy = p2.y - p1.y;
-                    const angle = Math.atan2(dy, dx); // 弧度
+                    let angle = Math.atan2(dy, dx); // 弧度
+                    angle = isNaN(angle) ? 90 : angle;
 
                     if (len / totalLen > _t) drawArrowCallback(p1.x, p1.y, angle); // 畫箭頭
                 }
@@ -883,6 +885,26 @@ $(document).ready(function () {
                         hh + hbw * calAng(getNotePos((Math.round(endNp / 10 % 1 * 10) - 1) % 8, 0)).y);
                     drawArrow(a, s * 1.25, t < 0 ? 0 : t);
                     break;
+                /*case 'p':
+                    a.moveTo(np[0].x, np[0].y);
+                    a.lineTo(
+                        (hw + hbw * calAng(getNotePos(Math.round(startNp - 3) % 8, 0)).x + np[0].x) / 2,
+                        (hh + hbw * calAng(getNotePos(Math.round(startNp - 3) % 8, 0)).y + np[0].y) / 2,
+                    );
+                    a.arc(
+                        hw, hh,
+                        Math.sqrt((((hw + hbw * calAng(getNotePos(Math.round(startNp - 3) % 8, 0)).x + np[0].x) / 2) - hw) ** 2 + (((hh + hbw * calAng(getNotePos(Math.round(startNp - 3) % 8, 0)).y + np[0].y) / 2) - hh) ** 2),
+                        getTouchPos(Math.round(startNp + 6) % 8, 0, 'E') + 2 * Math.PI * (startNp - 3 == endNp),
+                        getTouchPos(Math.round(endNp + 1) % 8, 0, 'E'),
+                        true
+                    );
+                    a.lineTo(
+                        (hw + hbw * calAng(getNotePos(Math.round(endNp + 3) % 8, 0)).x + np[1].x) / 2,
+                        (hh + hbw * calAng(getNotePos(Math.round(endNp + 3) % 8, 0)).y + np[1].y) / 2,
+                    );
+                    a.lineTo(np[1].x, np[1].y);
+                    drawArrow(a, s * 1.25, t < 0 ? 0 : t);
+                    break;*/
                 default:
                     ctx.beginPath();
                     ctx.moveTo(np[0].x, np[0].y);

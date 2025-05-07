@@ -195,11 +195,20 @@ export function simai_decode(_data) {
 
         const touchMatch = data.pos.match(/([ABCDE])(\d)|(C)/);
         if (touchMatch) {
-            tempNote[i].pos = touchMatch[2];
-            tempNote[i].touch = touchMatch[1];
-            if (tempNote[i].holdTime) {
-                tempNote[i].touchTime = tempNote[i].holdTime;
-                delete tempNote[i].holdTime;
+            if (touchMatch[0] == 'C') {
+                tempNote[i].pos = '1';
+                tempNote[i].touch = 'C';
+                if (tempNote[i].holdTime) {
+                    tempNote[i].touchTime = tempNote[i].holdTime;
+                    delete tempNote[i].holdTime;
+                }
+            } else {
+                tempNote[i].pos = touchMatch[2];
+                tempNote[i].touch = touchMatch[1];
+                if (tempNote[i].holdTime) {
+                    tempNote[i].touchTime = tempNote[i].holdTime;
+                    delete tempNote[i].holdTime;
+                }
             }
         }
 
@@ -211,11 +220,12 @@ export function simai_decode(_data) {
         if (slideMatch) {
             let temp = data.pos;
             let sp = { data: [], slideInfo: [] };
-            slideMatch.forEach(e => {
-                let a = temp.indexOf(e);
+            for (let i = 0; i < slideMatch.length; i++) {
+                const e = slideMatch[i];
+                let a = temp.indexOf(e, (i != 0));
                 sp.data.push(temp.slice(0, a));
                 temp = temp.slice(a);
-            });
+            }
             sp.data.push(temp);
 
             for (let j = 0; j < sp.data.length; j++) {
@@ -231,34 +241,29 @@ export function simai_decode(_data) {
                         g = g.match(/\[([ -~]+?)\]/);
                         if (g) {
                             sp.slideInfo[j] = parseParameter(g[1], data.bpm);
+                            sp.data[j][1] = sp.data[j][1].slice(0, sp.data[j][1].indexOf("[")) + sp.data[j][1].slice(sp.data[j][1].indexOf("]") + 1);
                         }
                     } else {
                         console.warn("找不到時間：[]");
                     }
                 }
-            }
 
-            for (let j = 1; j < sp.data.length; j++) {
-                const element = sp.data[j];
-                element[1] = element[1].slice(0, element[1].indexOf("[")) + element[1].slice(element[1].indexOf("]") + 1);
+                if (!sp.slideInfo[j]) {
+                    sp.slideInfo[j] = {};
+                }
             }
-            sp.slideInfo[0] = {};
 
             for (let flag in flags) {
+                if (sp.data[0].includes(flag)) {
+                    sp.data[0] = sp.data[0].replaceAll(flag, "");
+                    sp.slideInfo[0][flags[flag]] = true;
+                }
+
                 for (let j = 1; j < sp.data.length; j++) {
                     const element = sp.data[j];
                     if (element[1].includes(flag)) {
-                        //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
-                        //tempNote[i][flags[flag]] = true;
                         element[1] = element[1].replaceAll(flag, "");
                         sp.slideInfo[j][flags[flag]] = true;
-                    }
-
-                    if (sp.data[0].includes(flag)) {
-                        //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
-                        //tempNote[i][flags[flag]] = true;
-                        sp.data[0] = sp.data[0].replaceAll(flag, "");
-                        sp.slideInfo[0][flags[flag]] = true;
                     }
                 }
             }
@@ -273,34 +278,34 @@ export function simai_decode(_data) {
                 delete tempNote[i].head;
             }
 
+            console.log(sp);
             let qqq = [];
-
             for (let j = 1; j < sp.data.length; j++) {
                 qqq.push({
-                    time: tempNote[i].time + ((j - 1) < 1 ? 0 : sp.slideInfo[j - 1].duration),
+                    time: tempNote[i].time + ((j - 1) < 1 ? 0 : (sp.slideInfo[j - 1].duration) * 1000),
                     bpm: (sp.slideInfo[j] ?? '').bpm,
+                    break: (sp.slideInfo[j] ?? '').break,
                     delay: (sp.slideInfo[j] ?? '').delay,
                     slide: true,
-                    slideHead: sp.data[0],
+                    slideHead: (j - 1) < 1 ? sp.data[0] : sp.data[j - 1][1],
                     slideType: sp.data[j][0],
                     slideEnd: sp.data[j][1],
                     slideTime: (sp.slideInfo[j] ?? '').duration,
+                    chain: (j > 1),
+                    chainTarget: j > 1 ? i + 1 : null,
                 });
             }
 
-            for (let flag in sp.data.flags) {
-                qqq[flag] = true;
+            for (let j = 0; j < qqq.length; j++) {
+                const e = qqq[j];
+                tempNote.splice(i + j + 1, 0, e);
             }
-
-            qqq.forEach(e => {
-                tempNote.splice(i, 0, e);
-            });
 
             i += sp.data.length - 1;
         }
 
         for (let flag in flags) {
-            if (data.pos.includes(flag)) {
+            if ((data.pos ?? '').includes(flag)) {
                 //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
                 //tempNote[i][flags[flag]] = true;
                 data.pos = data.pos.replaceAll(flag, "");
