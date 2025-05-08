@@ -50,12 +50,8 @@ export function simai_decode(_data) {
                 }
             }
 
-            // 1-2[4:1]*-3[4:1]*-4[4:1]
             if (data.includes("*")) {
                 data = data.split("*");
-                //1-2[4:1]
-                //-3[4:1]
-                //-4[4:1]
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
                     tempNote.push({ pos: data[j], time: timeSum, bpm, head: data[0][0] });
@@ -114,10 +110,11 @@ export function simai_decode(_data) {
                 const bpmOverrideVal = parseFloat(parts[0]);
                 const beatsParts = parts[1].split(":");
                 if (beatsParts.length === 2) {
-                    const beatCount = parseFloat(beatsParts[0]);
-                    const noteDiv = parseFloat(beatsParts[1]);
+                    const noteDiv = parseFloat(beatsParts[0]);
+                    const beatCount = parseFloat(beatsParts[1]);
                     if (!isNaN(bpmOverrideVal) && !isNaN(beatCount) && !isNaN(noteDiv) && noteDiv !== 0) {
                         bpmOverride = bpmOverrideVal;
+                        delay = (60 / bpmOverride);
                         duration = (60 / bpmOverride) * (beatCount / (noteDiv / 4)); // 計算持續時間 (毫秒)
                     } else {
                         console.warn(`解析 BPM#拍數:音符單位 格式失敗: ${durationStr} (參數: ${param})`);
@@ -127,6 +124,23 @@ export function simai_decode(_data) {
                 }
             } else {
                 console.warn(`包含 # 和 : 的持續時間格式不符預期: ${durationStr} (參數: ${param})`);
+            }
+
+        } else if (durationStr.includes("#")) {
+            // 格式: 拍數:音符單位 (例如 180#3) - 使用目前的 BPM 計算
+            const parts = durationStr.split("#");
+            if (parts.length === 2) {
+                const bpmOverrideVal = parseFloat(parts[0]);
+                const secondsStr = parseFloat(parts[1]);
+                if (!isNaN(bpmOverrideVal) && !isNaN(secondsStr)) {
+                    bpmOverride = bpmOverrideVal;
+                    delay = (60 / bpmOverride);
+                    duration = secondsStr; // 計算持續時間 (毫秒)
+                } else {
+                    console.warn(`解析 拍數:音符單位 格式失敗: ${durationStr} (參數: ${param})`);
+                }
+            } else {
+                console.warn(`包含 : 的持續時間格式不符預期: ${durationStr} (參數: ${param})`);
             }
         } else if (durationStr.includes(":")) {
             // 格式: 拍數:音符單位 (例如 8:3) - 使用目前的 BPM 計算
@@ -275,17 +289,14 @@ export function simai_decode(_data) {
 
             if (!sp.data[0]) {
                 sp.data[0] = tempNote[i].head;
-                delete tempNote[i].head;
+                tempNote[i].delete = true;
             }
 
-            console.log(sp);
             let qqq = [];
             for (let j = 1; j < sp.data.length; j++) {
-                qqq.push({
+                let _temp = (sp.slideInfo[j] ?? {});
+                _temp = {..._temp, ...{
                     time: tempNote[i].time + ((j - 1) < 1 ? 0 : (sp.slideInfo[j - 1].duration) * 1000),
-                    bpm: (sp.slideInfo[j] ?? '').bpm,
-                    break: (sp.slideInfo[j] ?? '').break,
-                    delay: (sp.slideInfo[j] ?? '').delay,
                     slide: true,
                     slideHead: (j - 1) < 1 ? sp.data[0] : sp.data[j - 1][1],
                     slideType: sp.data[j][0],
@@ -293,7 +304,9 @@ export function simai_decode(_data) {
                     slideTime: (sp.slideInfo[j] ?? '').duration,
                     chain: (j > 1),
                     chainTarget: j > 1 ? i + 1 : null,
-                });
+                }};
+                delete _temp.duration;
+                qqq.push(_temp);
             }
 
             for (let j = 0; j < qqq.length; j++) {
@@ -301,6 +314,9 @@ export function simai_decode(_data) {
                 tempNote.splice(i + j + 1, 0, e);
             }
 
+            if (tempNote[i].delete) {
+                tempNote.splice(i, 1);
+            }
             i += sp.data.length - 1;
         }
 
