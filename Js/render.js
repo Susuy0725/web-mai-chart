@@ -2,6 +2,8 @@
 // RENDER GAME FUNCTION - All drawing logic goes here
 // ====================================================================================
 
+import { settings } from "./main.js";
+
 export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes, currentCalAng) {
     let w = ctx.canvas.width,
         h = ctx.canvas.height,
@@ -16,6 +18,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 4;
+    images.sensor.style.fontFamily = 'monospace';
     ctx.drawImage(images.sensor,
         (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
         bw, bw);
@@ -27,7 +30,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         bw, bw);
 
     // slide render
-    for (let i = notesToRender.length - 1; i >= 0; i--) {
+    for (let i = notesToRender.length - 1; i >= (settings.showSlide ? 0 : notesToRender.length); i--) {
         let note = notesToRender[i];
         if (!note || typeof note.slide === 'undefined') continue;
 
@@ -156,10 +159,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             // For now, assuming drawTouch takes what it needs.
 
             let _t = ((time - note.time) / 1000);
-            let color = '#FF50AA'; // Default or previous color
-            if (note.touch) { // This is always true in this block
-                color = '#0089F4';
-            }
+            let color = '#0089F4';
             // if (note.star && !currentSettings.pinkStar) { color = '#009FF9'; } // star notes handled above
             if (note.break) {
                 color = '#FF6C0C';
@@ -258,12 +258,6 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             x = this._fmt(x); y = this._fmt(y);
             this.commands.push(`L ${x} ${y}`);
             this.ctxPath.lineTo(x, y);
-            this.lastX = x; this.lastY = y;
-        }
-        bezierCurveTo(c1x, c1y, c2x, c2y, x, y) {
-            [c1x, c1y, c2x, c2y, x, y] = [c1x, c1y, c2x, c2y, x, y].map(v => this._fmt(v));
-            this.commands.push(`C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x} ${y}`);
-            this.ctxPath.bezierCurveTo(c1x, c1y, c2x, c2y, x, y);
             this.lastX = x; this.lastY = y;
         }
         arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
@@ -380,22 +374,26 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             a.moveTo(np[0].x, np[0].y); a.lineTo(np[1].x, np[1].y);
             break;
         case '^':
-            a.arc(hw, hh, hbw, getNotePos(startNp - 1), getNotePos(endNp - 1), ((endNp - startNp + 8) % 8) > 4);
+            a.arc(hw, hh, hbw, getNotePos(startNp - 2), getNotePos(endNp - 2), ((endNp - startNp + 8) % 8) > 4);
             break;
-        case '>':
+        case '>': {
+            let turn = (startNp - 1 >= 1 && startNp - 1 <= 4);
             a.arc(hw, hh, hbw,
-                getNotePos(startNp - 1 + ((startNp == endNp && (startNp >= 1 && startNp <= 4)) ? 8 : 0)), // index adjusted for 0-7
-                getNotePos(endNp - 1 + ((startNp == endNp && !(startNp >= 1 && startNp <= 4)) ? 8 : 0)),
-                false ^ (startNp >= 1 && startNp <= 4) // index adjusted for 0-7
+                getNotePos(startNp - 2 + ((startNp == endNp && turn) ? 8 : 0)), // index adjusted for 0-7
+                getNotePos(endNp - 2 + ((startNp == endNp && !turn) ? 8 : 0)),
+                false ^ turn // index adjusted for 0-7
             );
             break;
-        case '<':
+        }
+        case '<': {
+            let turn = (startNp - 1 >= 1 && startNp - 1 <= 4);
             a.arc(hw, hh, hbw,
-                getNotePos(startNp - 1 + ((startNp == endNp && !(startNp >= 1 && startNp <= 4)) ? 8 : 0)),
-                getNotePos(endNp - 1 + ((startNp == endNp && (startNp >= 1 && startNp <= 4)) ? 8 : 0)),
-                true ^ (startNp >= 1 && startNp <= 4)  // index adjusted for 0-7
+                getNotePos(startNp - 2 + ((startNp == endNp && !turn) ? 8 : 0)),
+                getNotePos(endNp - 2 + ((startNp == endNp && turn) ? 8 : 0)),
+                true ^ turn  // index adjusted for 0-7
             );
             break;
+        }
         case 'v':
             a.moveTo(np[0].x, np[0].y); a.lineTo(hw, hh); a.lineTo(np[1].x, np[1].y);
             break;
@@ -416,7 +414,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             a.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw, hh + npTouch1.y * touchDisToMid['B'] * hbw);
             a.lineTo(np[1].x, np[1].y);
             break;
-        }
+        }// 
         case 'V':
             a.moveTo(np[0].x, np[0].y);
             a.lineTo(np[1].x, np[1].y);
@@ -429,14 +427,16 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             ctx.beginPath(); ctx.moveTo(np[0].x, np[0].y); ctx.lineTo(np[1].x, np[1].y); ctx.stroke();
             // ctx.font = "30px Segoe UI";
             // ctx.fillText(startNp + '' + type + '' + endNp, np[1].x, np[1].y);
-            return; // Don't draw arrows for unknown types
+            break;
     }
     // Draw arrows on the path defined in 'a'
     drawArrow(a, s * 1.25, t_progress < 0 ? 0 : t_progress, ctx, localColor);
     // Debug text:
-    // ctx.font = "12px Segoe UI";
-    // ctx.fillStyle = "white";
-    // ctx.fillText((startNp) + '' + type + '' + (endNp) + " t:" + t_progress.toFixed(2) , np[0].x, np[0].y -10);
+    ctx.shadowBlur = s * 0.2;
+    ctx.shadowColor = '#000000';
+    ctx.font = "bold 24px Segoe UI";
+    ctx.fillStyle = "white";
+    ctx.fillText((startNp) + ' ' + type + ' ' + (endNp) + " t:" + t_progress.toFixed(2), np[1].x, np[1].y - 10);
 }
 
 export function drawHold(x, y, size, color, ang, l, ctx, hbw, currentSettings, currentCalAng) {
@@ -474,8 +474,8 @@ export function drawTouch(pos, size, color, type, distance, opacity, holdtime, t
     size = size * s;
     size = Math.max(size, 0);
 
-    let touchDisToMid = { "A": 1, "B": 0.475, "C": 0, "D": 1, "E": 0.675 };
-    let touchAngleOffset = { "A": 1, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
+    let touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 };
+    let touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
     let ang = (pos - 0.5 - touchAngleOffset[type]) / 4 * Math.PI;
     let np = currentCalAng(ang);
 
@@ -527,8 +527,13 @@ export function drawTouch(pos, size, color, type, distance, opacity, holdtime, t
             ctx.lineTo(hw + np.x * touchDisToMid[type] * hbw + size * distance * corner.x_offset, hh + np.y * touchDisToMid[type] * hbw + size * (1 + distance) * Math.sqrt(2) * corner.y_offset);
             ctx.lineTo(hw + np.x * touchDisToMid[type] * hbw + size * (1 + distance) * Math.sqrt(2) * corner.x_offset, hh + np.y * touchDisToMid[type] * hbw + size * distance * corner.y_offset);
             ctx.closePath();
-            if (fill) { ctx.fillStyle = corner.color; ctx.fill(); }
-            ctx.strokeStyle = corner.color; // Stroke with corner color if fill is true, else use localColor
+            if (fill) {
+                ctx.fillStyle = corner.color;
+                ctx.fill();
+                ctx.strokeStyle = corner.color;
+            } else {
+                ctx.strokeStyle = 'white'; // Stroke with corner color if fill is true, else use localColor
+            }
             ctx.stroke();
         });
         ctx.strokeStyle = localColor; // Reset strokeStyle for the center arc
@@ -582,6 +587,7 @@ export function drawTouch(pos, size, color, type, distance, opacity, holdtime, t
     if (holdtime && holdtime > 0) {
         strCh(true); // Draw colored filled parts for hold
     } else {
+        str();
         // For non-hold, the second str() call from original code is now part of the initial str()
         // or handled by the thinner strokeStyle above.
         // If a second distinct drawing pass is needed for non-hold, add it here.

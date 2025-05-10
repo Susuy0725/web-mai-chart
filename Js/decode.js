@@ -41,23 +41,6 @@ export function simai_decode(_data) {
                 }
             }
 
-            if (data.includes("`")) {
-                const split = 256;
-                data = data.split("`");
-                for (let j = 0; j < data.length; j++) {
-                    if (data[j] === "") continue;
-                    tempNote.push({ pos: data[j], time: timeSum + j / split * (60 / bpm) * 4000, bpm });
-                }
-            }
-
-            if (data.includes("*")) {
-                data = data.split("*");
-                for (let j = 0; j < data.length; j++) {
-                    if (data[j] === "") continue;
-                    tempNote.push({ pos: data[j], time: timeSum, bpm, head: data[0][0] });
-                }
-            }
-
             if (data.length > 1 && !isNaN(data)) {
                 for (let j = 0; j < data.length; j++) {
                     tempNote.push({ pos: data[j], time: timeSum, bpm });
@@ -65,11 +48,40 @@ export function simai_decode(_data) {
             }
             data = dataTemp[i];
         }
-        if (!(data.includes("`")) && !(data.includes("*")) && !(data.includes("/")) && data && !(data.length > 1 && !isNaN(data))) {
+        if (!(data.includes("/")) && data && !(data.length > 1 && !isNaN(data))) {
             tempNote.push({ pos: dataTemp[i], time: timeSum, bpm });
         }
         // 累加時間：此處公式依 slice 與 bpm 計算，4000 為單位比例，可依需求調整
         timeSum += (1 / slice) * (60 / bpm) * 4000;
+    }
+
+    for (let i = 0; i < tempNote.length; i++) {
+        let data = tempNote[i];
+        if (data) {
+            if (data.pos.includes("`")) {
+                data = data.pos.split("`");
+                for (let j = 0; j < data.length; j++) {
+                    if (data[j] === "") continue;
+                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time + j * 10, bpm }; continue; }
+                    tempNote.push({ pos: data[j], time: tempNote[i].time + j * 10, bpm });
+                }
+            }
+        }
+    }
+
+    for (let i = 0; i < tempNote.length; i++) {
+        let data = tempNote[i];
+        if (data) {
+            if (data.pos.includes("*")) {
+                data = data.pos.split("*");
+                console.log(data)
+                for (let j = 0; j < data.length; j++) {
+                    if (data[j] === "") continue;
+                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm }; continue; }
+                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm, head: data[0][0] });
+                }
+            }
+        }
     }
 
     // ──────────────────────────────
@@ -126,7 +138,7 @@ export function simai_decode(_data) {
                 console.warn(`包含 # 和 : 的持續時間格式不符預期: ${durationStr} (參數: ${param})`);
             }
 
-        } else if (durationStr.includes("#")) {
+        } else if (durationStr.includes("#") && !durationStr.startsWith("#")) {
             // 格式: 拍數:音符單位 (例如 180#3) - 使用目前的 BPM 計算
             const parts = durationStr.split("#");
             if (parts.length === 2) {
@@ -275,6 +287,7 @@ export function simai_decode(_data) {
 
                 for (let j = 1; j < sp.data.length; j++) {
                     const element = sp.data[j];
+                    if (!element) continue;
                     if (element[1].includes(flag)) {
                         element[1] = element[1].replaceAll(flag, "");
                         sp.slideInfo[j][flags[flag]] = true;
@@ -283,6 +296,9 @@ export function simai_decode(_data) {
             }
 
             if (sp.head) {
+                if(sp.head.includes("?") || sp.head.includes("!")){
+                    tempNote[i].delete = true;
+                }
                 tempNote[i].pos = sp.head;
                 tempNote[i].star = true;
             }
@@ -295,16 +311,18 @@ export function simai_decode(_data) {
             let qqq = [];
             for (let j = 1; j < sp.data.length; j++) {
                 let _temp = (sp.slideInfo[j] ?? {});
-                _temp = {..._temp, ...{
-                    time: tempNote[i].time + ((j - 1) < 1 ? 0 : (sp.slideInfo[j - 1].duration) * 1000),
-                    slide: true,
-                    slideHead: (j - 1) < 1 ? sp.data[0] : sp.data[j - 1][1],
-                    slideType: sp.data[j][0],
-                    slideEnd: sp.data[j][1],
-                    slideTime: (sp.slideInfo[j] ?? '').duration,
-                    chain: (j > 1),
-                    chainTarget: j > 1 ? i + 1 : null,
-                }};
+                _temp = {
+                    ..._temp, ...{
+                        time: tempNote[i].time + ((j - 1) < 1 ? 0 : (sp.slideInfo[j - 1].duration) * 1000),
+                        slide: true,
+                        slideHead: (j - 1) < 1 ? sp.data[0] : sp.data[j - 1][1],
+                        slideType: sp.data[j][0],
+                        slideEnd: sp.data[j][1],
+                        slideTime: (sp.slideInfo[j] ?? '').duration,
+                        chain: (j > 1),
+                        chainTarget: j > 1 ? i + 1 : null,
+                    }
+                };
                 delete _temp.duration;
                 qqq.push(_temp);
             }
@@ -316,6 +334,7 @@ export function simai_decode(_data) {
 
             if (tempNote[i].delete) {
                 tempNote.splice(i, 1);
+                i--;
             }
             i += sp.data.length - 1;
         }

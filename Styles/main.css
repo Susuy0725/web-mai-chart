@@ -3,6 +3,11 @@
     src: url('../Fonts/SEGOEICONS.TTF') format('truetype');
 }
 
+@font-face {
+    font-family: 'Handwriting';
+    src: url('../Fonts/Handlee-Regular.ttf') format('truetype');
+}
+
 * {
     -webkit-user-select: none;
     /* Safari */
@@ -263,12 +268,14 @@ textarea {
 #settings-popup {
     display: none;
     position: fixed;
-    top: 20%;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     width: 80%;
-    background: white;
+    background-color: white;
+    padding: 20px;
     border: 1px solid #ccc;
-    padding: 1em;
-    z-index: 9999;
+    z-index: 1000;
+    max-height: 80vh;
+    overflow-y: auto;
 }

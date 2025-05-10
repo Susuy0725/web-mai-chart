@@ -4,7 +4,6 @@ import * as render from "../Js/render.js";
 export let settings = {
     'distanceToMid': 0.28,
     'roundStroke': true,
-    'noteSpeed': 1,
     'noteSize': 0.09,
     'speed': 2,
     'pinkStar': false,
@@ -12,7 +11,7 @@ export let settings = {
     'slideSpeed': 2,
     'holdEndNoSound': false,
     //'useStroke': true,
-    //'showSlide': true,
+    'showSlide': true,
     //'noEffects': true,
 },
     play = {
@@ -158,7 +157,6 @@ $(document).ready(function () {
                 bgm.on('loadedmetadata', function () {
                     maxTime = maxTime >= (bgm[0].duration + 1) * 1000 ? maxTime : (bgm[0].duration + 1) * 1000;
                     controls.timeline.prop("max", maxTime / 1000 + 1);
-                    controls.timeline.val(0);
                     controls.timeline.trigger('input');
                 });
             }
@@ -179,7 +177,7 @@ $(document).ready(function () {
                     maidata = e.target.result;
                     console.log("檔案內容：", maidata);
                     data = maidata; // Update data with file content
-                    ababab(); // Reparse the new maidata
+                    doSomethingToDataIThink(); // Reparse the new maidata
                 };
                 reader.readAsText(file);
             }
@@ -188,22 +186,74 @@ $(document).ready(function () {
         fileInput.click();
     });
 
+    // 處理設定按鈕點擊
     $('.sett-menu-button').on('click', function () {
-        $('.dropdownlist .file-menu').hide();
-        $('#settings-textarea').val(JSON.stringify(settings, null, 4));
+        $('.dropdownlist .file-menu').hide(); // 假設這個還是需要的
+        populateSettingsForm(); // 新增的函式：填充表單
         $('#settings-popup').show();
         $('#settings-overlay').show();
     });
 
+    // 新增函式：將目前的設定值填入表單
+    function populateSettingsForm() {
+        // 填充 'settings' 物件的內容
+        $('#setting-distanceToMid').val(settings.distanceToMid);
+        $('#setting-roundStroke').prop('checked', settings.roundStroke);
+        $('#setting-noteSize').val(settings.noteSize);
+        $('#setting-speed').val(settings.speed);
+        $('#setting-pinkStar').prop('checked', settings.pinkStar);
+        $('#setting-touchSpeed').val(settings.touchSpeed);
+        $('#setting-slideSpeed').val(settings.slideSpeed);
+        $('#setting-holdEndNoSound').prop('checked', settings.holdEndNoSound);
+        $('#setting-showSlide').prop('checked', settings.showSlide);
+
+        // 填充 'soundSettings' 物件的內容
+        $('#setting-sound-sfxs').prop('checked', soundSettings.sfxs);
+        $('#setting-sound-answer').prop('checked', soundSettings.answer);
+        $('#setting-sound-answerVol').val(soundSettings.answerVol);
+        $('#setting-sound-judgeVol').val(soundSettings.judgeVol);
+        $('#setting-sound-breakJudgeVol').val(soundSettings.breakJudgeVol);
+        $('#setting-sound-touchVol').val(soundSettings.touchVol);
+        $('#setting-sound-breakVol').val(soundSettings.breakVol);
+
+        // 如果有其他設定，也在此處加入
+    }
+
+    // 處理儲存和取消按鈕
     $('#save-settings-btn, #cancel-settings-btn').on('click', function () {
         if (this.id === "save-settings-btn") {
             try {
-                const newSettings = JSON.parse($('#settings-textarea').val());
-                settings = newSettings; // Directly assign, assuming settings structure is compatible
-                console.log("新的設定：", settings);
+                // 從表單讀取 'settings'
+                settings.distanceToMid = parseFloat($('#setting-distanceToMid').val());
+                settings.roundStroke = $('#setting-roundStroke').is(':checked');
+                settings.noteSize = parseFloat($('#setting-noteSize').val());
+                settings.speed = parseFloat($('#setting-speed').val());
+                settings.pinkStar = $('#setting-pinkStar').is(':checked');
+                settings.touchSpeed = parseFloat($('#setting-touchSpeed').val());
+                settings.slideSpeed = parseFloat($('#setting-slideSpeed').val());
+                settings.holdEndNoSound = $('#setting-holdEndNoSound').is(':checked');
+                settings.showSlide = $('#setting-showSlide').is(':checked');
+
+                // 從表單讀取 'soundSettings'
+                soundSettings.sfxs = $('#setting-sound-sfxs').is(':checked');
+                soundSettings.answer = $('#setting-sound-answer').is(':checked');
+                soundSettings.answerVol = parseFloat($('#setting-sound-answerVol').val());
+                soundSettings.judgeVol = parseFloat($('#setting-sound-judgeVol').val());
+                soundSettings.breakJudgeVol = parseFloat($('#setting-sound-breakJudgeVol').val());
+                soundSettings.touchVol = parseFloat($('#setting-sound-touchVol').val());
+                soundSettings.breakVol = parseFloat($('#setting-sound-breakVol').val());
+
+
+                console.log("新的遊戲設定：", settings);
+                console.log("新的音效設定：", soundSettings);
+                // 您可以在此處加入例如將設定儲存到 localStorage 的邏輯
+                // localStorage.setItem('gameSettings', JSON.stringify(settings));
+                // localStorage.setItem('soundSettings', JSON.stringify(soundSettings));
+
             } catch (e) {
-                alert("JSON 格式錯誤！");
-                return;
+                alert("設定值格式錯誤！請檢查數字輸入是否正確。");
+                console.error("儲存設定時發生錯誤:", e);
+                return; // 發生錯誤時不關閉彈出視窗
             }
         }
         $('#settings-popup').hide();
@@ -213,14 +263,17 @@ $(document).ready(function () {
     _updCanvasRes();
     controls.play.text(icons[0 + play.btnPause]);
 
-    function ababab() {
+    function doSomethingToDataIThink() {
         try {
             maxTime = 1;
             notes = simai_decode(data);
             triggered = [];
             for (let index = 0; index < notes.length; index++) {
-                if ((notes[index].holdTime ?? false) || (notes[index].touchTime ?? false)) {
+                if ((notes[index].holdTime ?? false) || (notes[index].touchTime ?? false) || (notes[index].slideTime ?? false)) {
                     if (maxTime < notes[index].time) maxTime = (notes[index].holdTime ?? 0) || (notes[index].touchTime ?? 0);
+                    if (maxTime < notes[index].holdTime * 1000 + notes[index].time) maxTime = notes[index].holdTime * 1000 + notes[index].time;
+                    if (maxTime < notes[index].slideTime * 1000 + notes[index].delay * 1000 + notes[index].time) maxTime = notes[index].slideTime * 1000 + notes[index].delay * 1000 + notes[index].time;
+                    if (maxTime < notes[index].touchTime * 1000 + notes[index].time) maxTime = notes[index].touchTime * 1000 + notes[index].time;
                     triggered.push([false, false]);
                 } else {
                     if (maxTime < notes[index].time) maxTime = notes[index].time;
@@ -232,11 +285,11 @@ $(document).ready(function () {
                 maxTime = maxTime >= (bgm[0].duration + 1) * 1000 ? maxTime : (bgm[0].duration + 1) * 1000;
             }
             maxTime = isNaN(maxTime) ? 1 : maxTime;
-            controls.timeline.prop("max", maxTime / 1000 + 1);
+            controls.timeline.prop("max", maxTime / 1000);
             play.pauseBoth(controls.play, icons);
             bgm[0].pause();
-            controls.timeline.val(0).trigger('input'); // Reset timeline
-            startTime = Date.now(); // Reset start time
+            controls.timeline.trigger('input'); // Reset timeline
+            //startTime = Date.now(); // Reset start time
         } catch (error) {
             console.error("Error in ababab:", error);
             notes = []; // Prevent further errors if parsing fails
@@ -246,7 +299,7 @@ $(document).ready(function () {
 
     $editor.on("input", function (e) {
         data = $editor.val();
-        ababab();
+        doSomethingToDataIThink();
     });
 
     controls.timeline
@@ -295,7 +348,7 @@ $(document).ready(function () {
 
     if (data) { // Initialize with example data if present
         $editor.val(data); // Use val() for textarea
-        ababab();
+        doSomethingToDataIThink();
     }
 
 
@@ -366,6 +419,14 @@ $(document).ready(function () {
                                 }
                             }
                         }
+                    } else {
+                        if (triggered[i] !== undefined) { // Check if triggered[i] exists
+                            if (!triggered[i].length) { // For tap/star
+                                triggered[i] = false;
+                            } else { // For holds
+                                triggered[i][0] = false;
+                            }
+                        }
                     }
                     // Hold (end) logic
                     if (note.holdTime && _t_note_relative >= (note.holdTime ?? 0)) {
@@ -373,6 +434,8 @@ $(document).ready(function () {
                             _playEffect(note, true); // Play hold end sound
                             triggered[i][1] = true;
                         }
+                    } else {
+                        if (triggered[i] && triggered[i].length) triggered[i][1] = false;
                     }
                 }
                 // Slide logic (sound played at start)
