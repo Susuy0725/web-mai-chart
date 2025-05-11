@@ -1,3 +1,5 @@
+import * as render from "./render.js";
+
 export function simai_decode(_data) {
     // 先移除空白與換行
     _data = _data.replace(/(\r\n|\n|\r| )/gm, "");
@@ -87,9 +89,9 @@ export function simai_decode(_data) {
     // ──────────────────────────────
     // 輔助函式：解析 [參數] 部分，支援多種格式
     function parseParameter(param, currentBpm) { // 確保函式是 export 的
-        let delay = 0; // 延遲時間，初始化為 0 毫秒
+        let delay = 1; // 延遲時間，初始化為 1000 毫秒
         let durationStr = param; // 用於解析持續時間的部分
-        let duration = NaN; // 持續時間，初始化為 NaN 毫秒
+        let duration = 0; // 持續時間，初始化為 0 毫秒
         delay = (60 / currentBpm);
 
         // 1. 檢查是否包含延遲 (## 分隔)
@@ -184,7 +186,7 @@ export function simai_decode(_data) {
         } else {
             // 未知的持續時間格式
             console.warn(`未知的持續時間格式: ${durationStr} (參數: ${param})`);
-            duration = NaN; // 確保持續時間為 NaN
+            duration = -1; // 確保持續時間為 NaN
         }
 
         const effectiveBpm = bpmOverride !== undefined ? bpmOverride : currentBpm;
@@ -279,6 +281,21 @@ export function simai_decode(_data) {
                 }
             }
 
+            function getSlideLen(type, startNp, endNp, hw, hh, hbw) {
+                const pr = render.path(type, startNp, endNp, hw, hh, hbw, function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } });
+                const svgNS = "http://www.w3.org/2000/svg";
+                const tempSvg = document.createElementNS(svgNS, "svg");
+                tempSvg.setAttribute("width", "0"); // Use string for SVG attributes
+                tempSvg.setAttribute("height", "0");
+                const pathEl = document.createElementNS(svgNS, "path");
+                pathEl.setAttribute("d", pr.toSVGPath());
+                tempSvg.appendChild(pathEl);
+                document.body.appendChild(tempSvg);
+                const len = pathEl.getTotalLength();
+                document.body.removeChild(tempSvg);
+                return len;
+            }
+
             for (let flag in flags) {
                 if (sp.data[0].includes(flag)) {
                     sp.data[0] = sp.data[0].replaceAll(flag, "");
@@ -296,7 +313,7 @@ export function simai_decode(_data) {
             }
 
             if (sp.head) {
-                if(sp.head.includes("?") || sp.head.includes("!")){
+                if (sp.head.includes("?") || sp.head.includes("!")) {
                     tempNote[i].delete = true;
                 }
                 tempNote[i].pos = sp.head;
@@ -309,17 +326,59 @@ export function simai_decode(_data) {
             }
 
             let qqq = [];
+            let wholeLen = 0;
+            console.log(sp)
+            for (let ind = 0; ind < sp.data.length; ind++) {
+                if (ind == 0) continue;
+                wholeLen += getSlideLen(
+                    sp.data[ind][0],
+                    parseInt(sp.data[ind - 1].length > 1 ? sp.data[ind - 1][1] : sp.data[ind - 1]) - 1,
+                    sp.data[ind][1].length > 1 ? sp.data[ind][1] - 1 : parseInt(sp.data[ind][1]),
+                    100, 100, 100);
+            } console.log(wholeLen);
+
             for (let j = 1; j < sp.data.length; j++) {
                 let _temp = (sp.slideInfo[j] ?? {});
+                //let chain_t = sp.slideInfo[sp.slideInfo.length - 1].duration;
+
+                if (!sp.slideInfo[j].delay) {
+                    let _llll = sp.slideInfo.find((e, ind) => e.delay && ind > j);
+                    sp.slideInfo[j].delay = _llll.delay;
+
+                    let slideLen = getSlideLen(
+                        sp.data[j][0],
+                        parseInt(sp.data[j - 1].length > 1 ? sp.data[j - 1][1] : sp.data[j - 1]) - 1,
+                        sp.data[j][1].length > 1 ? sp.data[j][1] : parseInt(sp.data[j][1]) - 1,
+                        100, 100, 100);
+
+                    console.log(slideLen)
+
+                    let per = slideLen / wholeLen;
+                    sp.slideInfo[j].duration = _llll.duration * per;
+
+                    if (sp.slideInfo[j + 1] === _llll) {
+                        let slideLen = getSlideLen(
+                            sp.data[j+1][0],
+                            parseInt(sp.data[j][1]) - 1,
+                            sp.data[j+1][1].length > 1 ? sp.data[j+1][1] : parseInt(sp.data[j+1][1]) - 1,
+                            100, 100, 100);
+
+                        let per = slideLen / wholeLen;
+                        sp.slideInfo[j + 1].duration = _llll.duration * per;
+                    }
+                }
+                if (j > 1 && sp.slideInfo[j - 1].duration) {
+                    _temp.delay = sp.slideInfo[j - 1].duration + sp.slideInfo[j - 1].delay;
+                }
                 _temp = {
                     ..._temp, ...{
-                        time: tempNote[i].time + ((j - 1) < 1 ? 0 : (sp.slideInfo[j - 1].duration) * 1000),
+                        time: tempNote[i].time,
                         slide: true,
                         slideHead: (j - 1) < 1 ? sp.data[0] : sp.data[j - 1][1],
                         slideType: sp.data[j][0],
                         slideEnd: sp.data[j][1],
                         slideTime: (sp.slideInfo[j] ?? '').duration,
-                        chain: (j > 1),
+                        chain: sp.data.length > 2,
                         chainTarget: j > 1 ? i + 1 : null,
                     }
                 };

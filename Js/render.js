@@ -4,7 +4,9 @@
 
 import { settings } from "./main.js";
 
-export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes, currentCalAng) {
+export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes) {
+    const calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } };
+
     let w = ctx.canvas.width,
         h = ctx.canvas.height,
         hw = w / 2,
@@ -39,7 +41,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             let notePosition = [];
             for (let j = 0; j < 8; j++) { // Use a different loop variable
                 let ang = (j + 0.5) / 4 * Math.PI;
-                notePosition.push(currentCalAng(ang));
+                notePosition.push(calAng(ang));
             }
 
             let _t = ((time - note.time) / 1000);
@@ -47,7 +49,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             if (note.break) {
                 color = '#FF6C0C';
             } else {
-                let double = notesToRender.findIndex((_note, _idx) => _note && _note.time == note.time && _idx != i && _note.slide);
+                let double = notesToRender.findIndex((_note, _idx) => _note && _note.time == note.time && _idx != i && _note.slide && !_note.chain);
                 if (double != -1) {
                     color = '#FFD900';
                 }
@@ -72,9 +74,9 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 if (!(note.slideEnd.length > 1)) nang2 = nang2 < 0 ? 0 : nang2;
 
                 if (_t >= 0) {
-                    drawSlidePath(nang, nang2, note.slideType, color, _t <= 0 ? _t * currentSettings.slideSpeed : Math.max(_t - note.delay, 0) / note.slideTime, ctx, hw, hh, hbw, currentSettings, currentCalAng);
+                    drawSlidePath(nang, nang2, note.slideType, color, _t <= 0 ? _t * currentSettings.slideSpeed : Math.max(_t - note.delay, 0) / note.slideTime, ctx, hw, hh, hbw, currentSettings, calAng);
                 } else {
-                    drawSlidePath(nang, nang2, note.slideType, color, _t * currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, currentCalAng);
+                    drawSlidePath(nang, nang2, note.slideType, color, _t * currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng);
                 }
             }
         }
@@ -90,7 +92,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             let notePosition = [];
             for (let j = 0; j < 8; j++) { // Use a different loop variable
                 let ang = (j + 0.5) / 4 * Math.PI;
-                notePosition.push(currentCalAng(ang));
+                notePosition.push(calAng(ang));
             }
 
             let _t = ((time - note.time) / 1000);
@@ -125,11 +127,11 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                     np.x = hw + hbw * np.x * (Math.min(_t, 0) * currentSettings.speed + 1);
                     np.y = hh + hbw * np.y * (Math.min(_t, 0) * currentSettings.speed + 1);
                     if (note.star) {
-                        drawStar(np.x, np.y, 1, color, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, currentCalAng);
+                        drawStar(np.x, np.y, 1, color, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng);
                     } else if (!!note.holdTime) {
                         drawHold(np.x, np.y, 1, color, (nang) / -4 * Math.PI,
                             (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * currentSettings.speed, (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / currentSettings.speed)) / (d / currentSettings.speed))) * hbw,
-                            ctx, hbw, currentSettings, currentCalAng);
+                            ctx, hbw, currentSettings, calAng);
                     } else {
                         drawTap(np.x, np.y, 1, color, ctx, hbw, currentSettings);
                     }
@@ -137,9 +139,9 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                     np.x = hw + hbw * np.x * (1 - d);
                     np.y = hh + hbw * np.y * (1 - d);
                     if (note.star) {
-                        drawStar(np.x, np.y, (_t * currentSettings.speed + (2 - currentSettings.distanceToMid)), color, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, currentCalAng);
+                        drawStar(np.x, np.y, (_t * currentSettings.speed + (2 - currentSettings.distanceToMid)), color, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng);
                     } else if (!!note.holdTime) {
-                        drawHold(np.x, np.y, (_t * currentSettings.speed + (2 - currentSettings.distanceToMid)), color, (nang) / -4 * Math.PI, 0, ctx, hbw, currentSettings, currentCalAng);
+                        drawHold(np.x, np.y, (_t * currentSettings.speed + (2 - currentSettings.distanceToMid)), color, (nang) / -4 * Math.PI, 0, ctx, hbw, currentSettings, calAng);
                     } else {
                         drawTap(np.x, np.y, (_t * currentSettings.speed + (2 - currentSettings.distanceToMid)), color, ctx, hbw, currentSettings);
                     }
@@ -177,7 +179,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
             if (_t >= -1 / currentSettings.touchSpeed && _t <= (note.touchTime ?? 0)) {
                 // triggeredNotes[i] handling is game logic
-                drawTouch(note.pos, 0.8, color, note.touch, ani1(_t < 0 ? -_t : 0) * 0.65, 8 - (_t / (-2 / currentSettings.touchSpeed)) * 8, note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, currentCalAng);
+                drawTouch(note.pos, 0.8, color, note.touch, ani1(_t < 0 ? -_t : 0) * 0.65, 8 - (_t / (-2 / currentSettings.touchSpeed)) * 8, note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng);
             }
         }
     }
@@ -202,7 +204,7 @@ export function drawTap(x, y, size, color, ctx, hbw, currentSettings) {
     _arc(x, y, size, ctx); // Pass ctx
 }
 
-export function drawStar(x, y, size, color, ang, ctx, hbw, currentSettings, currentCalAng) {
+export function drawStar(x, y, size, color, ang, ctx, hbw, currentSettings, calAng) {
     ang = ang - 0.125 * Math.PI;
     let s = hbw * currentSettings.noteSize;
     size = size * s;
@@ -213,18 +215,18 @@ export function drawStar(x, y, size, color, ang, ctx, hbw, currentSettings, curr
     ctx.strokeStyle = 'white';
     function str() {
         ctx.beginPath();
-        ctx.moveTo(x - (size) * currentCalAng(ang).x, y + (size) * currentCalAng(ang).y);
-        ctx.lineTo(x - (size / 2) * currentCalAng(ang + 36 * Math.PI / 180).x, y + (size / 2) * currentCalAng(ang + 36 * Math.PI / 180).y);
-        ctx.lineTo(x - (size) * currentCalAng(ang + 72 * Math.PI / 180).x, y + (size) * currentCalAng(ang + 72 * Math.PI / 180).y);
-        ctx.lineTo(x - (size / 2) * currentCalAng(ang + 108 * Math.PI / 180).x, y + (size / 2) * currentCalAng(ang + 108 * Math.PI / 180).y);
-        ctx.lineTo(x - (size) * currentCalAng(ang + 144 * Math.PI / 180).x, y + (size) * currentCalAng(ang + 144 * Math.PI / 180).y);
-        ctx.lineTo(x - (size / 2) * currentCalAng(ang + Math.PI).x, y + (size / 2) * currentCalAng(ang + Math.PI).y);
-        ctx.lineTo(x - (size) * currentCalAng(ang + 216 * Math.PI / 180).x, y + (size) * currentCalAng(ang + 216 * Math.PI / 180).y);
-        ctx.lineTo(x - (size / 2) * currentCalAng(ang + 252 * Math.PI / 180).x, y + (size / 2) * currentCalAng(ang + 252 * Math.PI / 180).y);
-        ctx.lineTo(x - (size) * currentCalAng(ang + 288 * Math.PI / 180).x, y + (size) * currentCalAng(ang + 288 * Math.PI / 180).y);
-        ctx.lineTo(x - (size / 2) * currentCalAng(ang + 324 * Math.PI / 180).x, y + (size / 2) * currentCalAng(ang + 324 * Math.PI / 180).y);
-        ctx.lineTo(x - (size) * currentCalAng(ang + 2 * Math.PI).x, y + (size) * currentCalAng(ang + 2 * Math.PI).y);
-        // ctx.lineTo(x - (size / 2) * currentCalAng(ang + 36 * Math.PI / 180).x, y + (size / 2) * currentCalAng(ang + 36 * Math.PI / 180).y); //This line seems redundant
+        ctx.moveTo(x - (size) * calAng(ang).x, y + (size) * calAng(ang).y);
+        ctx.lineTo(x - (size / 2) * calAng(ang + 36 * Math.PI / 180).x, y + (size / 2) * calAng(ang + 36 * Math.PI / 180).y);
+        ctx.lineTo(x - (size) * calAng(ang + 72 * Math.PI / 180).x, y + (size) * calAng(ang + 72 * Math.PI / 180).y);
+        ctx.lineTo(x - (size / 2) * calAng(ang + 108 * Math.PI / 180).x, y + (size / 2) * calAng(ang + 108 * Math.PI / 180).y);
+        ctx.lineTo(x - (size) * calAng(ang + 144 * Math.PI / 180).x, y + (size) * calAng(ang + 144 * Math.PI / 180).y);
+        ctx.lineTo(x - (size / 2) * calAng(ang + Math.PI).x, y + (size / 2) * calAng(ang + Math.PI).y);
+        ctx.lineTo(x - (size) * calAng(ang + 216 * Math.PI / 180).x, y + (size) * calAng(ang + 216 * Math.PI / 180).y);
+        ctx.lineTo(x - (size / 2) * calAng(ang + 252 * Math.PI / 180).x, y + (size / 2) * calAng(ang + 252 * Math.PI / 180).y);
+        ctx.lineTo(x - (size) * calAng(ang + 288 * Math.PI / 180).x, y + (size) * calAng(ang + 288 * Math.PI / 180).y);
+        ctx.lineTo(x - (size / 2) * calAng(ang + 324 * Math.PI / 180).x, y + (size / 2) * calAng(ang + 324 * Math.PI / 180).y);
+        ctx.lineTo(x - (size) * calAng(ang + 2 * Math.PI).x, y + (size) * calAng(ang + 2 * Math.PI).y);
+        // ctx.lineTo(x - (size / 2) * calAng(ang + 36 * Math.PI / 180).x, y + (size / 2) * calAng(ang + 36 * Math.PI / 180).y); //This line seems redundant
         ctx.closePath(); // Close the path for a filled star, or ensure lines connect
         ctx.stroke();
     }
@@ -236,55 +238,55 @@ export function drawStar(x, y, size, color, ang, ctx, hbw, currentSettings, curr
     str();
 }
 
-export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, hh, hbw, currentSettings, currentCalAng) { // Renamed t to t_progress
+export class PathRecorder {
+    constructor() {
+        this.commands = [];
+        this.ctxPath = new Path2D();
+        this.lastX = null;
+        this.lastY = null;
+    }
+    _fmt(v) { return +v.toFixed(4); }
+    moveTo(x, y) {
+        x = this._fmt(x); y = this._fmt(y);
+        this.commands.push(`M ${x} ${y}`);
+        this.ctxPath.moveTo(x, y);
+        this.lastX = x; this.lastY = y;
+    }
+    lineTo(x, y) {
+        x = this._fmt(x); y = this._fmt(y);
+        this.commands.push(`L ${x} ${y}`);
+        this.ctxPath.lineTo(x, y);
+        this.lastX = x; this.lastY = y;
+    }
+    arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
+        this.ctxPath.arc(cx, cy, r, startAngle, endAngle, anticlockwise);
+        let delta = endAngle - startAngle;
+        if (!anticlockwise && delta < 0) delta += 2 * Math.PI;
+        if (anticlockwise && delta > 0) delta -= 2 * Math.PI;
+        const segments = Math.ceil(Math.abs(delta) / Math.PI);
+        const segAngle = delta / segments;
+        for (let i = 0; i < segments; i++) {
+            const a0 = startAngle + segAngle * i;
+            const a1 = startAngle + segAngle * (i + 1);
+            const sx = this._fmt(cx + r * Math.cos(a0));
+            const sy = this._fmt(cy + r * Math.sin(a0));
+            const ex = this._fmt(cx + r * Math.cos(a1));
+            const ey = this._fmt(cy + r * Math.sin(a1));
+            const laf = Math.abs(segAngle) > Math.PI ? 1 : 0;
+            const sf = anticlockwise ? 0 : 1;
+            if (this.lastX !== sx || this.lastY !== sy) {
+                this.commands.push(`M ${sx} ${sy}`);
+            }
+            this.commands.push(`A ${this._fmt(r)} ${this._fmt(r)} 0 ${laf} ${sf} ${ex} ${ey}`);
+            this.lastX = ex; this.lastY = ey;
+        }
+    }
+    toSVGPath() { return this.commands.join(" "); }
+}
+
+export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, hh, hbw, currentSettings, calAng) { // Renamed t to t_progress
     startNp = parseInt(startNp);
     endNp = parseInt(endNp);
-
-    class PathRecorder {
-        constructor() {
-            this.commands = [];
-            this.ctxPath = new Path2D();
-            this.lastX = null;
-            this.lastY = null;
-        }
-        _fmt(v) { return +v.toFixed(4); }
-        moveTo(x, y) {
-            x = this._fmt(x); y = this._fmt(y);
-            this.commands.push(`M ${x} ${y}`);
-            this.ctxPath.moveTo(x, y);
-            this.lastX = x; this.lastY = y;
-        }
-        lineTo(x, y) {
-            x = this._fmt(x); y = this._fmt(y);
-            this.commands.push(`L ${x} ${y}`);
-            this.ctxPath.lineTo(x, y);
-            this.lastX = x; this.lastY = y;
-        }
-        arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
-            this.ctxPath.arc(cx, cy, r, startAngle, endAngle, anticlockwise);
-            let delta = endAngle - startAngle;
-            if (!anticlockwise && delta < 0) delta += 2 * Math.PI;
-            if (anticlockwise && delta > 0) delta -= 2 * Math.PI;
-            const segments = Math.ceil(Math.abs(delta) / Math.PI);
-            const segAngle = delta / segments;
-            for (let i = 0; i < segments; i++) {
-                const a0 = startAngle + segAngle * i;
-                const a1 = startAngle + segAngle * (i + 1);
-                const sx = this._fmt(cx + r * Math.cos(a0));
-                const sy = this._fmt(cy + r * Math.sin(a0));
-                const ex = this._fmt(cx + r * Math.cos(a1));
-                const ey = this._fmt(cy + r * Math.sin(a1));
-                const laf = Math.abs(segAngle) > Math.PI ? 1 : 0;
-                const sf = anticlockwise ? 0 : 1;
-                if (this.lastX !== sx || this.lastY !== sy) {
-                    this.commands.push(`M ${sx} ${sy}`);
-                }
-                this.commands.push(`A ${this._fmt(r)} ${this._fmt(r)} 0 ${laf} ${sf} ${ex} ${ey}`);
-                this.lastX = ex; this.lastY = ey;
-            }
-        }
-        toSVGPath() { return this.commands.join(" "); }
-    }
 
     let s = hbw * currentSettings.noteSize; // Used for arrow size
 
@@ -337,11 +339,8 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 
     let notePositionLocal = []; // Renamed to avoid conflict
     for (let k = 0; k < 8; k++) { // Use a different loop variable
-        notePositionLocal.push(currentCalAng(getNotePos(k, 0)));
+        notePositionLocal.push(calAng(getNotePos(k, 0)));
     }
-
-    let touchDisToMid = { "A": 1, "B": 0.475, "C": 0, "D": 1, "E": 0.675 };
-    let touchAngleOffset = { "A": 1, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
 
     let np = [notePositionLocal[isNaN(startNp) ? 0 : startNp % 8], notePositionLocal[isNaN(endNp) ? 0 : (endNp > 9 ? (Math.floor(endNp / 10) - 1) : endNp) % 8]];
     np[0].x = hw + hbw * np[0].x;
@@ -364,71 +363,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
     ctx.strokeStyle = localColor;
 
 
-    const a = new PathRecorder();
-
-    function getNotePos(val_a, offset = 0) { return ((val_a + offset) + 0.5) / 4 * Math.PI; }
-    function getTouchPos(val_a, offset = 0, touchType) { return ((val_a + offset) % 8 - 0.5 - touchAngleOffset[touchType]) / 4 * Math.PI; }
-
-    switch (type) {
-        case '-':
-            a.moveTo(np[0].x, np[0].y); a.lineTo(np[1].x, np[1].y);
-            break;
-        case '^':
-            a.arc(hw, hh, hbw, getNotePos(startNp - 2), getNotePos(endNp - 2), ((endNp - startNp + 8) % 8) > 4);
-            break;
-        case '>': {
-            let turn = (startNp - 1 >= 1 && startNp - 1 <= 4);
-            a.arc(hw, hh, hbw,
-                getNotePos(startNp - 2 + ((startNp == endNp && turn) ? 8 : 0)), // index adjusted for 0-7
-                getNotePos(endNp - 2 + ((startNp == endNp && !turn) ? 8 : 0)),
-                false ^ turn // index adjusted for 0-7
-            );
-            break;
-        }
-        case '<': {
-            let turn = (startNp - 1 >= 1 && startNp - 1 <= 4);
-            a.arc(hw, hh, hbw,
-                getNotePos(startNp - 2 + ((startNp == endNp && !turn) ? 8 : 0)),
-                getNotePos(endNp - 2 + ((startNp == endNp && turn) ? 8 : 0)),
-                true ^ turn  // index adjusted for 0-7
-            );
-            break;
-        }
-        case 'v':
-            a.moveTo(np[0].x, np[0].y); a.lineTo(hw, hh); a.lineTo(np[1].x, np[1].y);
-            break;
-        case 'z': { // Use block scope for npTouch, npTouch1
-            let npTouch = currentCalAng(getTouchPos(startNp, 3, 'B'));
-            let npTouch1 = currentCalAng(getTouchPos(startNp, 7, 'B'));
-            a.moveTo(np[0].x, np[0].y);
-            a.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw, hh + npTouch.y * touchDisToMid['B'] * hbw);
-            a.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw, hh + npTouch1.y * touchDisToMid['B'] * hbw);
-            a.lineTo(np[1].x, np[1].y);
-            break;
-        }
-        case 's': { // Use block scope
-            let npTouch = currentCalAng(getTouchPos(startNp, 7, 'B'));
-            let npTouch1 = currentCalAng(getTouchPos(startNp, 3, 'B'));
-            a.moveTo(np[0].x, np[0].y);
-            a.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw, hh + npTouch.y * touchDisToMid['B'] * hbw);
-            a.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw, hh + npTouch1.y * touchDisToMid['B'] * hbw);
-            a.lineTo(np[1].x, np[1].y);
-            break;
-        }// 
-        case 'V':
-            a.moveTo(np[0].x, np[0].y);
-            a.lineTo(np[1].x, np[1].y);
-            a.lineTo(
-                hw + hbw * currentCalAng(getNotePos((Math.round(endNp / 10 % 1 * 10) - 1) % 8, 0)).x,
-                hh + hbw * currentCalAng(getNotePos((Math.round(endNp / 10 % 1 * 10) - 1) % 8, 0)).y);
-            break;
-        default:
-            // Fallback for unknown types, draw a simple line and text
-            ctx.beginPath(); ctx.moveTo(np[0].x, np[0].y); ctx.lineTo(np[1].x, np[1].y); ctx.stroke();
-            // ctx.font = "30px Segoe UI";
-            // ctx.fillText(startNp + '' + type + '' + endNp, np[1].x, np[1].y);
-            break;
-    }
+    const a = path(type, startNp, endNp, hw, hh, hbw, calAng);
     // Draw arrows on the path defined in 'a'
     drawArrow(a, s * 1.25, t_progress < 0 ? 0 : t_progress, ctx, localColor);
     // Debug text:
@@ -439,7 +374,94 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
     ctx.fillText((startNp) + ' ' + type + ' ' + (endNp) + " t:" + t_progress.toFixed(2), np[1].x, np[1].y - 10);
 }
 
-export function drawHold(x, y, size, color, ang, l, ctx, hbw, currentSettings, currentCalAng) {
+export function getNotePos(val_a, offset = 0) {
+    return ((val_a + offset) + 0.5) / 4 * Math.PI;
+}
+
+export function getTouchPos(val_a, offset = 0, touchType) {
+    const touchAngleOffset = { "A": 1, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
+    return ((val_a + offset) % 8 - 0.5 - touchAngleOffset[touchType]) / 4 * Math.PI;
+}
+
+export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
+    startNp = parseInt(startNp);
+    endNp = parseInt(endNp);
+    const touchDisToMid = { "A": 1, "B": 0.475, "C": 0, "D": 1, "E": 0.675 };
+    const notePositionLocal = []; // Renamed to avoid conflict
+    for (let k = 0; k < 8; k++) { // Use a different loop variable
+        notePositionLocal.push(calAng(getNotePos(k, 0)));
+    }
+    const path = new PathRecorder();
+    let np = [notePositionLocal[isNaN(startNp) ? 0 : startNp % 8], notePositionLocal[isNaN(endNp) ? 0 : (endNp > 9 ? (Math.floor(endNp / 10) - 1) : endNp) % 8]];
+    np[0].x = hw + hbw * np[0].x;
+    np[0].y = hh + hbw * np[0].y;
+    np[1].x = hw + hbw * np[1].x;
+    np[1].y = hh + hbw * np[1].y;
+
+    switch (type) {
+        case '-':
+            path.moveTo(np[0].x, np[0].y); path.lineTo(np[1].x, np[1].y);
+            break;
+        case '^':
+            path.arc(hw, hh, hbw, getNotePos(startNp - 2), getNotePos(endNp - 2), ((endNp - startNp + 8) % 8) > 4);
+            break;
+        case '>': {
+            let turn = (startNp - 1 >= 1 && startNp - 1 <= 4);
+            path.arc(hw, hh, hbw,
+                getNotePos(startNp - 2 + ((startNp == endNp && turn) ? 8 : 0)), // index adjusted for 0-7
+                getNotePos(endNp - 2 + ((startNp == endNp && !turn) ? 8 : 0)),
+                false ^ turn // index adjusted for 0-7
+            );
+            break;
+        }
+        case '<': {
+            let turn = (startNp - 1 >= 1 && startNp - 1 <= 4);
+            path.arc(hw, hh, hbw,
+                getNotePos(startNp - 2 + ((startNp == endNp && !turn) ? 8 : 0)),
+                getNotePos(endNp - 2 + ((startNp == endNp && turn) ? 8 : 0)),
+                true ^ turn  // index adjusted for 0-7
+            );
+            break;
+        }
+        case 'v':
+            path.moveTo(np[0].x, np[0].y); path.lineTo(hw, hh); path.lineTo(np[1].x, np[1].y);
+            break;
+        case 'z': { // Use block scope for npTouch, npTouch1
+            let npTouch = calAng(getTouchPos(startNp, 3, 'B'));
+            let npTouch1 = calAng(getTouchPos(startNp, 7, 'B'));
+            path.moveTo(np[0].x, np[0].y);
+            path.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw, hh + npTouch.y * touchDisToMid['B'] * hbw);
+            path.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw, hh + npTouch1.y * touchDisToMid['B'] * hbw);
+            path.lineTo(np[1].x, np[1].y);
+            break;
+        }
+        case 's': { // Use block scope
+            let npTouch = calAng(getTouchPos(startNp, 7, 'B'));
+            let npTouch1 = calAng(getTouchPos(startNp, 3, 'B'));
+            path.moveTo(np[0].x, np[0].y);
+            path.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw, hh + npTouch.y * touchDisToMid['B'] * hbw);
+            path.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw, hh + npTouch1.y * touchDisToMid['B'] * hbw);
+            path.lineTo(np[1].x, np[1].y);
+            break;
+        }// 
+        case 'V':
+            path.moveTo(np[0].x, np[0].y);
+            path.lineTo(np[1].x, np[1].y);
+            path.lineTo(
+                hw + hbw * calAng(getNotePos((Math.round(endNp / 10 % 1 * 10) - 1) % 8, 0)).x,
+                hh + hbw * calAng(getNotePos((Math.round(endNp / 10 % 1 * 10) - 1) % 8, 0)).y);
+            break;
+        default:
+            // Fallback for unknown types, draw a simple line and text
+            path.moveTo(np[0].x, np[0].y); path.lineTo(np[1].x, np[1].y);
+            // ctx.font = "30px Segoe UI";
+            // ctx.fillText(startNp + '' + type + '' + endNp, np[1].x, np[1].y);
+            break;
+    }
+    return path;
+}
+
+export function drawHold(x, y, size, color, ang, l, ctx, hbw, currentSettings, calAng) {
     ang = ang - 0.125 * Math.PI;
     let s = hbw * currentSettings.noteSize;
     size = size * s;
@@ -450,12 +472,12 @@ export function drawHold(x, y, size, color, ang, l, ctx, hbw, currentSettings, c
     ctx.strokeStyle = 'white';
     function str() {
         ctx.beginPath();
-        ctx.moveTo(x - size * currentCalAng(ang).x, y + size * currentCalAng(ang).y);
-        ctx.lineTo(x - size * currentCalAng(ang + Math.PI / 3).x, y + size * currentCalAng(ang + Math.PI / 3).y);
-        ctx.lineTo(x - size * currentCalAng(ang + 2 * Math.PI / 3).x + l * currentCalAng(ang).x, y + size * currentCalAng(ang + 2 * Math.PI / 3).y - l * currentCalAng(ang).y);
-        ctx.lineTo(x - size * currentCalAng(ang + Math.PI).x + l * currentCalAng(ang).x, y + size * currentCalAng(ang + Math.PI).y - l * currentCalAng(ang).y);
-        ctx.lineTo(x - size * currentCalAng(ang + 4 * Math.PI / 3).x + l * currentCalAng(ang).x, y + size * currentCalAng(ang + 4 * Math.PI / 3).y - l * currentCalAng(ang).y);
-        ctx.lineTo(x - size * currentCalAng(ang + 5 * Math.PI / 3).x, y + size * currentCalAng(ang + 5 * Math.PI / 3).y);
+        ctx.moveTo(x - size * calAng(ang).x, y + size * calAng(ang).y);
+        ctx.lineTo(x - size * calAng(ang + Math.PI / 3).x, y + size * calAng(ang + Math.PI / 3).y);
+        ctx.lineTo(x - size * calAng(ang + 2 * Math.PI / 3).x + l * calAng(ang).x, y + size * calAng(ang + 2 * Math.PI / 3).y - l * calAng(ang).y);
+        ctx.lineTo(x - size * calAng(ang + Math.PI).x + l * calAng(ang).x, y + size * calAng(ang + Math.PI).y - l * calAng(ang).y);
+        ctx.lineTo(x - size * calAng(ang + 4 * Math.PI / 3).x + l * calAng(ang).x, y + size * calAng(ang + 4 * Math.PI / 3).y - l * calAng(ang).y);
+        ctx.lineTo(x - size * calAng(ang + 5 * Math.PI / 3).x, y + size * calAng(ang + 5 * Math.PI / 3).y);
         ctx.closePath(); // Close the path for hold notes
         ctx.stroke();
     }
@@ -467,7 +489,7 @@ export function drawHold(x, y, size, color, ang, l, ctx, hbw, currentSettings, c
     str();
 }
 
-export function drawTouch(pos, size, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, currentCalAng) { // Renamed t to t_touch
+export function drawTouch(pos, size, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, calAng) { // Renamed t to t_touch
     opacity = Math.min(Math.max(opacity, 0), 1);
     let localColor = 'rgba(' + parseInt(color.substring(1, 3), 16) + ',' + parseInt(color.substring(3, 5), 16) + ',' + parseInt(color.substring(5, 7), 16) + ',' + opacity + ')'; // Renamed
     let s = hbw * currentSettings.noteSize;
@@ -477,7 +499,7 @@ export function drawTouch(pos, size, color, type, distance, opacity, holdtime, t
     let touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 };
     let touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
     let ang = (pos - 0.5 - touchAngleOffset[type]) / 4 * Math.PI;
-    let np = currentCalAng(ang);
+    let np = calAng(ang);
 
     ctx.shadowBlur = s * 0.2;
     ctx.shadowColor = 'rgba(0,0,0,' + opacity + ')';
@@ -564,7 +586,7 @@ export function drawTouch(pos, size, color, type, distance, opacity, holdtime, t
                 let baseX = hw + np.x * touchDisToMid[type] * hbw + startPoints[i].x;
                 let baseY = hh + np.y * touchDisToMid[type] * hbw + startPoints[i].y;
                 ctx.moveTo(baseX, baseY);
-                ctx.lineTo(baseX + currentCalAng(angles[i]).x * dis, baseY + currentCalAng(angles[i]).y * dis);
+                ctx.lineTo(baseX + calAng(angles[i]).x * dis, baseY + calAng(angles[i]).y * dis);
                 ctx.stroke();
             }
         }

@@ -2,6 +2,7 @@ import { simai_decode } from "../Js/decode.js";
 import * as render from "../Js/render.js";
 
 export let settings = {
+    'musicDelay': 0,
     'distanceToMid': 0.28,
     'roundStroke': true,
     'noteSize': 0.09,
@@ -34,6 +35,36 @@ export let settings = {
         'sfxs': true,
     },
     maidata;
+
+// 在您的 main.js 檔案中，可以放在 settings 和 soundSettings 物件定義之後
+
+const settingsConfig = {
+    // 'target' 指向實際儲存設定值的物件 (settings 或 soundSettings)
+    // 'key' 是在 target 物件中的屬性名稱
+    // 'label' 是顯示在介面上的名稱
+    // 'type' 是表單元素的類型
+    // 其他屬性如 'step', 'min', 'max' 針對數字類型
+    game: [
+        { target: settings, key: 'distanceToMid', label: 'Note 出現位置 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: settings, key: 'roundStroke', label: '圓滑邊緣 (Round Stroke)', type: 'boolean' },
+        { target: settings, key: 'noteSize', label: 'Note 大小 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: settings, key: 'speed', label: 'Tap/Hold 速度倍率', type: 'number', step: 0.1 },
+        { target: settings, key: 'pinkStar', label: '粉紅色星星 (Pink Star)', type: 'boolean' },
+        { target: settings, key: 'touchSpeed', label: 'Touch 速度倍率', type: 'number', step: 0.1 },
+        { target: settings, key: 'slideSpeed', label: 'Slide 速度倍率', type: 'number', step: 0.1 },
+        { target: settings, key: 'holdEndNoSound', label: 'Hold 結尾無音效', type: 'boolean' },
+        { target: settings, key: 'showSlide', label: '顯示 Slide 軌跡', type: 'boolean' }
+    ],
+    sound: [
+        { target: soundSettings, key: 'sfxs', label: '啟用打擊音效', type: 'boolean' },
+        { target: soundSettings, key: 'answer', label: '啟用 Answer 音效', type: 'boolean' },
+        { target: soundSettings, key: 'answerVol', label: 'Answer 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 }, // step 0.01 for finer control
+        { target: soundSettings, key: 'judgeVol', label: '打擊音量 (Tap/Star/Hold) (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'breakJudgeVol', label: 'Break 打擊音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'touchVol', label: 'Touch 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'breakVol', label: 'Break 特殊音效音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 }
+    ]
+};
 
 let notes = [{}],
     triggered = [],
@@ -122,8 +153,6 @@ $(document).ready(function () {
         }
     });
 
-    let calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } };
-
     let $c = $("#render")[0],
         ctx = $c.getContext("2d"),
         doc_width = $(document).width(),
@@ -188,77 +217,165 @@ $(document).ready(function () {
 
     // 處理設定按鈕點擊
     $('.sett-menu-button').on('click', function () {
-        $('.dropdownlist .file-menu').hide(); // 假設這個還是需要的
-        populateSettingsForm(); // 新增的函式：填充表單
+        $('.dropdownlist .file-menu').hide();
+        generateSettingsForm(); // 產生並填充表單
         $('#settings-popup').show();
         $('#settings-overlay').show();
     });
 
-    // 新增函式：將目前的設定值填入表單
-    function populateSettingsForm() {
-        // 填充 'settings' 物件的內容
-        $('#setting-distanceToMid').val(settings.distanceToMid);
-        $('#setting-roundStroke').prop('checked', settings.roundStroke);
-        $('#setting-noteSize').val(settings.noteSize);
-        $('#setting-speed').val(settings.speed);
-        $('#setting-pinkStar').prop('checked', settings.pinkStar);
-        $('#setting-touchSpeed').val(settings.touchSpeed);
-        $('#setting-slideSpeed').val(settings.slideSpeed);
-        $('#setting-holdEndNoSound').prop('checked', settings.holdEndNoSound);
-        $('#setting-showSlide').prop('checked', settings.showSlide);
+    // 新增函式：動態產生並填充設定表單
+    function generateSettingsForm() {
+        const $form = $('#settings-form');
+        console.log($form);
+        $form.empty(); // 清空之前的表單內容
 
-        // 填充 'soundSettings' 物件的內容
-        $('#setting-sound-sfxs').prop('checked', soundSettings.sfxs);
-        $('#setting-sound-answer').prop('checked', soundSettings.answer);
-        $('#setting-sound-answerVol').val(soundSettings.answerVol);
-        $('#setting-sound-judgeVol').val(soundSettings.judgeVol);
-        $('#setting-sound-breakJudgeVol').val(soundSettings.breakJudgeVol);
-        $('#setting-sound-touchVol').val(soundSettings.touchVol);
-        $('#setting-sound-breakVol').val(soundSettings.breakVol);
+        // 處理遊戲設定
+        const $gameSettingsHeader = $('<h3>').text('基本').css('margin-top', 0);
+        $form.append($gameSettingsHeader);
+        settingsConfig.game.forEach(config => {
+            const $fieldContainer = $('<div>').addClass('setting-field'); // 給每個設定項一個容器，方便CSS控制
+            const fieldId = `setting-game-${config.key}`; // 產生唯一的 ID
 
-        // 如果有其他設定，也在此處加入
+            const $label = $('<label>').attr('for', fieldId).text(config.label + ':');
+            $fieldContainer.append($label);
+
+            let $input;
+            const currentValue = config.target[config.key];
+
+            if (config.type === 'boolean') {
+                $input = $('<input type="checkbox">')
+                    .attr('id', fieldId)
+                    .attr('name', config.key) // name 可以用於表單提交，但這裡主要用 id
+                    .prop('checked', currentValue);
+                // 為了讓 checkbox 和 label 在同一行且有間隔
+                $label.css('margin-right', '5px');
+                $fieldContainer.empty().append($label).append($input); // 調整順序，checkbox 在前
+            } else if (config.type === 'number') {
+                $input = $('<input type="number">')
+                    .attr('id', fieldId)
+                    .attr('name', config.key)
+                    .val(currentValue);
+                if (config.step !== undefined) $input.attr('step', config.step);
+                if (config.min !== undefined) $input.attr('min', config.min);
+                if (config.max !== undefined) $input.attr('max', config.max);
+                $fieldContainer.append($input);
+            }
+            // 您可以根據需要擴展其他類型，例如 'text', 'select'
+            // else if (config.type === 'select') {
+            //     $input = $('<select>').attr('id', fieldId).attr('name', config.key);
+            //     config.options.forEach(opt => {
+            //         $('<option>').val(opt.value).text(opt.label).appendTo($input);
+            //     });
+            //     $input.val(currentValue);
+            //     $fieldContainer.append($input);
+            // }
+
+            if ($input) {
+                $form.append($fieldContainer);
+            }
+        });
+
+        $form.append($('<hr>'));
+
+        // 處理音效設定
+        const $soundSettingsHeader = $('<h3>').text('音效設定');
+        $form.append($soundSettingsHeader);
+        settingsConfig.sound.forEach(config => {
+            const $fieldContainer = $('<div>').addClass('setting-field');
+            const fieldId = `setting-sound-${config.key}`; // 產生唯一的 ID
+
+            const $label = $('<label>').attr('for', fieldId).text(config.label + ':');
+            $fieldContainer.append($label);
+
+            let $input;
+            const currentValue = config.target[config.key];
+
+            if (config.type === 'boolean') {
+                $input = $('<input type="checkbox">')
+                    .attr('id', fieldId)
+                    .attr('name', config.key)
+                    .prop('checked', currentValue);
+                $label.css('margin-right', '5px');
+                $fieldContainer.empty().append($label).append($input);
+            } else if (config.type === 'number') {
+                $input = $('<input type="number">')
+                    .attr('id', fieldId)
+                    .attr('name', config.key)
+                    .val(currentValue);
+                if (config.step !== undefined) $input.attr('step', config.step);
+                if (config.min !== undefined) $input.attr('min', config.min);
+                if (config.max !== undefined) $input.attr('max', config.max);
+                $fieldContainer.append($input);
+            }
+            // ... (可以擴展其他類型)
+
+            if ($input) {
+                $form.append($fieldContainer);
+            }
+        });
     }
 
     // 處理儲存和取消按鈕
     $('#save-settings-btn, #cancel-settings-btn').on('click', function () {
         if (this.id === "save-settings-btn") {
             try {
-                // 從表單讀取 'settings'
-                settings.distanceToMid = parseFloat($('#setting-distanceToMid').val());
-                settings.roundStroke = $('#setting-roundStroke').is(':checked');
-                settings.noteSize = parseFloat($('#setting-noteSize').val());
-                settings.speed = parseFloat($('#setting-speed').val());
-                settings.pinkStar = $('#setting-pinkStar').is(':checked');
-                settings.touchSpeed = parseFloat($('#setting-touchSpeed').val());
-                settings.slideSpeed = parseFloat($('#setting-slideSpeed').val());
-                settings.holdEndNoSound = $('#setting-holdEndNoSound').is(':checked');
-                settings.showSlide = $('#setting-showSlide').is(':checked');
+                // 遍歷 settingsConfig 來讀取表單值並更新設定物件
+                ['game', 'sound'].forEach(groupKey => {
+                    settingsConfig[groupKey].forEach(config => {
+                        const fieldId = `setting-${groupKey}-${config.key}`;
+                        const $input = $(`#${fieldId}`);
 
-                // 從表單讀取 'soundSettings'
-                soundSettings.sfxs = $('#setting-sound-sfxs').is(':checked');
-                soundSettings.answer = $('#setting-sound-answer').is(':checked');
-                soundSettings.answerVol = parseFloat($('#setting-sound-answerVol').val());
-                soundSettings.judgeVol = parseFloat($('#setting-sound-judgeVol').val());
-                soundSettings.breakJudgeVol = parseFloat($('#setting-sound-breakJudgeVol').val());
-                soundSettings.touchVol = parseFloat($('#setting-sound-touchVol').val());
-                soundSettings.breakVol = parseFloat($('#setting-sound-breakVol').val());
-
+                        if ($input.length) { // 確保元素存在
+                            let newValue;
+                            if (config.type === 'boolean') {
+                                newValue = $input.is(':checked');
+                            } else if (config.type === 'number') {
+                                newValue = parseFloat($input.val());
+                                if (isNaN(newValue)) { // 簡單的驗證
+                                    console.warn(`設定 "${config.label}" 的值不是一個有效的數字: ${$input.val()}`);
+                                    // 可以選擇拋出錯誤或使用預設值
+                                    // throw new Error(`設定 "${config.label}" 的值無效`);
+                                    newValue = config.target[config.key]; // 保留原值或設為預設
+                                }
+                            }
+                            // else if (config.type === 'select' || config.type === 'text') {
+                            //     newValue = $input.val();
+                            // }
+                            else {
+                                newValue = $input.val(); // 預設處理方式
+                            }
+                            config.target[config.key] = newValue;
+                        }
+                    });
+                });
 
                 console.log("新的遊戲設定：", settings);
                 console.log("新的音效設定：", soundSettings);
-                // 您可以在此處加入例如將設定儲存到 localStorage 的邏輯
-                // localStorage.setItem('gameSettings', JSON.stringify(settings));
-                // localStorage.setItem('soundSettings', JSON.stringify(soundSettings));
+                // (可選) localStorage.setItem('gameSettings', JSON.stringify(settings));
+                // (可選) localStorage.setItem('soundSettings', JSON.stringify(soundSettings));
 
             } catch (e) {
-                alert("設定值格式錯誤！請檢查數字輸入是否正確。");
+                alert("儲存設定時發生錯誤！請檢查輸入。");
                 console.error("儲存設定時發生錯誤:", e);
-                return; // 發生錯誤時不關閉彈出視窗
+                return;
             }
         }
         $('#settings-popup').hide();
         $('#settings-overlay').hide();
     });
+
+    // (可選) 頁面載入時從 localStorage 讀取設定
+    // $(document).ready(function() {
+    //     const savedGameSettings = localStorage.getItem('gameSettings');
+    //     if (savedGameSettings) {
+    //         Object.assign(settings, JSON.parse(savedGameSettings)); // 使用 Object.assign 更新
+    //     }
+    //     const savedSoundSettings = localStorage.getItem('soundSettings');
+    //     if (savedSoundSettings) {
+    //         Object.assign(soundSettings, JSON.parse(savedSoundSettings));
+    //     }
+    //     // ...
+    // });
 
     _updCanvasRes();
     controls.play.text(icons[0 + play.btnPause]);
@@ -476,7 +593,7 @@ $(document).ready(function () {
 
         // Call the render function
         // hw, hh, hbw are calculated inside renderGame based on current canvas dimensions
-        render.renderGame(ctx, notes, settings, noteImages, t, triggered, calAng);
+        render.renderGame(ctx, notes, settings, noteImages, t, triggered);
 
         requestAnimationFrame(update);
     }
