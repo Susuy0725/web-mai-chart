@@ -117,14 +117,12 @@ body {
 #timeline {
     -webkit-appearance: none;
     appearance: none;
-    width: 100%;
+    width: 96%;
     height: 20px;
-    left: 0;
     background: #ffe9e989;
     outline: none;
     margin: 0;
-    top: 100%;
-    /*transform: translateY(-100%);*/
+    transform: translateX(2%);
     box-shadow: 0 0 3px #0000005e inset;
     border-radius: 2px;
 }
@@ -151,7 +149,7 @@ body {
 }
 
 #timeline:focus {
-    border: solid #0000005e 1px;
+    border: solid #ffb4b4 2px;
 }
 
 /*.bruh {
@@ -282,6 +280,8 @@ textarea {
     z-index: 1000;
     max-height: 80vh;
     overflow-y: auto;
+    border-radius: 5px;
+    border: none;
 }
 
 .setting-field {

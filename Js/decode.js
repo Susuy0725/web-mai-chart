@@ -210,6 +210,18 @@ export function simai_decode(_data) {
             "$": "star",
         };
 
+        const slideMatch = data.pos.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
+        if (!slideMatch) {
+            for (let flag in flags) {
+                if ((data.pos ?? '').includes(flag)) {
+                    //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
+                    //tempNote[i][flags[flag]] = true;
+                    data.pos = data.pos.replaceAll(flag, "");
+                    data[flags[flag]] = true;
+                }
+            }
+        }
+
         const timeMatch = data.pos.match(/h\[([ -~]+?)\]/);
         if (timeMatch) {
             const result = parseParameter(timeMatch[1], data.bpm);
@@ -244,7 +256,6 @@ export function simai_decode(_data) {
             tempNote[i].pos = tempNote[i].pos[0];
         }
 
-        const slideMatch = data.pos.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
         if (slideMatch) {
             let temp = data.pos;
             let sp = { data: [], slideInfo: [] };
@@ -327,15 +338,14 @@ export function simai_decode(_data) {
 
             let qqq = [];
             let wholeLen = 0;
-            console.log(sp)
             for (let ind = 0; ind < sp.data.length; ind++) {
                 if (ind == 0) continue;
                 wholeLen += getSlideLen(
                     sp.data[ind][0],
-                    parseInt(sp.data[ind - 1].length > 1 ? sp.data[ind - 1][1] : sp.data[ind - 1]) - 1,
+                    parseInt(sp.data[ind - 1].length > 1 ? (sp.data[ind - 1][1].length > 1 ? sp.data[ind - 1][1][1] : sp.data[ind - 1][1]) : sp.data[ind - 1]) - 1,
                     sp.data[ind][1].length > 1 ? sp.data[ind][1] - 1 : parseInt(sp.data[ind][1]),
                     100, 100, 100);
-            } console.log(wholeLen);
+            }
 
             for (let j = 1; j < sp.data.length; j++) {
                 let _temp = (sp.slideInfo[j] ?? {});
@@ -347,20 +357,18 @@ export function simai_decode(_data) {
 
                     let slideLen = getSlideLen(
                         sp.data[j][0],
-                        parseInt(sp.data[j - 1].length > 1 ? sp.data[j - 1][1] : sp.data[j - 1]) - 1,
+                        parseInt(sp.data[j - 1].length > 1 ? (sp.data[j - 1][1].length > 1 ? sp.data[j - 1][1][1] : sp.data[j - 1][1]) : sp.data[j - 1]) - 1,
                         sp.data[j][1].length > 1 ? sp.data[j][1] : parseInt(sp.data[j][1]) - 1,
                         100, 100, 100);
-
-                    console.log(slideLen)
 
                     let per = slideLen / wholeLen;
                     sp.slideInfo[j].duration = _llll.duration * per;
 
                     if (sp.slideInfo[j + 1] === _llll) {
                         let slideLen = getSlideLen(
-                            sp.data[j+1][0],
+                            sp.data[j + 1][0],
                             parseInt(sp.data[j][1]) - 1,
-                            sp.data[j+1][1].length > 1 ? sp.data[j+1][1] : parseInt(sp.data[j+1][1]) - 1,
+                            sp.data[j + 1][1].length > 1 ? sp.data[j + 1][1] : parseInt(sp.data[j + 1][1]) - 1,
                             100, 100, 100);
 
                         let per = slideLen / wholeLen;
@@ -374,7 +382,7 @@ export function simai_decode(_data) {
                     ..._temp, ...{
                         time: tempNote[i].time,
                         slide: true,
-                        slideHead: (j - 1) < 1 ? sp.data[0] : sp.data[j - 1][1],
+                        slideHead: (j - 1) < 1 ? sp.data[0] : (sp.data[j - 1][1].length > 1 ? sp.data[j - 1][1][1] : sp.data[j - 1][1]),
                         slideType: sp.data[j][0],
                         slideEnd: sp.data[j][1],
                         slideTime: (sp.slideInfo[j] ?? '').duration,
