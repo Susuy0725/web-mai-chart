@@ -293,22 +293,7 @@ export class PathRecorder {
     }
 
     getTotalLength() {
-        // Prefer this.currentLength if calculated mathematically
-        if (this.currentLength > 0 && this.points.length > 1) { // Basic check
-            return this.currentLength;
-        }
-        // Fallback or warning if using SVG method (SHOULD BE AVOIDED)
-        console.warn("PathRecorder.getTotalLength() called without pre-calculated mathematical length. SVG fallback is slow.");
-        const svgNS = "http://www.w3.org/2000/svg";
-        const tempSvg = document.createElementNS(svgNS, "svg");
-        tempSvg.setAttribute("width", "0"); tempSvg.setAttribute("height", "0");
-        const pathEl = document.createElementNS(svgNS, "path");
-        pathEl.setAttribute("d", this.toSVGPath());
-        tempSvg.appendChild(pathEl);
-        document.body.appendChild(tempSvg); // DOM Manipulation - VERY SLOW
-        const len = pathEl.getTotalLength();
-        document.body.removeChild(tempSvg); // DOM Manipulation - VERY SLOW
-        return len;
+        return this.currentLength;
     }
 
     // Implement getPointAtLength mathematically based on this.points and their types
@@ -324,7 +309,6 @@ export class PathRecorder {
             if (p2.type === 'M' || p2.type === 'M_ArcStart') {
                 if (i > 0 && this.points[i - 1].type !== 'M' && this.points[i - 1].type !== 'M_ArcStart') continue; // if p1 was end of segment
             }
-
 
             let segmentLength = 0;
             let segmentAngle = 0;
@@ -522,6 +506,15 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
             pathRec.lineTo(
                 hw + hbw * thirdPointAng.x,
                 hh + hbw * thirdPointAng.y);
+            break;
+        }
+        case 'q': {
+            let npTouch = calAng(getTouchPos(startNp, 2, 'B'));
+            let npTouch1 = calAng(getTouchPos(startNp, 1, 'B'));
+            pathRec.moveTo(np[0].x, np[0].y);
+            pathRec.lineTo(hw + calAng(getNotePos(startNp, 3)).x * hbw, hh + calAng(getNotePos(startNp, 3)).y * hbw);
+            pathRec.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw, hh + npTouch1.y * touchDisToMid['B'] * hbw);
+            pathRec.lineTo(np[1].x, np[1].y);
             break;
         }
         default:
