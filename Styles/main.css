@@ -94,6 +94,7 @@ body {
 }
 
 .controls-btns {
+    padding-top: 20px;
     display: flex;
     height: calc(100% - 20px);
     width: 100%;
@@ -103,6 +104,7 @@ body {
 }
 
 #playBtn {
+    background: white;
     position: absolute;
     font-family: Icon;
     width: 25px;
@@ -115,23 +117,27 @@ body {
 }
 
 #timeline {
+    position: absolute;
+    bottom: 46px;
+    left: 50%;
     -webkit-appearance: none;
     appearance: none;
-    width: 96%;
-    height: 20px;
+    width: 90%;
+    height: 12px;
     background: #ffe9e989;
     outline: none;
     margin: 0;
-    transform: translateX(2%);
+    transform: translateX(-50%) translateY(50%);
     box-shadow: 0 0 3px #0000005e inset;
     border-radius: 2px;
+    box-sizing: initial;
 }
 
 #timeline::-webkit-slider-thumb {
     -webkit-appearance: none;
     /* Override default look */
     appearance: none;
-    width: 10px;
+    width: 12px;
     height: 100%;
     background: #ff3232;
     cursor: pointer;
@@ -142,16 +148,38 @@ body {
 }
 
 #timeline::-webkit-slider-thumb:hover {
-    width: 15px;
+    width: calc(12px + 5px);
     height: calc(100% + 5px);
     border-radius: 4px;
     background: #ff6464;
 }
 
 #timeline:focus {
-    border: solid #ffb4b4 2px;
+    border: solid #aaa 1px;
 }
 
+#customMenu {
+    color: #fff;
+    position: absolute;
+    display: none;
+    background: #232323;
+    border: 1px solid #444;
+    border-radius: 6px;
+    box-shadow: 0px 2px 5px rgb(0 0 0 / 50%);
+    z-index: 1000;
+}
+
+#customMenu > div{
+    margin: 3px;
+    padding: 6px;
+    min-width: 100px;
+    font-size: 12px;
+    border-radius: 3px;
+}
+
+#customMenu > div:hover{
+    background: rgba(255, 255, 255, 0.188)
+}
 /*.bruh {
     position: absolute;
     display: flex;
@@ -286,15 +314,21 @@ textarea {
 
 .setting-field {
     margin-bottom: 10px;
-    display: flex; /* 或者其他佈局方式 */
-    align-items: center; /* 垂直居中 */
+    display: flex;
+    /* 或者其他佈局方式 */
+    align-items: center;
+    /* 垂直居中 */
     justify-content: space-between;
 }
+
 .setting-field label {
     margin-right: 10px;
-    min-width: 200px; /* 讓標籤寬度一致，方便對齊 */
+    min-width: 200px;
+    /* 讓標籤寬度一致，方便對齊 */
     display: inline-block;
 }
+
 .setting-field input[type="number"] {
-    width: 80px; /* 或其他合適的寬度 */
+    width: 80px;
+    /* 或其他合適的寬度 */
 }

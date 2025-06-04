@@ -12,6 +12,7 @@ export let settings = { // Keep export if other modules might need direct access
     'slideSpeed': 2,
     'holdEndNoSound': false,
     'showSlide': true,
+    'nextNoteHighlight': false,
 };
 // Make play and soundSettings local if not modified externally
 let play = {
@@ -28,6 +29,7 @@ let soundSettings = {
     'answer': true,
     'answerVol': 0.8,
     'judgeVol': 0.1,
+    'judgeExVol': 0.1,
     'breakJudgeVol': 0.1,
     'touchVol': 0.2,
     'breakVol': 0.3,
@@ -37,6 +39,7 @@ let maidata; // Chart data
 
 const settingsConfig = {
     game: [
+        { target: settings, key: 'musicDelay', label: '譜面偏移 (音樂延遲)', type: 'number', step: 0.01, min: -20, max: 20 },
         { target: settings, key: 'distanceToMid', label: 'Note 出現位置 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: settings, key: 'roundStroke', label: '圓滑邊緣', type: 'boolean' },
         { target: settings, key: 'noteSize', label: 'Note 大小 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
@@ -51,7 +54,8 @@ const settingsConfig = {
         { target: soundSettings, key: 'sfxs', label: '啟用打擊音效', type: 'boolean' },
         { target: soundSettings, key: 'answer', label: '啟用 Answer 音效', type: 'boolean' },
         { target: soundSettings, key: 'answerVol', label: 'Answer 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
-        { target: soundSettings, key: 'judgeVol', label: '打擊音量 (Tap/Star/Hold) (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'judgeVol', label: '打擊音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'judgeExVol', label: 'Ex音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'breakJudgeVol', label: 'Break 打擊音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'touchVol', label: 'Touch 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'breakVol', label: 'Break 特殊音效音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 }
@@ -69,10 +73,11 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 const soundFiles = {
     tap: 'judge.wav',
+    ex: 'judge_ex.wav',
     break: 'judge_break.wav',
     break_woo: 'break.wav',
     touch: 'touch.wav',
-    answer: 'answer.wav'
+    answer: 'answer.wav',
 };
 
 let soundBuffers = {}; // Use `let`
@@ -121,11 +126,14 @@ loadAllSounds(soundFiles).then(buffers => {
 
 
 function _playEffect(note, hold = false) {
-    if (!sfxReady) return;
+    if (!sfxReady || play.pause) return;
     if (soundSettings.answer && soundBuffers.answer) {
         playSound(soundBuffers, 'answer', { volume: soundSettings.answerVol });
     }
     if (soundSettings.sfxs) {
+        if (note.ex && soundBuffers.ex && !hold) { // Ensure it's not touch before playing tap
+            playSound(soundBuffers, 'ex', { volume: soundSettings.judgeExVol });
+        }
         if (note.break && !hold) {
             if (soundBuffers.break_woo) playSound(soundBuffers, 'break_woo', { volume: soundSettings.breakVol });
             if (soundBuffers.break) playSound(soundBuffers, 'break', { volume: soundSettings.breakJudgeVol });
@@ -169,8 +177,85 @@ $(document).ready(function () {
 
     const $c = $("#render")[0]; // Use const
     const ctx = $c.getContext("2d");
+    const $menu = $("#customMenu");
     let doc_width = $(document).width(); // Keep let as it's updated on resize
     let doc_height = $(document).height();
+
+    $("body").on("contextmenu", function (e) {
+        //console.log(e);
+        e.preventDefault();
+        if (e.target === $("#editor")[0]) {
+            $menu.css({
+                top: e.pageY + "px",
+                left: e.pageX + "px",
+                display: "block"
+            });
+        }
+    });
+
+    $menu.on("click", ".menu-item", async function () {
+        const action = $(this).data("action");
+        const textarea = $editor[0];
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selected = textarea.value.substring(start, end);
+
+        switch (action) {
+            case "copy":
+                await navigator.clipboard.writeText(selected);
+                break;
+            case "cut":
+                await navigator.clipboard.writeText(selected);
+                // 刪除被剪下的內容
+                textarea.setRangeText("", start, end, "start");
+                break;
+            case "paste":
+                const pasteText = await navigator.clipboard.readText();
+                // 在游標處插入文字
+                textarea.setRangeText(pasteText, start, end, "end");
+                break;
+            case "trun-left-right": {
+                let result = '';
+                let inParen = 0;
+                let inBrace = 0;
+
+                for (let i = 0; i < selected.length; i++) {
+                    const ch = selected[i];
+
+                    if (ch === '(') inParen++;
+                    else if (ch === ')') inParen--;
+                    else if (ch === '{') inBrace++;
+                    else if (ch === '}') inBrace--;
+
+                    if (inParen == 0 && inBrace == 0 && /\d/.test(ch)) {
+                        // 只對不在括號內的數字做 9 - x
+                        result += (9 - parseInt(ch)).toString();
+                    } else {
+                        // 其他原樣輸出
+                        result += ch;
+                    }
+                }
+                // 在游標處插入文字
+                textarea.setRangeText(result, start, end, "end");
+                break;
+            }
+            default:
+                break;
+        }
+
+        data = $editor.val();
+        processChartData();
+
+        // 更新焦點
+        textarea.focus();
+        $menu.hide();
+    });
+
+    // 點其他地方關閉選單
+    $(document).on("click", function () {
+        $menu.hide();
+    });
+
 
     const $editor = $("#editor");
     let data = typeof example !== 'undefined' ? example : '';
@@ -362,7 +447,7 @@ $(document).ready(function () {
             }
             maxTime = isNaN(maxTime) ? 1000 : maxTime;
             controls.timeline.prop("max", maxTime / 1000);
-            if(currentTimelineValue > maxTime){
+            if (currentTimelineValue > maxTime) {
                 currentTimelineValue = maxTime;
             }
             play.pauseBoth(controls.play, icons);
@@ -427,7 +512,7 @@ $(document).ready(function () {
 
         if (!play.pause) {
             bgm[0].currentTime = currentTimelineValue;
-            bgm[0].play().catch(e => console.error("BGM play error:", e));
+            bgm[0].play().catch(e => null/*console.error("BGM play error:", e)*/);
         } else {
             bgm[0].pause();
         }
@@ -466,7 +551,7 @@ $(document).ready(function () {
             }
         }
 
-        const t = currentTimelineValue * 1000; // Use JS variable
+        const t = (currentTimelineValue - settings.musicDelay) * 1000; // Use JS variable
 
         if (notes && notes.length > 0 && sfxReady) {
             for (let i = notes.length - 1; i >= 0; i--) {
