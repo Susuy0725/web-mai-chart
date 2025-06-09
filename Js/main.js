@@ -15,7 +15,7 @@ export let settings = { // Keep export if other modules might need direct access
     'nextNoteHighlight': false,
     'nowDiff': 5,
 };
-// Make play and soundSettings local if not modified externallya
+// Make play and soundSettings local if not modified externallyaa
 let play = {
     'pauseBoth': function (btn, icons) {
         play.btnPause = true;
