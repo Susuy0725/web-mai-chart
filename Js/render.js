@@ -195,7 +195,7 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
     let s = noteBaseSize;
     let currentSize = Math.max(sizeFactor * s, 0);
 
-    // Example for Path2D star - define points once
+    // Example for Path2D star - define points oncea
     // This is a simplified star, adjust to your exact shape
     const getStarPath = (scale) => {
         const path = new Path2D();

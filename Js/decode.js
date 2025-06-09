@@ -203,7 +203,7 @@ export function simai_decode(_data) {
 
         /*const p = data.pos;
 
-        // 1. 定义所有合法格式
+        // 1. 定义所有合法格式a
         const reSimpleKey = /^[1-8]$/;                     // 单按键 1~8
         const reTouch = /^[ABCDE][1-8]$/;                  // touch: A1~E8
         const reHold = /^\d+h$/;                           // hold eg. '5h'
