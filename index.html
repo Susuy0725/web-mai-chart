@@ -14,8 +14,7 @@
     <link rel="stylesheet" href="Styles/main.css">
 </head>
 <script>
-    let example = `(234)
-{16}1q2[4:1],,,`;
+    let example = `1qq1[4:1]`;
 </script>
 
 <body>
@@ -25,6 +24,7 @@
         <div class="menu-item" data-action="cut">剪下</div>
         <div class="menu-item" data-action="copy">複製</div>
         <div class="menu-item" data-action="paste">貼上</div>
+        <div class="menu-item" data-action="selectAll">全選</div>
         <div class="menu-item" data-action="trun-upside-down">上下反轉</div>
         <div class="menu-item" data-action="trun-left-right">左右反轉</div>
         <div class="menu-item" data-action="trun-right">右轉 45° (逆時針)</div>
@@ -33,6 +33,7 @@
     <audio id="bgm"></audio>
     <div class="controls">
         <div class="controls-btns">
+            <div id="stopBtn"></div>
             <div id="playBtn"></div>
         </div>
         <input type="range" id="timeline" value="0.0" min="0" max="8" step="0.01">
@@ -40,6 +41,8 @@
     <div class="actions">
         <div class="file-menu-button"><span>檔案</span></div>
         <div class="diff-menu-button"><span>難度</span></div>
+        <div class="edit-menu-button"><span>編輯</span></div>
+        <div class="info-menu-button"><span>譜面資訊</span></div>
         <div class="sett-menu-button"><span>設定</span></div>
     </div>
     <div class="dropdownlist">
@@ -50,12 +53,13 @@
             <li class="a-btn3">儲存</li>
         </ul>
         <ul class="diff-menu" style="display: none;">
-            <li>EASY</li>
-            <li>ADVANCED</li>
-            <li>EXPERT</li>
-            <li>MASTER</li>
-            <li>RE:MASTER</li>
-            <li>ORIGINAL</li>
+            <li class="a-btn0">EASY</li>
+            <li class="a-btn1">BASIC</li>
+            <li class="a-btn2">ADVANCED</li>
+            <li class="a-btn3">EXPERT</li>
+            <li class="a-btn4">MASTER</li>
+            <li class="a-btn5">RE:MASTER</li>
+            <li class="a-btn6">ORIGINAL</li>
         </ul>
     </div>
 

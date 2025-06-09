@@ -8,6 +8,22 @@
     src: url('../Fonts/Handlee-Regular.ttf') format('truetype');
 }
 
+@media (max-aspect-ratio: 1/1) {
+
+    /* 當 vw < vh，也就是畫面偏「高」時 */
+    .my-element {
+        background: red;
+    }
+}
+
+@media (min-aspect-ratio: 1/1) {
+
+    /* 當 vw >= vh，也就是畫面偏「寬」時 */
+    .my-element {
+        background: blue;
+    }
+}
+
 * {
     -webkit-user-select: none;
     /* Safari */
@@ -99,13 +115,12 @@ body {
     height: calc(100% - 20px);
     width: 100%;
     align-items: center;
-    justify-content: space-around;
+    justify-content: space-evenly;
     background: white;
 }
 
-#playBtn {
+.controls-btns>div {
     background: white;
-    position: absolute;
     font-family: Icon;
     width: 25px;
     height: 25px;
@@ -114,6 +129,16 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 100ms ease;
+}
+
+.controls-btns>div:hover {
+    background: #ddd;
+}
+
+.controls-btns>div:active {
+    background: #aaa;
+    box-shadow: 0 0 2px black inset;
 }
 
 #timeline {
@@ -169,7 +194,7 @@ body {
     z-index: 1000;
 }
 
-#customMenu > div{
+#customMenu>div {
     margin: 3px;
     padding: 6px;
     min-width: 100px;
@@ -177,9 +202,10 @@ body {
     border-radius: 3px;
 }
 
-#customMenu > div:hover{
+#customMenu>div:hover {
     background: rgba(255, 255, 255, 0.188)
 }
+
 /*.bruh {
     position: absolute;
     display: flex;

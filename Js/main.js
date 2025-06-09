@@ -13,6 +13,7 @@ export let settings = { // Keep export if other modules might need direct access
     'holdEndNoSound': false,
     'showSlide': true,
     'nextNoteHighlight': false,
+    'nowDiff': 5,
 };
 // Make play and soundSettings local if not modified externally
 let play = {
@@ -214,20 +215,27 @@ $(document).ready(function () {
                 // 在游標處插入文字
                 textarea.setRangeText(pasteText, start, end, "end");
                 break;
+            case "selectAll":
+                textarea.selectionStart = 0;
+                textarea.selectionEnd = textarea.value.length;
+                break;
             case "trun-left-right": {
                 let result = '';
                 let inParen = 0;
                 let inBrace = 0;
+                let inBrack = 0;
 
                 for (let i = 0; i < selected.length; i++) {
                     const ch = selected[i];
 
                     if (ch === '(') inParen++;
-                    else if (ch === ')') inParen--;
-                    else if (ch === '{') inBrace++;
-                    else if (ch === '}') inBrace--;
+                    if (ch === ')') inParen--;
+                    if (ch === '{') inBrace++;
+                    if (ch === '}') inBrace--;
+                    if (ch === '[') inBrack++;
+                    if (ch === ']') inBrack--;
 
-                    if (inParen == 0 && inBrace == 0 && /\d/.test(ch)) {
+                    if (inParen == 0 && inBrack == 0 && inBrace == 0 && /\d/.test(ch)) {
                         // 只對不在括號內的數字做 9 - x
                         result += (9 - parseInt(ch)).toString();
                     } else {
@@ -243,7 +251,7 @@ $(document).ready(function () {
                 break;
         }
 
-        data = $editor.val();
+        data["inote_" + settings.nowDiff] = $editor.val();
         processChartData();
 
         // 更新焦點
@@ -258,13 +266,23 @@ $(document).ready(function () {
 
 
     const $editor = $("#editor");
-    let data = typeof example !== 'undefined' ? example : '';
+    let data = typeof {} !== 'undefined' ? {} : '';
+    for (let i = 1; i <= 7; i++) {
+        const key = `inote_${i}`;
+        if (typeof data[key] === "undefined") {
+            data[key] = ""; // 可以換成你想要的預設值，比如 [] 或其他
+        }
+    }
+    data.getNowDiff = function (e) {
+        return data['inote_' + e];
+    }
 
     const _sliderColor = ['#ff3232', '#FFE9E9']; // Use const
-    const icons = ['\uE103', '\uE102']; // Use const
+    const icons = ['\uE103', '\uE102', '\uE100']; // Use const
     const controls = { // Use const
         'timeline': $("#timeline"),
         'play': $('#playBtn'),
+        'stop': $('#stopBtn'),
     };
 
     const bgm = $("#bgm"); // Use const
@@ -307,15 +325,118 @@ $(document).ready(function () {
             const reader = new FileReader();
             reader.onload = function (e) {
                 maidata = e.target.result;
-                // console.log("檔案內容：", maidata);
-                data = maidata;
-                $editor.val(data); // Update editor content
+                data = parseMaidataToJson(maidata);
+                console.log("檔案內容：", data);
+                data.getNowDiff = function (e) {
+                    return data['inote_' + e];
+                }
+                settings.musicDelay = parseFloat(data.first ?? "0");
+                $editor.val(data.getNowDiff(settings.nowDiff)); // Update editor content
                 processChartData();
             };
             reader.readAsText(file);
         });
     });
 
+    function loadDiff(diff, data) {
+        $editor.val(data.getNowDiff(diff));
+        settings.nowDiff = diff;
+        processChartData();
+    }
+
+    $('.diff-menu .a-btn0').on('click', function () { // Load EASY
+        $('.dropdownlist .diff-menu').hide();
+        loadDiff(1, data);
+    });
+
+    $('.diff-menu .a-btn1').on('click', function () { // Load BASIC
+        $('.dropdownlist .diff-menu').hide();
+        loadDiff(2, data);
+    });
+
+    $('.diff-menu .a-btn2').on('click', function () { // Load ADVANCED
+        $('.dropdownlist .diff-menu').hide();
+        loadDiff(3, data);
+    });
+
+    $('.diff-menu .a-btn3').on('click', function () { // Load EXPERT
+        $('.dropdownlist .diff-menu').hide();
+        loadDiff(4, data);
+    });
+
+    $('.diff-menu .a-btn4').on('click', function () { // Load MASTER
+        $('.dropdownlist .diff-menu').hide();
+        loadDiff(5, data);
+    });
+
+    $('.diff-menu .a-btn5').on('click', function () { // Load RE:MASTER
+        $('.dropdownlist .diff-menu').hide();
+        loadDiff(6, data);
+    });
+
+    $('.diff-menu .a-btn6').on('click', function () { // Load ORIGINAL
+        $('.dropdownlist .diff-menu').hide();
+        loadDiff(7, data);
+    });
+
+    function parseMaidataToJson(text) {
+        // 1. 先把所有換行統一成 "\n"
+        const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        // 2. 以 "\n" 分行
+        const lines = normalized.split("\n");
+
+        const result = {};
+        let currentKey = null;
+        let buffer = ""; // 用來累積當前 key 的 value
+
+        for (let rawLine of lines) {
+            // 保留原始換行位置：
+            const line = rawLine.trimEnd(); // 去除行尾可能多餘的空格或換行符
+
+            if (line.startsWith("&")) {
+                // （A）先把上一個 key + buffer 存到 result
+                if (currentKey !== null) {
+                    // 去除開頭可能的 '\n'
+                    result[currentKey] = buffer.replace(/^\n/, "");
+                }
+                // （B）解析新的一行：&key=value
+                //     比如 "&title=请设置标题" → key="title", value="请设置标题"
+                const eqIndex = line.indexOf("=");
+                if (eqIndex > 0) {
+                    currentKey = line.substring(1, eqIndex);       // 看 "&" 與 "=" 之間當作 key
+                    const rest = line.substring(eqIndex + 1);      // "=" 後面到行尾當作初始 value
+                    buffer = rest.length > 0 ? rest : "";          // 如果有文字就放到 buffer，不然就空字串
+                } else {
+                    // 如果沒有 "="（極少見），就把整行（去掉 &）當 key，value 先留空
+                    currentKey = line.substring(1);
+                    buffer = "";
+                }
+            } else {
+                // 這一行不是以 "&" 開頭，代表是「繼續累積到目前 currentKey 的 buffer」。
+                // 我們要忠於原始文字，保留換行，所以先把 "\n" 加回去，再放本行內容：
+                if (line.length > 0) {
+                    buffer += "\n" + line;
+                } else {
+                    // 如果本行是空白行，也保留一個換行符
+                    buffer += "\n";
+                }
+            }
+        }
+
+        // 最後一個 key 也要收尾
+        if (currentKey !== null) {
+            result[currentKey] = buffer.replace(/^\n/, "");
+        }
+
+        for (let i = 1; i <= 7; i++) {
+            const key = `inote_${i}`;
+            if (typeof result[key] === "undefined") {
+                result[key] = ""; // 可以換成你想要的預設值，比如 [] 或其他
+            }
+        }
+
+        return result;
+    }
 
     $('.sett-menu-button').on('click', function () {
         $('.dropdownlist .file-menu').hide();
@@ -399,10 +520,11 @@ $(document).ready(function () {
 
     _updCanvasRes();
     controls.play.text(icons[0 + play.btnPause]);
+    controls.stop.text(icons[2]);
 
     function processChartData() { // Renamed from doSomethingToDataIThink
         try {
-            notes = simai_decode(data); // This now returns notes with pre-calculated path objects if possible
+            notes = simai_decode(data.getNowDiff(settings.nowDiff)); // This now returns notes with pre-calculated path objects if possible
             triggered = [];
             let newMaxTime = 1; // Local variable for calculation
 
@@ -464,7 +586,7 @@ $(document).ready(function () {
     }
 
     $editor.on("input", debounce(function () { // Debounced input
-        data = $editor.val();
+        data["inote_" + settings.nowDiff] = $editor.val();
         processChartData();
     }, 500)); // 500ms debounce delay
 
@@ -518,8 +640,19 @@ $(document).ready(function () {
         }
     });
 
-    if (data) {
-        $editor.val(data);
+    controls.stop.click(function (e) {
+        play.pauseBoth(controls.play, icons);
+        currentTimelineValue = 0; // Get current value from slider
+        startTime = Date.now();
+
+        bgm[0].pause();
+        controls.timeline.val(0);
+        updateTimelineVisual(0);
+    });
+
+    if (example) {
+        $editor.val(example);
+        data["inote_" + settings.nowDiff] = example;
         processChartData();
     }
 
@@ -533,7 +666,7 @@ $(document).ready(function () {
     }, 30));
 
     function _updCanvasRes() {
-        ctx.canvas.width = doc_width;
+        ctx.canvas.width = doc_width * 2 * ($editor.position().left / $("body").width());
         const controlsHeight = $('.controls').outerHeight(true) || 0; // Use outerHeight(true) for margins
         const actionsHeight = $('.actions').outerHeight(true) || 0;
         ctx.canvas.height = Math.max(150, (doc_height - (controlsHeight + actionsHeight)) * 2); // Ensure min height, adjust multiplier if needed

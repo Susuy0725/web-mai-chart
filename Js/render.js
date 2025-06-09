@@ -2,6 +2,8 @@
 // RENDER GAME FUNCTION - All drawing logic goes here
 // ====================================================================================
 
+import { settings } from "./main";
+
 // import { settings } from "./main.js"; // Assuming settings is passed as currentSettings
 
 // Pre-calculate angular positions if they are static
@@ -45,7 +47,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     if (currentSettings.showSlide) {
         for (let i = notesToRender.length - 1; i >= 0; i--) {
             const note = notesToRender[i];
-            if (!note || !note.slide) continue; // Simplified check
+            if (!note || !note.slide || note.invalid) continue; // Simplified check
 
             const _t = ((time - note.time) / 1000);
             let color = '#5BCCFF';
@@ -86,8 +88,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     //tap ,star and hold render
     for (let i = notesToRender.length - 1; i >= 0; i--) {
         const note = notesToRender[i];
-        if (!note || note.starTime || note.touch || note.slide) continue; // Simplified check
-
+        if (!note || note.starTime || note.touch || note.slide || note.invalid) continue; // Simplified check
 
         const _t = ((time - note.time) / 1000);
         let color = '#FF50AA';
@@ -142,7 +143,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     //touch render
     for (let i = notesToRender.length - 1; i >= 0; i--) {
         const note = notesToRender[i];
-        if (!note || !note.touch) continue; // Simplified check
+        if (!note || !note.touch || note.invalid) continue; // Simplified check
 
         const _t = ((time - note.time) / 1000);
         let color = '#0089F4';
@@ -237,125 +238,239 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
 
 
 export class PathRecorder {
-    constructor() {
-        this.commands = [];
-        this.ctxPath = new Path2D(); // Main use
-        this.lastX = null;
-        this.lastY = null;
-        this.currentLength = 0; // For mathematical length calculation
-        this.points = []; // Store points for mathematical processing
-    }
-    _fmt(v) { return +v.toFixed(4); }
+  static EPS = 1e-6;
 
-    moveTo(x, y) {
-        x = this._fmt(x); y = this._fmt(y);
-        this.commands.push(`M ${x} ${y}`); // For SVG export if still needed for debug
-        this.ctxPath.moveTo(x, y);
-        this.lastX = x; this.lastY = y;
-        this.points.push({ x, y, type: 'M' });
+  constructor() {
+    // 公開 API 相關屬性
+    this.commands = [];
+    this.ctxPath = new Path2D();
+
+    // 用於計算的內部狀態
+    this._points = [];
+    this._lastX = 0;
+    this._lastY = 0;
+
+    // 快取，用於優化長度和取點計算
+    this._segments = [];
+    this._totalLength = 0;
+    this._isCacheDirty = true; // 快取是否需要更新的標記
+  }
+
+  // 將快取標記為髒，以便下次重新計算
+  _invalidateCache() {
+    this._isCacheDirty = true;
+  }
+  
+  // 格式化數字以避免浮點數誤差
+  _fmt(v) {
+    return +v.toFixed(4);
+  }
+
+  /**
+   * 更新內部線段快取，僅在需要時執行
+   * 這是效能優化的核心
+   */
+  _updateCache() {
+    if (!this._isCacheDirty) {
+      return;
     }
 
-    lineTo(x, y) {
-        x = this._fmt(x); y = this._fmt(y);
-        if (this.lastX !== null && this.lastY !== null) {
-            const dx = x - this.lastX;
-            const dy = y - this.lastY;
-            this.currentLength += Math.sqrt(dx * dx + dy * dy);
+    this._segments = [];
+    let accumulatedLength = 0;
+    let subpathStartPoint = null;
+
+    for (let i = 0; i < this._points.length; i++) {
+      const p2 = this._points[i];
+      
+      if (p2.type === 'M') {
+        subpathStartPoint = p2;
+        continue;
+      }
+      
+      const p1 = this._points[i - 1];
+      // 如果前一個點不存在或是 Z，則無法形成線段
+      if (!p1 || p1.type === 'Z') {
+          continue;
+      }
+      
+      let targetPoint = p2;
+      if (p2.type === 'Z') {
+        // 如果是閉合路徑，線段的終點是當前子路徑的起點
+        if (!subpathStartPoint) continue;
+        targetPoint = subpathStartPoint;
+      }
+      
+      const dx = targetPoint.x - p1.x;
+      const dy = targetPoint.y - p1.y;
+      const len = Math.hypot(dx, dy);
+
+      if (len > PathRecorder.EPS) {
+        accumulatedLength += len;
+        this._segments.push({
+          p1,
+          p2: targetPoint,
+          len,
+          ang: Math.atan2(dy, dx),
+          accLen: accumulatedLength,
+        });
+      }
+    }
+    
+    this._totalLength = accumulatedLength;
+    this._isCacheDirty = false;
+  }
+
+  moveTo(x, y) {
+    x = this._fmt(x); y = this._fmt(y);
+    this.commands.push(`M ${x} ${y}`);
+    this.ctxPath.moveTo(x, y);
+    this._lastX = x; this._lastY = y;
+    this._points.push({ x, y, type: 'M' });
+    this._invalidateCache();
+  }
+
+  lineTo(x, y) {
+    x = this._fmt(x); y = this._fmt(y);
+    this.commands.push(`L ${x} ${y}`);
+    this.ctxPath.lineTo(x, y);
+    this._lastX = x; this._lastY = y;
+    this._points.push({ x, y, type: 'L' });
+    this._invalidateCache();
+  }
+  
+  arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
+    // Arc to SVG command conversion logic remains the same
+    let delta = endAngle - startAngle;
+    if (!anticlockwise && delta < 0) delta += 2 * Math.PI;
+    if ( anticlockwise && delta > 0) delta -= 2 * Math.PI;
+
+    const largeArcFlag = Math.abs(delta) > Math.PI ? 1 : 0;
+    const sweepFlag = anticlockwise ? 0 : 1;
+    const startX = this._fmt(cx + r * Math.cos(startAngle));
+    const startY = this._fmt(cy + r * Math.sin(startAngle));
+    const endX = this._fmt(cx + r * Math.cos(endAngle));
+    const endY = this._fmt(cy + r * Math.sin(endAngle));
+    
+    // 如果路徑的最後一個點不是圓弧的起點，先畫一條線過去
+    if (Math.abs(this._lastX - startX) > PathRecorder.EPS || Math.abs(this._lastY - startY) > PathRecorder.EPS) {
+        this.lineTo(startX, startY);
+    }
+
+    this.commands.push(`A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`);
+    this.ctxPath.arc(cx, cy, r, startAngle, endAngle, anticlockwise);
+
+    // 離散化圓弧為一系列的點（用於長度計算和取點）
+    // 這部分邏輯不變，因為將曲線轉為密集折線是計算長度的常見且有效方法
+    const segments = Math.ceil(Math.abs(delta) / (Math.PI / 18)); // 每 10 度一個點
+    for (let i = 1; i <= segments; i++) {
+      const angle = startAngle + delta * (i / segments);
+      const x = this._fmt(cx + r * Math.cos(angle));
+      const y = this._fmt(cy + r * Math.sin(angle));
+      this._points.push({ x, y, type: 'L' });
+    }
+
+    this._lastX = endX; this._lastY = endY;
+    this._invalidateCache();
+  }
+
+  closePath() {
+    this.commands.push('Z');
+    this.ctxPath.closePath();
+    this._points.push({ type: 'Z' }); // 使用一個哨兵點來標記閉合
+    this._invalidateCache();
+  }
+
+  toSVGPath() {
+    return this.commands.join(' ');
+  }
+
+  getTotalLength() {
+    this._updateCache(); // 確保快取是最新
+    return this._totalLength;
+  }
+
+  /**
+   * 取得在指定長度位置的點座標和切線角度
+   * @param {number} targetLength 
+   * @returns {{x: number, y: number, angle: number}}
+   */
+  getPointAtLength(targetLength) {
+    this._updateCache();
+    
+    const segments = this._segments;
+    const totalLength = this._totalLength;
+
+    // 處理邊界情況
+    if (targetLength <= 0) {
+      const firstSeg = segments[0];
+      return { x: firstSeg.p1.x, y: firstSeg.p1.y, angle: firstSeg.ang };
+    }
+    if (targetLength >= totalLength) {
+      const lastSeg = segments[segments.length - 1];
+      return { x: lastSeg.p2.x, y: lastSeg.p2.y, angle: lastSeg.ang };
+    }
+
+    // 使用二分搜尋法快速定位線段
+    let low = 0, high = segments.length - 1;
+    let segIndex = -1;
+    while(low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (segments[mid].accLen >= targetLength) {
+            segIndex = mid;
+            high = mid - 1;
+        } else {
+            low = mid + 1;
         }
-        this.commands.push(`L ${x} ${y}`);
-        this.ctxPath.lineTo(x, y);
-        this.lastX = x; this.lastY = y;
-        this.points.push({ x, y, type: 'L' });
     }
 
-    arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
-        // Mathematical length of arc: r * abs(endAngle - startAngle)
-        let delta = endAngle - startAngle;
-        if (!anticlockwise && delta < 0) delta += 2 * Math.PI;
-        if (anticlockwise && delta > 0) delta -= 2 * Math.PI;
-        this.currentLength += Math.abs(r * delta);
+    const seg = segments[segIndex];
+    const prevAccLen = segIndex > 0 ? segments[segIndex - 1].accLen : 0;
+    const lenInSeg = targetLength - prevAccLen;
+    const t = seg.len < PathRecorder.EPS ? 0 : lenInSeg / seg.len;
+    
+    return {
+      x: seg.p1.x + (seg.p2.x - seg.p1.x) * t,
+      y: seg.p1.y + (seg.p2.y - seg.p1.y) * t,
+      angle: seg.ang,
+    };
+  }
 
-        this.ctxPath.arc(cx, cy, r, startAngle, endAngle, anticlockwise);
-
-        // For SVG export and point tracking, approximate with line segments if needed
-        // This part is complex if you need precise points from the arc for SVG.
-        // For Path2D drawing, ctxPath.arc is enough.
-        // For mathematical getPointAtLength on an arc, you'd use parametric equations.
-        const segments = Math.ceil(Math.abs(delta) / (Math.PI / 18)); // e.g., segment per 10 degrees
-        for (let i = 0; i <= segments; i++) {
-            const angle = startAngle + (delta * i / segments);
-            const x = this._fmt(cx + r * Math.cos(angle));
-            const y = this._fmt(cy + r * Math.sin(angle));
-            if (i === 0 && (this.lastX !== x || this.lastY !== y)) { // If moveTo is needed
-                this.commands.push(`M ${x} ${y}`);
-                this.points.push({ x, y, type: 'M_ArcStart' });
-            } else if (i > 0) {
-                this.commands.push(`L ${x} ${y}`); // Approximate arc with lines for SVG string
-                this.points.push({ x, y, type: 'L_ArcSegment' });
-            }
-            this.lastX = x; this.lastY = y;
-        }
-        // Update lastX, lastY to the end of the arc
-        this.lastX = this._fmt(cx + r * Math.cos(endAngle));
-        this.lastY = this._fmt(cy + r * Math.sin(endAngle));
+  /**
+   * 以指定解析度（沿路徑等距）取樣點陣列
+   * @param {number} resolution - 取樣間距（路徑長度單位）
+   * @returns {Array<{x: number, y: number, angle: number, length: number}>}
+   */
+  getPointsAtResolution(resolution) {
+    if (resolution <= PathRecorder.EPS) {
+      throw new Error('Resolution must be > 0');
     }
-
-    getTotalLength() {
-        return this.currentLength;
+    
+    const total = this.getTotalLength(); // 這會觸發一次快取更新
+    const samples = [];
+    
+    for (let t = 0; t < total; t += resolution) {
+      const pt = this.getPointAtLength(t);
+      samples.push({
+        x: this._fmt(pt.x),
+        y: this._fmt(pt.y),
+        angle: pt.angle,
+        length: this._fmt(t),
+      });
     }
+    
+    // 確保包含路徑的最後一個點
+    const endPt = this.getPointAtLength(total);
+    samples.push({
+      x: this._fmt(endPt.x),
+      y: this._fmt(endPt.y),
+      angle: endPt.angle,
+      length: this._fmt(total),
+    });
 
-    // Implement getPointAtLength mathematically based on this.points and their types
-    getPointAtLength(targetLength) {
-        if (this.points.length < 2) return this.points[0] || { x: 0, y: 0, angle: 0 };
-
-        let accumulatedLength = 0;
-        for (let i = 0; i < this.points.length - 1; i++) {
-            const p1 = this.points[i];
-            const p2 = this.points[i + 1];
-
-            // Skip if p2 is a moveTo, means a new subpath started by p1
-            if (p2.type === 'M' || p2.type === 'M_ArcStart') {
-                if (i > 0 && this.points[i - 1].type !== 'M' && this.points[i - 1].type !== 'M_ArcStart') continue; // if p1 was end of segment
-            }
-
-            let segmentLength = 0;
-            let segmentAngle = 0;
-
-            // This needs to handle arcs properly if `this.points` stores arc segments correctly
-            // For now, assuming line segments for simplicity of this example
-            const dx = p2.x - p1.x;
-            const dy = p2.y - p1.y;
-            segmentLength = Math.sqrt(dx * dx + dy * dy);
-            segmentAngle = Math.atan2(dy, dx);
-
-
-            if (targetLength <= accumulatedLength + segmentLength + 0.0001) { // Add epsilon for float errors
-                const remainingLength = targetLength - accumulatedLength;
-                const fraction = segmentLength === 0 ? 0 : remainingLength / segmentLength;
-                return {
-                    x: p1.x + dx * fraction,
-                    y: p1.y + dy * fraction,
-                    angle: segmentAngle
-                };
-            }
-            accumulatedLength += segmentLength;
-        }
-        // If targetLength exceeds path length, return the last point
-        const lastP = this.points[this.points.length - 1];
-        let prevP = this.points[this.points.length - 2] || { x: lastP.x, y: lastP.y };
-        if (lastP.type === 'M' || lastP.type === 'M_ArcStart' && this.points.length > 1) { // If last point was a move, angle is tricky
-            prevP = this.points.findLast(p => p.type !== 'M' && p.type !== 'M_ArcStart' && (p.x !== lastP.x || p.y !== lastP.y)) || lastP;
-        }
-
-        return {
-            x: lastP.x,
-            y: lastP.y,
-            angle: Math.atan2(lastP.y - prevP.y, lastP.x - prevP.x) || 0
-        };
-    }
-
-    toSVGPath() { return this.commands.join(" "); }
+    return samples;
+  }
 }
+
 
 // Modified drawSlidePath - CRITICAL: drawArrow needs full rewrite to avoid DOM
 export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, noteData) {
@@ -366,12 +481,12 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 
     // CRITICAL REWRITE: drawArrow should not use SVG DOM elements.
     // It should calculate points mathematically using the path object.
-    function drawArrow(pathObject, spacing, _t_arrow_progress, currentCtx, arrowColor, arrowSize) {
+    function drawArrow(pathObject, spacing, _t_arrow_progress, currentCtx, arrowColor, arrowSize, getBigger) {
         const totalLen = pathObject.getTotalLength(); // Assumes pathObject.getTotalLength() is now mathematical
         if (totalLen <= 0) return;
 
         currentCtx.fillStyle = arrowColor;
-
+        let b = 0;
         for (let len = spacing / 2; len < totalLen - spacing / 2; len += spacing) {
             if (len / totalLen >= _t_arrow_progress) { // Only draw if part of the remaining path
                 // getPointAtLength should return {x, y, angle}
@@ -383,15 +498,16 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
                 currentCtx.beginPath();
                 // Define arrow shape relative to (0,0)
                 currentCtx.moveTo(arrowSize * 0.55, 0); // Tip of arrow
-                currentCtx.lineTo(arrowSize * 0.35, arrowSize * -0.4);
-                currentCtx.lineTo(0, arrowSize * -0.4);
+                currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * -0.4 - b);
+                currentCtx.lineTo(0 - b / 2, arrowSize * -0.4 - b);
                 currentCtx.lineTo(arrowSize * 0.2, 0);
-                currentCtx.lineTo(0, arrowSize * 0.4);
-                currentCtx.lineTo(arrowSize * 0.35, arrowSize * 0.4);
+                currentCtx.lineTo(0 - b / 2, arrowSize * 0.4 + b);
+                currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * 0.4 + b);
                 currentCtx.closePath();
                 currentCtx.fill();
                 currentCtx.restore();
             }
+            b += arrowSize * (getBigger ? 0.2 : 0);
         }
     }
 
@@ -405,19 +521,18 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         localColor = color.length === 7 ? color + alphaHex : color.substring(0, 7) + alphaHex; // Handle existing alpha
         ctx.shadowColor = '#000000' + alphaHex;
     }
-    ctx.lineWidth = s * 0.75;
+    ctx.lineWidth = s * 0.15;
     ctx.strokeStyle = localColor;
 
     // Path generation (assuming render.path returns a PathRecorder instance)
     // The PathRecorder instance should be generated by noteData if possible during decode.
     const a = noteData.pathObject || path(type, startNp, endNp, hw, hh, hbw, calAng); // Use pre-calculated path if available
-
     // Draw the path itself (the line of the slide)
     //ctx.stroke(a.ctxPath); // Stroke the Path2D object
 
     // Draw arrows on the path
     // Ensure `a` is a PathRecorder with mathematical getPointAtLength and getTotalLength
-    drawArrow(a, s * 1.25, t_progress < 0 ? 0 : t_progress, ctx, localColor, s * 2); // Pass arrowSize
+    drawArrow(a, s * 1.2, t_progress < 0 ? 0 : t_progress, ctx, localColor, s * 2, type == "w"); // Pass arrowSize
 
     // Debug text: (Consider removing for production)
     // ctx.shadowBlur = s * 0.2;
@@ -490,8 +605,8 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
             let npTouch = calAng(getTouchPos(startNp, 3, 'B'));
             let npTouch1 = calAng(getTouchPos(startNp, 7, 'B'));
             pathRec.moveTo(np[0].x, np[0].y);
-            pathRec.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw, hh + npTouch.y * touchDisToMid['B'] * hbw);
-            pathRec.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw, hh + npTouch1.y * touchDisToMid['B'] * hbw);
+            pathRec.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw * 0.885, hh + npTouch.y * touchDisToMid['B'] * hbw * 0.885);
+            pathRec.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw * 0.885, hh + npTouch1.y * touchDisToMid['B'] * hbw * 0.885);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
         }
@@ -499,8 +614,8 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
             let npTouch = calAng(getTouchPos(startNp, 7, 'B'));
             let npTouch1 = calAng(getTouchPos(startNp, 3, 'B'));
             pathRec.moveTo(np[0].x, np[0].y);
-            pathRec.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw, hh + npTouch.y * touchDisToMid['B'] * hbw);
-            pathRec.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw, hh + npTouch1.y * touchDisToMid['B'] * hbw);
+            pathRec.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw * 0.885, hh + npTouch.y * touchDisToMid['B'] * hbw * 0.885);
+            pathRec.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw * 0.885, hh + npTouch1.y * touchDisToMid['B'] * hbw * 0.885);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
         }
@@ -531,6 +646,17 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
             break;
         }
         case 'qq': {
+            pathRec.moveTo(np[0].x, np[0].y);
+            pathRec.arc(
+                hw + calAng(Math.PI * (startNp / 4 - 0.25)).x * hbw / 2.1,
+                hh + calAng(Math.PI * (startNp / 4 - 0.25)).y * hbw / 2.1 + hbw / 16,
+                hbw / 2.15,
+                Math.PI * ((startNp + 9) % 8) / 4, Math.PI * (1 * ((startNp - endNp + 7) % 8 == 0) + 8 * ((startNp - endNp + 4) % 8 == 0) + (endNp + 5) % 8) / 4,
+                false);
+            pathRec.lineTo(np[1].x, np[1].y);
+            break;
+        }
+        case 'pp': {
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.lineTo(hw, hh);
             break;

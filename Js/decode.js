@@ -76,7 +76,6 @@ export function simai_decode(_data) {
         if (data) {
             if (data.pos.includes("*")) {
                 data = data.pos.split("*");
-                console.log(data)
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
                     if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm }; continue; }
@@ -202,6 +201,39 @@ export function simai_decode(_data) {
     for (let i = 0; i < tempNote.length; i++) {
         let data = tempNote[i];
 
+        /*const p = data.pos;
+
+        // 1. 定义所有合法格式
+        const reSimpleKey = /^[1-8]$/;                     // 单按键 1~8
+        const reTouch = /^[ABCDE][1-8]$/;                  // touch: A1~E8
+        const reHold = /^\d+h$/;                           // hold eg. '5h'
+        const reSlide = /^\d+(?:pp|qq|[-<>^vpqszVw])\d+$/; // slide片段 eg. 'V73'
+        const reParam = /\[.*?\]$/;                        // 参数尾巴 eg. '[4:1]'
+        const reFlag = /[bxf\$]/;                          // flag b, x, f, $
+
+        // 2. 如果它后面有参数（[...])，先去掉参数部分单独检测
+        let core = p.replace(reParam, "");
+
+        // 3. 只要 core 符合下面任意一种，就认为是合法 note
+        const isValid =
+            reSimpleKey.test(core) ||  // 普通按键
+            reTouch.test(core) ||  // touch
+            reHold.test(core) ||  // 简单 hold
+            reSlide.test(core) || // slide start+end
+            reFlag.test(core)             // flag (star, break…)
+            ;
+
+        if (!isValid) {
+            // 4. 完全不合法，直接替换成 invalid note
+            tempNote[i] = {
+                data: core,      // 原始字符串（去掉参数后或含参数都行，看你要）
+                invalid: true,
+                time: data.time,
+            };
+            console.warn("偵測到不合法音符！：", tempNote[i], i);
+            continue; // 跳过后面一大堆解析逻辑
+        }*/
+
         // ── 處理其他 Flags ──
         const flags = {
             "b": "break",
@@ -259,9 +291,10 @@ export function simai_decode(_data) {
         if (slideMatch) {
             let temp = data.pos;
             let sp = { data: [], slideInfo: [] };
-            for (let i = 0; i < slideMatch.length; i++) {
-                const e = slideMatch[i];
-                let a = temp.indexOf(e, (i != 0));
+            for (let j = 0; j < slideMatch.length; j++) {
+                const e = slideMatch[j];
+                const l = ((slideMatch[j - 1] ?? "-").length - 1) + (data.head ? -1 : 0);
+                let a = temp.indexOf(e, l + 1);
                 sp.data.push(temp.slice(0, a));
                 temp = temp.slice(a);
             }
@@ -275,6 +308,7 @@ export function simai_decode(_data) {
                 const slideMatch = sp.data[j].match(/(?:pp)|(?:qq)|[-<>^vpqszVw]/);
                 if (slideMatch && sp.data[j]) {
                     let g = sp.data[j].split(slideMatch[0])[1];
+
                     if (g) {
                         sp.data[j] = [slideMatch[0], g];
                         g = g.match(/\[([ -~]+?)\]/);
@@ -291,6 +325,7 @@ export function simai_decode(_data) {
                     sp.slideInfo[j] = {};
                 }
             }
+            console.groupEnd();
 
             function getSlideLen(type, startNp, endNp, hw, hh, hbw) {
                 let len = render.path(
@@ -433,7 +468,7 @@ export function simai_decode(_data) {
                     slide: true,
                     slideHead: headIndex,
                     slideType: curr[0],
-                    slideEnd: endIndex.toString(),
+                    slideEnd: (endIndex ?? "").toString(),
                     slideTime: base.duration,              // 計算後的這段 duration
                     chain: sp.data.length > 2,
                     chainTarget: j > 1 ? i + 1 : null,
