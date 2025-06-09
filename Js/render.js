@@ -1,8 +1,8 @@
 // ====================================================================================
-// RENDER GAME FUNCTION - All drawing logic goes here
+// RENDER GAME FUNNCTION - All drawing logic goes here
 // ====================================================================================
 
-import { settings } from "./main";
+import { settings } from "./main.js";
 
 // import { settings } from "./main.js"; // Assuming settings is passed as currentSettings
 
