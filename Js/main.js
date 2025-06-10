@@ -8,7 +8,7 @@ export let settings = { // Keep export if other modules might need direct access
     'noteSize': 0.09,
     'speed': 2,
     'pinkStar': false,
-    'touchSpeed': 3,
+    'touchSpeed': 2,
     'slideSpeed': 2,
     'holdEndNoSound': false,
     'showSlide': true,
@@ -28,13 +28,15 @@ let play = {
 };
 let soundSettings = {
     'answer': true,
+    'sfxs': true,
+    'music': true,
     'answerVol': 0.8,
     'judgeVol': 0.1,
     'judgeExVol': 0.1,
     'breakJudgeVol': 0.1,
     'touchVol': 0.2,
     'breakVol': 0.3,
-    'sfxs': true,
+    'musicVol': 0.8,
 };
 let maidata; // Chart data
 
@@ -49,17 +51,19 @@ const settingsConfig = {
         { target: settings, key: 'touchSpeed', label: 'Touch 速度倍率', type: 'number', step: 0.1 },
         { target: settings, key: 'slideSpeed', label: 'Slide 速度倍率', type: 'number', step: 0.1 },
         { target: settings, key: 'holdEndNoSound', label: 'Hold 結尾無音效', type: 'boolean' },
-        { target: settings, key: 'showSlide', label: '顯示 Slide 軌跡', type: 'boolean' }
+        { target: settings, key: 'showSlide', label: '顯示 Slide 軌跡', type: 'boolean' },
     ],
     sound: [
         { target: soundSettings, key: 'sfxs', label: '啟用打擊音效', type: 'boolean' },
         { target: soundSettings, key: 'answer', label: '啟用 Answer 音效', type: 'boolean' },
+        { target: soundSettings, key: 'music', label: '啟用音樂', type: 'boolean' },
+        { target: soundSettings, key: 'musicVol', label: '音樂音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'answerVol', label: 'Answer 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
-        { target: soundSettings, key: 'judgeVol', label: '打擊音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
-        { target: soundSettings, key: 'judgeExVol', label: 'Ex音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
-        { target: soundSettings, key: 'breakJudgeVol', label: 'Break 打擊音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'judgeVol', label: 'judge 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'judgeExVol', label: 'Ex 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'breakJudgeVol', label: 'Break judge音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'touchVol', label: 'Touch 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
-        { target: soundSettings, key: 'breakVol', label: 'Break 特殊音效音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 }
+        { target: soundSettings, key: 'breakVol', label: 'Break 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
     ]
 };
 
@@ -312,10 +316,12 @@ $(document).ready(function () {
             bgm.attr('src', objectURL);
             bgm[0].load();
             bgm.off('loadedmetadata').on('loadedmetadata', function () { // Use .off to prevent multiple bindings
+                bgm[0].volume = soundSettings.musicVol;
                 const audioDurationMs = (bgm[0].duration + 1) * 1000;
                 maxTime = Math.max(maxTime, audioDurationMs);
                 controls.timeline.prop("max", maxTime / 1000);
                 updateTimelineVisual(currentTimelineValue); // Update visual based on current time
+                console.log(bgm);
             });
         });
     });
@@ -516,6 +522,7 @@ $(document).ready(function () {
         }
         $('#settings-popup').hide();
         $('#settings-overlay').hide();
+        bgm[0].volume = soundSettings.musicVol;
     });
 
     _updCanvasRes();
@@ -606,6 +613,7 @@ $(document).ready(function () {
             }
         })
         .on("mouseup touchend", function () {
+            bgm[0].volume = soundSettings.musicVol;
             currentTimelineValue = parseFloat($(this).val());
             startTime = Date.now() - currentTimelineValue * 1000;
             play.pause = play.btnPause;
@@ -626,6 +634,7 @@ $(document).ready(function () {
         });
 
     controls.play.click(function (e) {
+        bgm[0].volume = soundSettings.musicVol;
         play.btnPause = !play.btnPause;
         play.pause = play.btnPause;
         $(this).text(icons[0 + play.btnPause]);

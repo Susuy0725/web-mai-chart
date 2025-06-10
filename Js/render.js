@@ -77,9 +77,9 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 if (!(note.slideEnd.length > 1)) nang2 = nang2 < 0 ? 0 : nang2;
 
                 if (_t >= 0) {
-                    drawSlidePath(nang, nang2, note.slideType, color, Math.max(_t - note.delay, 0) / note.slideTime, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note);
+                    drawSlidePath(nang, nang2, note.slideType, color, (_t - note.delay) / note.slideTime, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, false);
                 } else {
-                    drawSlidePath(nang, nang2, note.slideType, color, _t * currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note);
+                    drawSlidePath(nang, nang2, note.slideType, color, _t * currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, true);
                 }
             }
         }
@@ -128,7 +128,8 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
             if (note.star) {
                 drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize);
-            } else if (note.holdTime) { // Check for truthiness (not just existence)
+            } else if (note.holdTime != null) { // Check for truthiness (not just existence)
+                note.holdTime = note.holdTime == 0 ? 1E-64 : note.holdTime;
                 let holdLength = 0;
                 if (_t >= -d / currentSettings.speed) {
                     holdLength = (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * currentSettings.speed, (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / currentSettings.speed)) / (d / currentSettings.speed))) * hbw;
@@ -159,7 +160,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
         if (_t >= -1 / currentSettings.touchSpeed && _t <= (note.touchTime ?? 0)) {
             drawTouch(note.pos, 0.8, color, note.touch,
-                ani1(_t < 0 ? -_t : 0) * 0.65,
+                ani1(_t < 0 ? _t * - currentSettings.touchSpeed : 0) * 0.6,
                 (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4
                 , note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize);
         }
@@ -187,50 +188,69 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
     _arc(x, y, currentSize, ctx);
 }
 
-// Cache Star Path2D objects if possible, or simplify
-const starPathCache = {}; // Simple cache example
+// 建立一個快取來儲存不同大小的星星路徑，避免重複計算
+const starCache = new Map();
 
-export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSettings, calAng, noteBaseSize) {
-    ang = ang - 0.125 * Math.PI;
-    let s = noteBaseSize;
-    let currentSize = Math.max(sizeFactor * s, 0);
+function getStarPath(scale) {
+    // 如果快取中已有同樣大小的路徑，直接回傳
+    if (starCache.has(scale)) {
+        return starCache.get(scale);
+    }
 
-    // Example for Path2D star - define points oncea
-    // This is a simplified star, adjust to your exact shape
-    const getStarPath = (scale) => {
-        const path = new Path2D();
-        // Define star points relative to (0,0) and scale
-        // This is a placeholder, you need to calculate your star points
-        const R = scale, r = scale / 2;
-        //path.moveTo(-R, -R);
-        for (let i = 0; i < 5; i++) {
-            path.lineTo(Math.cos((18 + i * 72) * Math.PI / 180) * r, -Math.sin((18 + i * 72) * Math.PI / 180) * r);
-            path.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * R, -Math.sin((54 + i * 72) * Math.PI / 180) * R);
-        }
-        path.closePath();
-        return path;
-    };
+    const path = new Path2D();
+    const R = scale;
+    const r = scale / 2;
+
+    // 修正：使用 moveTo 設定第一個點
+    path.moveTo(Math.cos(18 * Math.PI / 180) * r, -Math.sin(18 * Math.PI / 180) * r);
+
+    for (let i = 0; i < 5; i++) {
+        // 先畫到外角點
+        path.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * R, -Math.sin((54 + i * 72) * Math.PI / 180) * R);
+        // 再畫到下一個內角點
+        path.lineTo(Math.cos((18 + (i + 1) * 72) * Math.PI / 180) * r, -Math.sin((18 + (i + 1) * 72) * Math.PI / 180) * r);
+    }
+
+    path.closePath();
+
+    // 將新產生的路徑存入快取
+    starCache.set(scale, path);
+    return path;
+}
+
+// 移除了未使用的參數 (hbw, currentSettings, calAng)
+export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSettings, calAng, noteBaseSize, alpha = 1) {
+    // 角度調整可以保留，這屬於視覺效果的一部分
+    ang = ang - 0.175 * Math.PI;
+    const currentSize = Math.max(sizeFactor * noteBaseSize, 0);
+
+    if (currentSize === 0) return; // 大小為 0 就不用畫了
 
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(ang + Math.PI / 2); // Adjust rotation if needed based on your star point definition
+    ctx.rotate(ang + Math.PI / 2);
 
-    const starShape = getStarPath(currentSize); // Recalculate path if size changes dynamically, or cache scaled versions
+    const starShape = getStarPath(currentSize);
 
-    ctx.shadowBlur = s * 0.2;
-    if (ex) {
-        ctx.shadowColor = 'white';
-    } else {
-        ctx.shadowColor = 'black';
-    }
-    ctx.lineWidth = currentSize * 0.6; // Adjusted for Path2D
-    ctx.strokeStyle = 'white';
+    // --- 顏色與透明度處理 ---
+    // 修正：直接限制 alpha 在 0-1 之間
+    const localAlpha = Math.max(0, Math.min(1, alpha));
+    const alphaHex = Math.floor(localAlpha * 255).toString(16).padStart(2, '0');
+    // 確保顏色字串長度正確，再附加透明度
+    const localColor = (color.length === 7 ? color : color.substring(0, 7)) + alphaHex;
+
+    // --- 第一次描邊：白色外框 + 陰影 (製造外發光效果) ---
+    ctx.shadowBlur = noteBaseSize * 0.2;
+    ctx.shadowColor = (ex ? '#ffffff' : '#000000') + alphaHex;
+    ctx.lineWidth = currentSize * 0.6;
+    ctx.strokeStyle = '#ffffff' + alphaHex;
     ctx.stroke(starShape);
 
-    ctx.shadowBlur = 0;
+    // --- 第二次描邊：主題顏色內框 ---
+    ctx.shadowBlur = 0; // 關閉陰影
     ctx.shadowColor = '#00000000';
-    ctx.lineWidth = currentSize * 0.35; // Adjusted for Path2D
-    ctx.strokeStyle = color;
+    ctx.lineWidth = currentSize * 0.35;
+    ctx.strokeStyle = localColor;
     ctx.stroke(starShape);
 
     ctx.restore();
@@ -238,242 +258,242 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
 
 
 export class PathRecorder {
-  static EPS = 1e-6;
+    static EPS = 1e-6;
 
-  constructor() {
-    // 公開 API 相關屬性
-    this.commands = [];
-    this.ctxPath = new Path2D();
+    constructor() {
+        // 公開 API 相關屬性
+        this.commands = [];
+        this.ctxPath = new Path2D();
 
-    // 用於計算的內部狀態
-    this._points = [];
-    this._lastX = 0;
-    this._lastY = 0;
+        // 用於計算的內部狀態
+        this._points = [];
+        this._lastX = 0;
+        this._lastY = 0;
 
-    // 快取，用於優化長度和取點計算
-    this._segments = [];
-    this._totalLength = 0;
-    this._isCacheDirty = true; // 快取是否需要更新的標記
-  }
-
-  // 將快取標記為髒，以便下次重新計算
-  _invalidateCache() {
-    this._isCacheDirty = true;
-  }
-  
-  // 格式化數字以避免浮點數誤差
-  _fmt(v) {
-    return +v.toFixed(4);
-  }
-
-  /**
-   * 更新內部線段快取，僅在需要時執行
-   * 這是效能優化的核心
-   */
-  _updateCache() {
-    if (!this._isCacheDirty) {
-      return;
+        // 快取，用於優化長度和取點計算
+        this._segments = [];
+        this._totalLength = 0;
+        this._isCacheDirty = true; // 快取是否需要更新的標記
     }
 
-    this._segments = [];
-    let accumulatedLength = 0;
-    let subpathStartPoint = null;
-
-    for (let i = 0; i < this._points.length; i++) {
-      const p2 = this._points[i];
-      
-      if (p2.type === 'M') {
-        subpathStartPoint = p2;
-        continue;
-      }
-      
-      const p1 = this._points[i - 1];
-      // 如果前一個點不存在或是 Z，則無法形成線段
-      if (!p1 || p1.type === 'Z') {
-          continue;
-      }
-      
-      let targetPoint = p2;
-      if (p2.type === 'Z') {
-        // 如果是閉合路徑，線段的終點是當前子路徑的起點
-        if (!subpathStartPoint) continue;
-        targetPoint = subpathStartPoint;
-      }
-      
-      const dx = targetPoint.x - p1.x;
-      const dy = targetPoint.y - p1.y;
-      const len = Math.hypot(dx, dy);
-
-      if (len > PathRecorder.EPS) {
-        accumulatedLength += len;
-        this._segments.push({
-          p1,
-          p2: targetPoint,
-          len,
-          ang: Math.atan2(dy, dx),
-          accLen: accumulatedLength,
-        });
-      }
-    }
-    
-    this._totalLength = accumulatedLength;
-    this._isCacheDirty = false;
-  }
-
-  moveTo(x, y) {
-    x = this._fmt(x); y = this._fmt(y);
-    this.commands.push(`M ${x} ${y}`);
-    this.ctxPath.moveTo(x, y);
-    this._lastX = x; this._lastY = y;
-    this._points.push({ x, y, type: 'M' });
-    this._invalidateCache();
-  }
-
-  lineTo(x, y) {
-    x = this._fmt(x); y = this._fmt(y);
-    this.commands.push(`L ${x} ${y}`);
-    this.ctxPath.lineTo(x, y);
-    this._lastX = x; this._lastY = y;
-    this._points.push({ x, y, type: 'L' });
-    this._invalidateCache();
-  }
-  
-  arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
-    // Arc to SVG command conversion logic remains the same
-    let delta = endAngle - startAngle;
-    if (!anticlockwise && delta < 0) delta += 2 * Math.PI;
-    if ( anticlockwise && delta > 0) delta -= 2 * Math.PI;
-
-    const largeArcFlag = Math.abs(delta) > Math.PI ? 1 : 0;
-    const sweepFlag = anticlockwise ? 0 : 1;
-    const startX = this._fmt(cx + r * Math.cos(startAngle));
-    const startY = this._fmt(cy + r * Math.sin(startAngle));
-    const endX = this._fmt(cx + r * Math.cos(endAngle));
-    const endY = this._fmt(cy + r * Math.sin(endAngle));
-    
-    // 如果路徑的最後一個點不是圓弧的起點，先畫一條線過去
-    if (Math.abs(this._lastX - startX) > PathRecorder.EPS || Math.abs(this._lastY - startY) > PathRecorder.EPS) {
-        this.lineTo(startX, startY);
+    // 將快取標記為髒，以便下次重新計算
+    _invalidateCache() {
+        this._isCacheDirty = true;
     }
 
-    this.commands.push(`A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`);
-    this.ctxPath.arc(cx, cy, r, startAngle, endAngle, anticlockwise);
-
-    // 離散化圓弧為一系列的點（用於長度計算和取點）
-    // 這部分邏輯不變，因為將曲線轉為密集折線是計算長度的常見且有效方法
-    const segments = Math.ceil(Math.abs(delta) / (Math.PI / 18)); // 每 10 度一個點
-    for (let i = 1; i <= segments; i++) {
-      const angle = startAngle + delta * (i / segments);
-      const x = this._fmt(cx + r * Math.cos(angle));
-      const y = this._fmt(cy + r * Math.sin(angle));
-      this._points.push({ x, y, type: 'L' });
+    // 格式化數字以避免浮點數誤差
+    _fmt(v) {
+        return +v.toFixed(4);
     }
 
-    this._lastX = endX; this._lastY = endY;
-    this._invalidateCache();
-  }
-
-  closePath() {
-    this.commands.push('Z');
-    this.ctxPath.closePath();
-    this._points.push({ type: 'Z' }); // 使用一個哨兵點來標記閉合
-    this._invalidateCache();
-  }
-
-  toSVGPath() {
-    return this.commands.join(' ');
-  }
-
-  getTotalLength() {
-    this._updateCache(); // 確保快取是最新
-    return this._totalLength;
-  }
-
-  /**
-   * 取得在指定長度位置的點座標和切線角度
-   * @param {number} targetLength 
-   * @returns {{x: number, y: number, angle: number}}
-   */
-  getPointAtLength(targetLength) {
-    this._updateCache();
-    
-    const segments = this._segments;
-    const totalLength = this._totalLength;
-
-    // 處理邊界情況
-    if (targetLength <= 0) {
-      const firstSeg = segments[0];
-      return { x: firstSeg.p1.x, y: firstSeg.p1.y, angle: firstSeg.ang };
-    }
-    if (targetLength >= totalLength) {
-      const lastSeg = segments[segments.length - 1];
-      return { x: lastSeg.p2.x, y: lastSeg.p2.y, angle: lastSeg.ang };
-    }
-
-    // 使用二分搜尋法快速定位線段
-    let low = 0, high = segments.length - 1;
-    let segIndex = -1;
-    while(low <= high) {
-        const mid = Math.floor((low + high) / 2);
-        if (segments[mid].accLen >= targetLength) {
-            segIndex = mid;
-            high = mid - 1;
-        } else {
-            low = mid + 1;
+    /**
+     * 更新內部線段快取，僅在需要時執行
+     * 這是效能優化的核心
+     */
+    _updateCache() {
+        if (!this._isCacheDirty) {
+            return;
         }
+
+        this._segments = [];
+        let accumulatedLength = 0;
+        let subpathStartPoint = null;
+
+        for (let i = 0; i < this._points.length; i++) {
+            const p2 = this._points[i];
+
+            if (p2.type === 'M') {
+                subpathStartPoint = p2;
+                continue;
+            }
+
+            const p1 = this._points[i - 1];
+            // 如果前一個點不存在或是 Z，則無法形成線段
+            if (!p1 || p1.type === 'Z') {
+                continue;
+            }
+
+            let targetPoint = p2;
+            if (p2.type === 'Z') {
+                // 如果是閉合路徑，線段的終點是當前子路徑的起點
+                if (!subpathStartPoint) continue;
+                targetPoint = subpathStartPoint;
+            }
+
+            const dx = targetPoint.x - p1.x;
+            const dy = targetPoint.y - p1.y;
+            const len = Math.hypot(dx, dy);
+
+            if (len > PathRecorder.EPS) {
+                accumulatedLength += len;
+                this._segments.push({
+                    p1,
+                    p2: targetPoint,
+                    len,
+                    ang: Math.atan2(dy, dx),
+                    accLen: accumulatedLength,
+                });
+            }
+        }
+
+        this._totalLength = accumulatedLength;
+        this._isCacheDirty = false;
     }
 
-    const seg = segments[segIndex];
-    const prevAccLen = segIndex > 0 ? segments[segIndex - 1].accLen : 0;
-    const lenInSeg = targetLength - prevAccLen;
-    const t = seg.len < PathRecorder.EPS ? 0 : lenInSeg / seg.len;
-    
-    return {
-      x: seg.p1.x + (seg.p2.x - seg.p1.x) * t,
-      y: seg.p1.y + (seg.p2.y - seg.p1.y) * t,
-      angle: seg.ang,
-    };
-  }
-
-  /**
-   * 以指定解析度（沿路徑等距）取樣點陣列
-   * @param {number} resolution - 取樣間距（路徑長度單位）
-   * @returns {Array<{x: number, y: number, angle: number, length: number}>}
-   */
-  getPointsAtResolution(resolution) {
-    if (resolution <= PathRecorder.EPS) {
-      throw new Error('Resolution must be > 0');
+    moveTo(x, y) {
+        x = this._fmt(x); y = this._fmt(y);
+        this.commands.push(`M ${x} ${y}`);
+        this.ctxPath.moveTo(x, y);
+        this._lastX = x; this._lastY = y;
+        this._points.push({ x, y, type: 'M' });
+        this._invalidateCache();
     }
-    
-    const total = this.getTotalLength(); // 這會觸發一次快取更新
-    const samples = [];
-    
-    for (let t = 0; t < total; t += resolution) {
-      const pt = this.getPointAtLength(t);
-      samples.push({
-        x: this._fmt(pt.x),
-        y: this._fmt(pt.y),
-        angle: pt.angle,
-        length: this._fmt(t),
-      });
-    }
-    
-    // 確保包含路徑的最後一個點
-    const endPt = this.getPointAtLength(total);
-    samples.push({
-      x: this._fmt(endPt.x),
-      y: this._fmt(endPt.y),
-      angle: endPt.angle,
-      length: this._fmt(total),
-    });
 
-    return samples;
-  }
+    lineTo(x, y) {
+        x = this._fmt(x); y = this._fmt(y);
+        this.commands.push(`L ${x} ${y}`);
+        this.ctxPath.lineTo(x, y);
+        this._lastX = x; this._lastY = y;
+        this._points.push({ x, y, type: 'L' });
+        this._invalidateCache();
+    }
+
+    arc(cx, cy, r, startAngle, endAngle, anticlockwise = false) {
+        // Arc to SVG command conversion logic remains the same
+        let delta = endAngle - startAngle;
+        if (!anticlockwise && delta < 0) delta += 2 * Math.PI;
+        if (anticlockwise && delta > 0) delta -= 2 * Math.PI;
+
+        const largeArcFlag = Math.abs(delta) > Math.PI ? 1 : 0;
+        const sweepFlag = anticlockwise ? 0 : 1;
+        const startX = this._fmt(cx + r * Math.cos(startAngle));
+        const startY = this._fmt(cy + r * Math.sin(startAngle));
+        const endX = this._fmt(cx + r * Math.cos(endAngle));
+        const endY = this._fmt(cy + r * Math.sin(endAngle));
+
+        // 如果路徑的最後一個點不是圓弧的起點，先畫一條線過去
+        if (Math.abs(this._lastX - startX) > PathRecorder.EPS || Math.abs(this._lastY - startY) > PathRecorder.EPS) {
+            this.lineTo(startX, startY);
+        }
+
+        this.commands.push(`A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`);
+        this.ctxPath.arc(cx, cy, r, startAngle, endAngle, anticlockwise);
+
+        // 離散化圓弧為一系列的點（用於長度計算和取點）
+        // 這部分邏輯不變，因為將曲線轉為密集折線是計算長度的常見且有效方法
+        const segments = Math.ceil(Math.abs(delta) / (Math.PI / 18)); // 每 10 度一個點
+        for (let i = 1; i <= segments; i++) {
+            const angle = startAngle + delta * (i / segments);
+            const x = this._fmt(cx + r * Math.cos(angle));
+            const y = this._fmt(cy + r * Math.sin(angle));
+            this._points.push({ x, y, type: 'L' });
+        }
+
+        this._lastX = endX; this._lastY = endY;
+        this._invalidateCache();
+    }
+
+    closePath() {
+        this.commands.push('Z');
+        this.ctxPath.closePath();
+        this._points.push({ type: 'Z' }); // 使用一個哨兵點來標記閉合
+        this._invalidateCache();
+    }
+
+    toSVGPath() {
+        return this.commands.join(' ');
+    }
+
+    getTotalLength() {
+        this._updateCache(); // 確保快取是最新
+        return this._totalLength;
+    }
+
+    /**
+     * 取得在指定長度位置的點座標和切線角度
+     * @param {number} targetLength 
+     * @returns {{x: number, y: number, angle: number}}
+     */
+    getPointAtLength(targetLength) {
+        this._updateCache();
+
+        const segments = this._segments;
+        const totalLength = this._totalLength;
+
+        // 處理邊界情況
+        if (targetLength <= 0) {
+            const firstSeg = segments[0];
+            return { x: firstSeg.p1.x, y: firstSeg.p1.y, angle: firstSeg.ang };
+        }
+        if (targetLength >= totalLength) {
+            const lastSeg = segments[segments.length - 1];
+            return { x: lastSeg.p2.x, y: lastSeg.p2.y, angle: lastSeg.ang };
+        }
+
+        // 使用二分搜尋法快速定位線段
+        let low = 0, high = segments.length - 1;
+        let segIndex = -1;
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            if (segments[mid].accLen >= targetLength) {
+                segIndex = mid;
+                high = mid - 1;
+            } else {
+                low = mid + 1;
+            }
+        }
+
+        const seg = segments[segIndex];
+        const prevAccLen = segIndex > 0 ? segments[segIndex - 1].accLen : 0;
+        const lenInSeg = targetLength - prevAccLen;
+        const t = seg.len < PathRecorder.EPS ? 0 : lenInSeg / seg.len;
+
+        return {
+            x: seg.p1.x + (seg.p2.x - seg.p1.x) * t,
+            y: seg.p1.y + (seg.p2.y - seg.p1.y) * t,
+            angle: seg.ang,
+        };
+    }
+
+    /**
+     * 以指定解析度（沿路徑等距）取樣點陣列
+     * @param {number} resolution - 取樣間距（路徑長度單位）
+     * @returns {Array<{x: number, y: number, angle: number, length: number}>}
+     */
+    getPointsAtResolution(resolution) {
+        if (resolution <= PathRecorder.EPS) {
+            throw new Error('Resolution must be > 0');
+        }
+
+        const total = this.getTotalLength(); // 這會觸發一次快取更新
+        const samples = [];
+
+        for (let t = 0; t < total; t += resolution) {
+            const pt = this.getPointAtLength(t);
+            samples.push({
+                x: this._fmt(pt.x),
+                y: this._fmt(pt.y),
+                angle: pt.angle,
+                length: this._fmt(t),
+            });
+        }
+
+        // 確保包含路徑的最後一個點
+        const endPt = this.getPointAtLength(total);
+        samples.push({
+            x: this._fmt(endPt.x),
+            y: this._fmt(endPt.y),
+            angle: endPt.angle,
+            length: this._fmt(total),
+        });
+
+        return samples;
+    }
 }
 
 
 // Modified drawSlidePath - CRITICAL: drawArrow needs full rewrite to avoid DOM
-export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, noteData) {
+export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, noteData, fading) {
     startNp = parseInt(startNp); // Should be number already
     endNp = parseInt(endNp);   // Should be number already
 
@@ -481,14 +501,17 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 
     // CRITICAL REWRITE: drawArrow should not use SVG DOM elements.
     // It should calculate points mathematically using the path object.
-    function drawArrow(pathObject, spacing, _t_arrow_progress, currentCtx, arrowColor, arrowSize, getBigger) {
+    function drawArrowAndStar(pathObject, spacing, _t_arrow_progress, currentCtx, arrowColor, arrowSize, wSlide, fading, noteData) {
         const totalLen = pathObject.getTotalLength(); // Assumes pathObject.getTotalLength() is now mathematical
         if (totalLen <= 0) return;
 
+        spacing *= ((1 + wSlide / 2));
         currentCtx.fillStyle = arrowColor;
+
         let b = 0;
+        const _t_arrow = t_progress < 0 ? 0 : t_progress;
         for (let len = spacing / 2; len < totalLen - spacing / 2; len += spacing) {
-            if (len / totalLen >= _t_arrow_progress) { // Only draw if part of the remaining path
+            if (len / totalLen >= _t_arrow) { // Only draw if part of the remaining path
                 // getPointAtLength should return {x, y, angle}
                 const p = pathObject.getPointAtLength(len);
 
@@ -507,7 +530,17 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
                 currentCtx.fill();
                 currentCtx.restore();
             }
-            b += arrowSize * (getBigger ? 0.2 : 0);
+            b += arrowSize * (wSlide ? 0.3 : 0);
+        }
+        if (!fading) {
+            const k = (noteData.chainTarget ? true : false) ? (_t_arrow_progress > 0) + 0 : Math.min(_t_arrow_progress * noteData.slideTime + 1, 1);
+
+            const p = pathObject.getPointAtLength(_t_arrow * totalLen);
+            currentCtx.save();
+            currentCtx.translate(p.x, p.y);
+            currentCtx.rotate(p.angle);
+            drawStar(0, 0, k, color, noteData.ex ?? false, 90, currentCtx, hbw, currentSettings, calAng, s, Math.min(_t_arrow_progress + 1, 1));
+            currentCtx.restore();
         }
     }
 
@@ -515,7 +548,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
     ctx.shadowBlur = s * 0.2;
     ctx.shadowColor = '#000000';
 
-    if (t_progress < 0) {
+    if (t_progress < 0 && fading) {
         const alpha = Math.max(0, Math.min(1, (t_progress + 1))); // Alpha from 0 to 1
         const alphaHex = Math.floor(alpha * 255).toString(16).padStart(2, '0');
         localColor = color.length === 7 ? color + alphaHex : color.substring(0, 7) + alphaHex; // Handle existing alpha
@@ -532,7 +565,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 
     // Draw arrows on the path
     // Ensure `a` is a PathRecorder with mathematical getPointAtLength and getTotalLength
-    drawArrow(a, s * 1.2, t_progress < 0 ? 0 : t_progress, ctx, localColor, s * 2, type == "w"); // Pass arrowSize
+    drawArrowAndStar(a, s * 1.2, t_progress, ctx, localColor, s * 2, type == "w", fading, noteData); // Pass arrowSize
 
     // Debug text: (Consider removing for production)
     // ctx.shadowBlur = s * 0.2;
@@ -648,17 +681,33 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
         case 'qq': {
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.arc(
-                hw + calAng(Math.PI * (startNp / 4 - 0.25)).x * hbw / 2.1,
-                hh + calAng(Math.PI * (startNp / 4 - 0.25)).y * hbw / 2.1 + hbw / 16,
-                hbw / 2.15,
-                Math.PI * ((startNp + 9) % 8) / 4, Math.PI * (1 * ((startNp - endNp + 7) % 8 == 0) + 8 * ((startNp - endNp + 4) % 8 == 0) + (endNp + 5) % 8) / 4,
+                hw + calAng(Math.PI * (startNp / 4 - 0.25)).x * hbw / 2,
+                hh + calAng(Math.PI * (startNp / 4 - 0.25)).y * hbw / 2 + hbw / 16,
+                hbw / 2.25,
+                Math.PI * ((startNp + 9) % 8 - 0.25) / 4,
+                Math.PI * (
+                    1 * ((startNp - endNp + 7) % 8 == 0) +
+                    8 * ((startNp - endNp + 4) % 8 == 0) +
+                    0.5 * (0.5 - ((endNp - startNp + 8) % 8 > 1)) +
+                    (endNp + 5) % 8) / 4,
                 false);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
         }
         case 'pp': {
             pathRec.moveTo(np[0].x, np[0].y);
-            pathRec.lineTo(hw, hh);
+            pathRec.arc(
+                hw + calAng(Math.PI * (startNp / 4 - 1.5)).x * hbw / 2,
+                hh + calAng(Math.PI * (startNp / 4 - 1.5)).y * hbw / 2 + hbw / 16,
+                hbw / 2.25,
+                Math.PI * ((startNp + 13) % 8 - 0.25) / 4,
+                Math.PI * (0 - (
+                    1 * ((startNp - endNp + 8) % 8 == 0) +
+                    8 * ((startNp - endNp + 4) % 8 == 0) +
+                    0.5 * (0.5 - ((endNp - startNp + 7) % 8 > 1))
+                ) + (endNp + 8) % 8) / 4,
+                true);
+            pathRec.lineTo(np[1].x, np[1].y);
             break;
         }
         default:

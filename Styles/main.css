@@ -147,7 +147,7 @@ body {
     left: 50%;
     -webkit-appearance: none;
     appearance: none;
-    width: 90%;
+    width: 75%;
     height: 12px;
     background: #ffe9e989;
     outline: none;
@@ -206,68 +206,6 @@ body {
     background: rgba(255, 255, 255, 0.188)
 }
 
-/*.bruh {
-    position: absolute;
-    display: flex;
-    top: 0;
-    left: 0;
-    width: 50%;
-    height: auto;
-    background-color: #4d85ff70;
-    color: #fff;
-    text-align: center;
-    flex-direction: column;
-    align-items: flex-start;
-    transition: width ease 0.5s;
-    backdrop-filter: blur(2px);
-}
-
-.bruh div {
-    width: 100%;
-}
-
-.time-line {
-    position: absolute;
-    display: flex;
-    left: 0;
-    bottom: 0;
-    width: 50%;
-    height: auto;
-    background-color: #4d85ff70;
-    color: #fff;
-    text-align: center;
-    flex-direction: column;
-    align-items: flex-start;
-    transition: width ease 0.5s;
-    backdrop-filter: blur(2px);
-}
-
-.time-line>input[type='range'] {
-    position: relative;
-    width: calc(100% - 10px);
-    left: 5px;
-}
-
-.a1 {
-    display: flex;
-    flex-direction: row;
-    justify-content: space-between;
-    overflow-x: scroll;
-}
-
-#offset {
-    width: 50px;
-}
-
-#music {
-    width: 100px;
-}
-
-#bgm-time {
-    width: 100px;
-    font-family: monospace;
-}*/
-
 .imgs {
     display: none;
 }
@@ -300,7 +238,7 @@ textarea {
     box-sizing: border-box;
     padding: 2px;
     margin: 0;
-    background: #00000083;
+    background: #232323;
     border-radius: 0 0 10px 10px;
     box-shadow: 0 0 4px #0000005e;
 }
@@ -312,13 +250,13 @@ textarea {
     padding: 5;
     margin: 3px;
     border-radius: 5px;
-    text-shadow: 0 2px 5px black;
+    text-shadow: 0 1px 2px black;
     transition: all 100ms;
 }
 
 .dropdownlist ul li:hover {
     background: #4d505a;
-    text-shadow: 0 0 3px white;
+    /*text-shadow: 0 0 3px white;*/
 }
 
 #settings-popup {
