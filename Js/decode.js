@@ -39,19 +39,19 @@ export function simai_decode(_data) {
                 data = data.split("/");
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
-                    tempNote.push({ pos: data[j], time: timeSum, bpm });
+                    tempNote.push({ pos: data[j], time: timeSum, bpm, index: i });
                 }
             }
 
             if (data.length > 1 && !isNaN(data)) {
                 for (let j = 0; j < data.length; j++) {
-                    tempNote.push({ pos: data[j], time: timeSum, bpm });
+                    tempNote.push({ pos: data[j], time: timeSum, bpm, index: i });
                 }
             }
             data = dataTemp[i];
         }
         if (!(data.includes("/")) && data && !(data.length > 1 && !isNaN(data))) {
-            tempNote.push({ pos: dataTemp[i], time: timeSum, bpm });
+            tempNote.push({ pos: dataTemp[i], time: timeSum, bpm, index: i });
         }
         // 累加時間：此處公式依 slice 與 bpm 計算，4000 為單位比例，可依需求調整
         timeSum += (1 / slice) * (60 / bpm) * 4000;
@@ -64,8 +64,8 @@ export function simai_decode(_data) {
                 data = data.pos.split("`");
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
-                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time + j * 10, bpm }; continue; }
-                    tempNote.push({ pos: data[j], time: tempNote[i].time + j * 10, bpm });
+                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time + j * 10, bpm, index: tempNote[i].index }; continue; }
+                    tempNote.push({ pos: data[j], time: tempNote[i].time + j * 10, bpm, index: tempNote[i].index });
                 }
             }
         }
@@ -78,8 +78,8 @@ export function simai_decode(_data) {
                 data = data.pos.split("*");
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
-                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm }; continue; }
-                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm, head: data[0][0] });
+                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm, index: tempNote[i].index }; continue; }
+                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm, head: data[0][0], index: tempNote[i].index });
                 }
             }
         }
@@ -291,14 +291,19 @@ export function simai_decode(_data) {
         if (slideMatch) {
             let temp = data.pos;
             let sp = { data: [], slideInfo: [] };
+            let skip = 0;
             for (let j = 0; j < slideMatch.length; j++) {
                 const e = slideMatch[j];
-                const l = ((slideMatch[j - 1] ?? "-").length - 1) + (data.head ? -1 : 0);
-                let a = temp.indexOf(e, l + 1);
+                const l = ((slideMatch[j - 1] ?? " ").length - 1) + (data.head ? 0 : 1) + skip;
+                let a = temp.indexOf(e, l);
                 sp.data.push(temp.slice(0, a));
+                console.log(temp, l);
                 temp = temp.slice(a);
+                console.log(temp);
+                skip = temp.indexOf(slideMatch[j + 1] ?? "", 1) - 1;
             }
             sp.data.push(temp);
+            console.log(sp);
 
             for (let j = 0; j < sp.data.length; j++) {
                 if (sp.data[0] && j == 0) {
@@ -437,13 +442,11 @@ export function simai_decode(_data) {
                         const per = slideLens[j] / wholeLen;
                         //       這裡 set 新的 duration = sp.slideInfo[k].duration * per
                         base.duration = sp.slideInfo[k].duration * per;
-                        base.test = base.duration / slideLens[j];
 
                         // 3.2.3 判斷：如果下一段 (j+1) 恰好就是 k，也就是 k = j+1，代表要同時重算 j+1 的 duration
                         if (k === j + 1) {
                             const nextBase = sp.slideInfo[j + 1];
                             nextBase.duration = sp.slideInfo[k].duration * (slideLens[j + 1] / wholeLen);
-                            nextBase.test = nextBase.duration / slideLens[j + 1];
                         }
                     }
                 }
@@ -471,7 +474,7 @@ export function simai_decode(_data) {
                     slideEnd: (endIndex ?? "").toString(),
                     slideTime: base.duration,              // 計算後的這段 duration
                     chain: sp.data.length > 2,
-                    chainTarget: j > 1 ? i + 1 : null,
+                    chainTarget: i + 1,
                     delay: base.delay,
                     // 若原本 sp.slideInfo[j] 有其他不想保留的欄位，這裡就只挑必要的塞
                 };

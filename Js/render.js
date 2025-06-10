@@ -2,8 +2,6 @@
 // RENDER GAME FUNNCTION - All drawing logic goes here
 // ====================================================================================
 
-import { settings } from "./main.js";
-
 // import { settings } from "./main.js"; // Assuming settings is passed as currentSettings
 
 // Pre-calculate angular positions if they are static
@@ -13,7 +11,7 @@ for (let j = 0; j < 8; j++) {
     EIGHT_POSITIONS_ANG.push({ 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 });
 }
 
-export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes) {
+export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes, play) {
     const calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } }; // Keep if dynamic angles needed elsewhere
 
     const w = ctx.canvas.width,
@@ -29,6 +27,10 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
     // Cache note base size
     const noteBaseSize = hbw * currentSettings.noteSize;
+
+    ctx.fillStyle = "black";
+    ctx.font = Math.floor(hbw / 4) + "px monospace"
+    ctx.fillText(`${play.nowIndex}`, hw - hbw / 16, hh);
 
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 4;
@@ -139,6 +141,24 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize);
             }
         }
+
+        if (_t >= 0 && _t <= currentSettings.effectDecayTime) {
+            let nang = (parseInt(note.pos[0]) - 1) % 8;
+            nang = nang < 0 ? 0 : nang;
+
+            const notePosition = EIGHT_POSITIONS_ANG; // Use pre-calculated positions
+            let np = notePosition[isNaN(nang) ? 0 : nang];
+            if (!np) {
+                console.warn("np is undefined in tap/star/hold for note:", note, "index:", i); // Conditional logging
+                continue;
+            }
+            let currentX = hw + hbw * np.x;
+            let currentY = hh + hbw * np.y;
+            drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize);
+            /*ctx.fillStyle = "black";
+            ctx.font = "24px monospace"
+            ctx.fillText(`${_t}, ${currentSettings.effectDecayTime}`, currentX, currentY);*/
+        }
     }
 
     //touch render
@@ -164,6 +184,18 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4
                 , note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize);
         }
+
+        if (_t >= 0 && _t <= currentSettings.effectDecayTime) {
+            const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 }; // Make const
+            const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 }; // Make const
+            let ang = (note.pos - 0.5 - (touchAngleOffset[note.touch] || 0)) / 4 * Math.PI;
+            let np = calAng(ang);
+
+            const centerX = hw + np.x * (touchDisToMid[note.touch] || 0) * hbw;
+            const centerY = hh + np.y * (touchDisToMid[note.touch] || 0) * hbw;
+
+            drawSimpleEffect(centerX, centerY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize);
+        }
     }
 }
 
@@ -185,7 +217,33 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
     ctx.shadowColor = '#00000000';
     ctx.lineWidth = currentSize * 0.5;
     ctx.strokeStyle = color;
+    ctx.fillStyle = '#00000000';
     _arc(x, y, currentSize, ctx);
+}
+
+export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
+    if (!currentSettings.showEffect) return;
+    function ani(x) {
+        return 1 - Math.pow(x, 2);
+    }
+    function ani1(x) {
+        return Math.log(9 * x + 1) / Math.log(10);
+    }
+    sizeFactor = Math.min(Math.max(sizeFactor, 0), 1);
+    let s = noteBaseSize; // Use passed base size
+    let currentSize = s * (ani1(sizeFactor) * 1.75);
+    let localColor = ctx.createRadialGradient(x, y, 0, x, y, currentSize);
+    localColor.addColorStop(0, '#FCFF0A00');
+    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(sizeFactor)));
+
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "#00000000";
+    ctx.lineWidth = currentSize * 0.75;
+    ctx.fillStyle = localColor;
+    ctx.beginPath();
+    ctx.arc(x, y, currentSize, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.fill();
 }
 
 // 建立一個快取來儲存不同大小的星星路徑，避免重複計算
@@ -579,11 +637,11 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 }
 
 
-export function getNotePos(val_a, offset = 0) {
+export function getNoteAng(val_a, offset = 0) {
     return ((val_a + offset) + 0.5) / 4 * Math.PI;
 }
 
-export function getTouchPos(val_a, offset = 0, touchType) {
+export function getTouchAng(val_a, offset = 0, touchType) {
     const touchAngleOffset = { "A": 1, "B": 0, "C": 0, "D": 0.5, "E": 0.5 }; // Make const
     return ((val_a + offset) % 8 - 0.5 - (touchAngleOffset[touchType] || 0)) / 4 * Math.PI;
 }
@@ -608,8 +666,8 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
             pathRec.moveTo(np[0].x, np[0].y); pathRec.lineTo(np[1].x, np[1].y);
             break;
         case '^': {
-            const sAng = getNotePos(startNp - 2); // Simpler indexing if startNp is 0-7 based
-            const eAng = getNotePos(endNp - 2);
+            const sAng = getNoteAng(startNp - 2); // Simpler indexing if startNp is 0-7 based
+            const eAng = getNoteAng(endNp - 2);
             // Determine anticlockwise based on shortest path (e.g. 1 to 7 is clockwise, 1 to 3 is clockwise)
             let diff = (endNp - startNp + 8) % 8;
             pathRec.arc(hw, hh, hbw, sAng, eAng, diff > 4);
@@ -617,16 +675,16 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
         }
         case '>': {
             pathRec.arc(hw, hh, hbw,
-                getNotePos(startNp - 2 + ((startNp === endNp && turn) ? 8 : 0)),
-                getNotePos(endNp - 2 + ((startNp === endNp && !turn) ? 8 : 0)),
+                getNoteAng(startNp - 2 + ((startNp === endNp && turn) ? 8 : 0)),
+                getNoteAng(endNp - 2 + ((startNp === endNp && !turn) ? 8 : 0)),
                 false ^ turn
             );
             break;
         }
         case '<': {
             pathRec.arc(hw, hh, hbw,
-                getNotePos(startNp - 2 + ((startNp === endNp && !turn) ? 8 : 0)),
-                getNotePos(endNp - 2 + ((startNp === endNp && turn) ? 8 : 0)),
+                getNoteAng(startNp - 2 + ((startNp === endNp && !turn) ? 8 : 0)),
+                getNoteAng(endNp - 2 + ((startNp === endNp && turn) ? 8 : 0)),
                 true ^ turn
             );
             break;
@@ -635,8 +693,8 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
             pathRec.moveTo(np[0].x, np[0].y); pathRec.lineTo(hw, hh); pathRec.lineTo(np[1].x, np[1].y);
             break;
         case 'z': {
-            let npTouch = calAng(getTouchPos(startNp, 3, 'B'));
-            let npTouch1 = calAng(getTouchPos(startNp, 7, 'B'));
+            let npTouch = calAng(getTouchAng(startNp, 3, 'B'));
+            let npTouch1 = calAng(getTouchAng(startNp, 7, 'B'));
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw * 0.885, hh + npTouch.y * touchDisToMid['B'] * hbw * 0.885);
             pathRec.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw * 0.885, hh + npTouch1.y * touchDisToMid['B'] * hbw * 0.885);
@@ -644,8 +702,8 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
             break;
         }
         case 's': {
-            let npTouch = calAng(getTouchPos(startNp, 7, 'B'));
-            let npTouch1 = calAng(getTouchPos(startNp, 3, 'B'));
+            let npTouch = calAng(getTouchAng(startNp, 7, 'B'));
+            let npTouch1 = calAng(getTouchAng(startNp, 3, 'B'));
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.lineTo(hw + npTouch.x * touchDisToMid['B'] * hbw * 0.885, hh + npTouch.y * touchDisToMid['B'] * hbw * 0.885);
             pathRec.lineTo(hw + npTouch1.x * touchDisToMid['B'] * hbw * 0.885, hh + npTouch1.y * touchDisToMid['B'] * hbw * 0.885);
@@ -656,7 +714,7 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.lineTo(np[1].x, np[1].y);
             const endPosFraction = Math.round(endNp / 10 % 1 * 10); // e.g. 8.3 -> 3
-            const thirdPointAng = calAng(getNotePos((endPosFraction - 1 + 8) % 8, 0)); // Ensure 0-7
+            const thirdPointAng = calAng(getNoteAng((endPosFraction - 1 + 8) % 8, 0)); // Ensure 0-7
             pathRec.lineTo(
                 hw + hbw * thirdPointAng.x,
                 hh + hbw * thirdPointAng.y);
@@ -893,6 +951,20 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     ctx.shadowColor = '#00000000';
 }
 
+export function hexWithAlpha(hex, alpha) {
+    // 移除開頭的 "#"（如果有）
+    hex = hex.replace(/^#/, '');
+
+    // 如果是短格式（例如 #abc），轉換成長格式（#aabbcc）
+    if (hex.length === 3) {
+        hex = hex.split('').map(c => c + c).join('');
+    }
+
+    // 將 alpha 轉為 0~255 的十六進位，並補滿兩位
+    const alphaHex = Math.round(alpha * 255).toString(16).padStart(2, '0');
+
+    return `#${hex}${alphaHex}`;
+}
 
 export function _arc(x, y, r = 0, currentCtx) {
     if (r <= 0) return; // Don't draw zero or negative radius arcs
