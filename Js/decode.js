@@ -7,7 +7,12 @@ export function simai_decode(_data) {
         dataTemp = _data.split(","),
         timeSum = 0,
         slice = 1,
-        bpm = 60;
+        bpm = 60,
+        tapCounts = 0,
+        holdCounts = 0,
+        touchCounts = 0,
+        slideCounts = 0,
+        breakCounts = 0;
 
     // 基本 note 解析（依據逗號分隔，每筆 note 記錄原始 pos 與時間）
     for (let i = 0; i < dataTemp.length; i++) {
@@ -199,51 +204,312 @@ export function simai_decode(_data) {
     // ──────────────────────────────
 
     for (let i = 0; i < tempNote.length; i++) {
-        let data = tempNote[i];
+        try {
+            let data = tempNote[i];
 
-        /*const p = data.pos;
-
-        // 1. 定义所有合法格式a
-        const reSimpleKey = /^[1-8]$/;                     // 单按键 1~8
-        const reTouch = /^[ABCDE][1-8]$/;                  // touch: A1~E8
-        const reHold = /^\d+h$/;                           // hold eg. '5h'
-        const reSlide = /^\d+(?:pp|qq|[-<>^vpqszVw])\d+$/; // slide片段 eg. 'V73'
-        const reParam = /\[.*?\]$/;                        // 参数尾巴 eg. '[4:1]'
-        const reFlag = /[bxf\$]/;                          // flag b, x, f, $
-
-        // 2. 如果它后面有参数（[...])，先去掉参数部分单独检测
-        let core = p.replace(reParam, "");
-
-        // 3. 只要 core 符合下面任意一种，就认为是合法 note
-        const isValid =
-            reSimpleKey.test(core) ||  // 普通按键
-            reTouch.test(core) ||  // touch
-            reHold.test(core) ||  // 简单 hold
-            reSlide.test(core) || // slide start+end
-            reFlag.test(core)             // flag (star, break…)
-            ;
-
-        if (!isValid) {
-            // 4. 完全不合法，直接替换成 invalid note
-            tempNote[i] = {
-                data: core,      // 原始字符串（去掉参数后或含参数都行，看你要）
-                invalid: true,
-                time: data.time,
+            // ── 處理其他 Flags ──
+            const flags = {
+                "b": "break",
+                "x": "ex",
+                "f": "hanabi",
+                "$": "star",
             };
-            console.warn("偵測到不合法音符！：", tempNote[i], i);
-            continue; // 跳过后面一大堆解析逻辑
-        }*/
 
-        // ── 處理其他 Flags ──
-        const flags = {
-            "b": "break",
-            "x": "ex",
-            "f": "hanabi",
-            "$": "star",
-        };
+            const slideMatch = data.pos.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
+            if (!slideMatch) {
+                for (let flag in flags) {
+                    if ((data.pos ?? '').includes(flag)) {
+                        //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
+                        //tempNote[i][flags[flag]] = true;
+                        data.pos = data.pos.replaceAll(flag, "");
+                        data[flags[flag]] = true;
+                    }
+                }
 
-        const slideMatch = data.pos.match(/((?:pp)|(?:qq)|[-<>^vpqszVw])/g);
-        if (!slideMatch) {
+                if (data.break) {
+                    breakCounts++;
+                } else {
+                    const touchMatch = data.pos.match(/([ABCDE])(\d)|(C)/);
+                    const holdMatch = data.pos.match(/h\[([ -~]+?)\]/);
+                    const miniHold = data.pos.match(/\dh$/);
+
+                    if (touchMatch) {
+                        touchCounts++;
+                    } else if (holdMatch || miniHold) {
+                        holdCounts++;
+                    } else {
+                        tapCounts++;
+                    }
+                }
+            }
+
+            const holdMatch = data.pos.match(/h\[([ -~]+?)\]/);
+            const miniHold = data.pos.match(/\dh$/);
+            const touchMatch = data.pos.match(/([ABCDE])(\d)|(C)/);
+
+            if (holdMatch) {
+                const result = parseParameter(holdMatch[1], data.bpm);
+                tempNote[i].holdTime = result.duration;
+            }
+
+            if (miniHold) {
+                tempNote[i].holdTime = 1E-64;
+                tempNote[i].pos = tempNote[i].pos[0];
+            }
+
+            if (touchMatch) {
+                if (touchMatch[0] == 'C') {
+                    tempNote[i].pos = '1';
+                    tempNote[i].touch = 'C';
+                    if (tempNote[i].holdTime) {
+                        tempNote[i].touchTime = tempNote[i].holdTime;
+                        delete tempNote[i].holdTime;
+                    }
+                } else {
+                    tempNote[i].pos = touchMatch[2];
+                    tempNote[i].touch = touchMatch[1];
+                    if (tempNote[i].holdTime) {
+                        tempNote[i].touchTime = tempNote[i].holdTime;
+                        delete tempNote[i].holdTime;
+                    }
+                }
+            }
+
+            if (holdMatch && !touchMatch) {
+                tempNote[i].pos = tempNote[i].pos[0];
+            }
+
+            if (slideMatch) {
+                let temp = data.pos;
+                let sp = { data: [], slideInfo: [] };
+                let skip = 0;
+                for (let j = 0; j < slideMatch.length; j++) {
+                    const e = slideMatch[j];
+                    const l = ((slideMatch[j - 1] ?? " ").length - 1) + (data.head ? 0 : 1) + skip;
+                    let a = temp.indexOf(e, l);
+                    sp.data.push(temp.slice(0, a));
+                    temp = temp.slice(a);
+                    skip = (slideMatch[j + 1] ?? "").length;
+                }
+                sp.data.push(temp);
+
+                for (let j = 0; j < sp.data.length; j++) {
+                    if (sp.data[0] && j == 0) {
+                        sp.head = sp.data[0];
+                    }
+
+                    const slideMatch = sp.data[j].match(/(?:pp)|(?:qq)|[-<>^vpqszVw]/);
+                    if (slideMatch && sp.data[j]) {
+                        let g = sp.data[j].split(slideMatch[0])[1];
+
+                        if (g) {
+                            sp.data[j] = [slideMatch[0], g];
+                            g = g.match(/\[([ -~]+?)\]/);
+                            if (g) {
+                                sp.slideInfo[j] = parseParameter(g[1], data.bpm);
+                                sp.data[j][1] = sp.data[j][1].slice(0, sp.data[j][1].indexOf("[")) + sp.data[j][1].slice(sp.data[j][1].indexOf("]") + 1);
+                            }
+                        } else {
+                            console.warn("找不到時間：[]");
+                        }
+                    }
+
+                    if (!sp.slideInfo[j]) {
+                        sp.slideInfo[j] = {};
+                    }
+                }
+                console.groupEnd();
+
+                function getSlideLen(type, startNp, endNp, hw, hh, hbw) {
+                    let len = render.path(
+                        type,
+                        startNp,
+                        endNp,
+                        hw, hh, hbw,
+                        // 傳入一個角度旋轉函式，如果 render.path 裡面要用的話
+                        ang => ({ x: Math.sin(ang), y: Math.cos(ang) * -1 })
+                    ).getTotalLength();
+
+                    return len;
+                }
+
+                for (let flag in flags) {
+                    if (sp.data[0].includes(flag)) {
+                        sp.data[0] = sp.data[0].replaceAll(flag, "");
+                        sp.slideInfo[0][flags[flag]] = true;
+                    }
+
+                    let shouldApplyToAll = false;
+                    for (let j = 1; j < sp.data.length; j++) {
+                        const element = sp.data[j];
+                        if (!element) continue;
+                        if (element[1].includes(flag)) {
+                            element[1] = element[1].replaceAll(flag, "");
+                            shouldApplyToAll = true; // 發現任何一段有 flag，就標記
+                        }
+                    }
+
+                    // 套用 break 給全部 slideInfo
+                    if (shouldApplyToAll) {
+                        for (let j = 1; j < sp.slideInfo.length; j++) {
+                            if (!sp.slideInfo[j]) continue;
+                            sp.slideInfo[j][flags[flag]] = true;
+                        }
+                    }
+                }
+
+                if (sp.data[0]) {
+                    if (sp.slideInfo[0].break) {
+                        breakCounts++;
+                    } else {
+                        tapCounts++;
+                    }
+                }
+
+                if (sp.slideInfo[sp.data.length - 1].break) {
+                    breakCounts++;
+                } else {
+                    slideCounts++;
+                }
+                if (sp.data.length > 2) {
+                    sp.slideInfo[sp.data.length - 1].lastOne = true;
+                    sp.slideInfo[1].firstOne = true;
+                }
+
+                if (sp.head) {
+                    if (sp.head.includes("?") || sp.head.includes("!")) {
+                        tempNote[i].delete = true;
+                    }
+                    tempNote[i].pos = sp.head;
+                    tempNote[i].star = true;
+                }
+
+                if (!sp.data[0]) {
+                    sp.data[0] = tempNote[i].head;
+                    tempNote[i].delete = true;
+                }
+
+                // --- 1. 先把每一段 slide 長度一次算好，存到 slideLens 陣列 ---
+                const slideCount = sp.data.length - 1; // 因為 sp.data[0] 只是 slideHead，真正有 slide 段的是從 index=1 開始到最後
+                const slideLens = new Array(slideCount + 1).fill(0);
+                // slideLens[j] 代表從 sp.data[j-1]→sp.data[j] 這段的長度；index 0 不用
+                let wholeLen = 0;
+
+                for (let j = 1; j <= slideCount; j++) {
+                    const prev = sp.data[j - 1];
+                    let headIndex = parseInt(Array.isArray(prev)
+                        ? Array.isArray(prev[1]) ? prev[1][1] : prev[1]
+                        : prev).toString();
+                    const startNp = parseInt(headIndex.length >= 2 ? headIndex[headIndex.length - 1] : headIndex);
+                    const curr = sp.data[j];
+                    const endIndex = (Array.isArray(curr[1]) ? curr[1] : curr[1]);
+                    const endNp = parseInt(endIndex) - 1;
+
+                    // 1.3. 呼叫一次 getSlideLen
+                    const len = getSlideLen(
+                        sp.data[j][0],   // slideType
+                        startNp - 1,
+                        endNp,
+                        100, 100, 100     // 你的 hw, hh, hbw 實參
+                    );
+
+                    slideLens[j] = len;
+                    wholeLen += len;
+                }
+
+                // --- 2. 逆向掃一遍 slideInfo，先把「下一個有 delay 的 index」存到 nextDelayIndex 陣列 ---
+                const nextDelayIndex = new Array(slideCount + 2).fill(-1);
+                // 我們讓 nextDelayIndex[j] = k，代表 k 是第一個 k>j 而 sp.slideInfo[k].delay 已有值
+                let lastIdxWithDelay = -1;
+                for (let j = slideCount; j >= 1; j--) {
+                    if (sp.slideInfo[j] && sp.slideInfo[j].delay != null) {
+                        lastIdxWithDelay = j;
+                    }
+                    nextDelayIndex[j] = lastIdxWithDelay;
+                }
+                // 最後 nextDelayIndex 裡就有 O(1) 拿到下一個有 delay 的 index
+
+                // --- 3. 逐段計算每段的 delay / duration，並把重組好的物件放到 qqq ---
+                const tempData = [];
+
+                for (let j = 1; j <= slideCount; j++) {
+                    // 3.1. 拷貝原本的 sp.slideInfo[j]（可能是空物件）
+                    const base = sp.slideInfo[j] || {};
+
+                    // 3.2. 如果這一段還沒計算 delay，就去拿「下一個有 delay 的 index」
+                    if (base.delay == null) {
+                        const k = nextDelayIndex[j]; // 下一個有 .delay 的位置
+                        if (k > 0) {
+                            // 3.2.1 將 sp.slideInfo[j].delay 設成 sp.slideInfo[k].delay
+                            base.delay = sp.slideInfo[k].delay;
+
+                            // 3.2.2 重新計算 sp.slideInfo[j].duration：按比例分攤
+                            //       per = slideLens[j] / wholeLen
+                            const per = slideLens[j] / wholeLen;
+                            //       這裡 set 新的 duration = sp.slideInfo[k].duration * per
+                            base.duration = sp.slideInfo[k].duration * per;
+
+                            // 3.2.3 判斷：如果下一段 (j+1) 恰好就是 k，也就是 k = j+1，代表要同時重算 j+1 的 duration
+                            if (k === j + 1) {
+                                const nextBase = sp.slideInfo[j + 1];
+                                nextBase.duration = sp.slideInfo[k].duration * (slideLens[j + 1] / wholeLen);
+                            }
+                        }
+                    }
+
+                    // 3.3. 如果 j>1，基於前一段的 delay+duration 設置本段 delay
+                    if (j > 1 && sp.slideInfo[j - 1] && sp.slideInfo[j - 1].duration != null) {
+                        base.delay = sp.slideInfo[j - 1].duration + sp.slideInfo[j - 1].delay;
+                    }
+
+                    // 3.4. 用解構把新的屬性打進去，做成一筆要插入 tempNote 的物件
+                    const prev = sp.data[j - 1];
+                    let headIndex = parseInt(Array.isArray(prev)
+                        ? Array.isArray(prev[1]) ? prev[1][1] : prev[1]
+                        : prev).toString();
+                    headIndex = headIndex.length >= 2 ? headIndex[headIndex.length - 1] : headIndex;
+                    const curr = sp.data[j];
+                    const endIndex = (Array.isArray(curr[1]) ? curr[1] : curr[1]);
+
+                    let newNote = {
+                        ...base,
+                        time: tempNote[i].time,
+                        slide: true,
+                        slideHead: headIndex,
+                        slideType: curr[0],
+                        slideEnd: (endIndex ?? "").toString(),
+                        slideTime: base.duration,              // 計算後的這段 duration
+                        chain: sp.data.length > 2,
+                        chainTarget: i + 1,
+                        delay: base.delay,
+                        // 若原本 sp.slideInfo[j] 有其他不想保留的欄位，這裡就只挑必要的塞
+                    };
+                    delete newNote.duration;
+
+                    // 把 newNote 推到 qqq 裡
+                    tempData.push(newNote);
+
+                    // 同步更新 sp.slideInfo[j] 回質算好的 base（如果需要後續再用）
+                    //sp.slideInfo[j] = base;
+                }
+
+                // --- 4. 一次性把 qqq 全部插入 tempNote，就不用一筆筆 splice 了 ---
+                if (tempData.length > 0) {
+                    // i 是原本外面那個迴圈的索引
+                    // 把「從 i+1 開始」一次插入所有 newNote
+                    tempNote.splice(i + 1, 0, ...tempData);
+                }
+
+                // --- 5. 處理原本要刪除的情況，再調整外層的 i 指標 ---
+                if (tempNote[i].delete) {
+                    tempNote.splice(i, 1);
+                    i--;
+                }
+
+                // 原本最後要 i += sp.data.length - 1，這裡改成：
+                i += slideCount; // 直接跳過整組 slide 段
+            }
+
             for (let flag in flags) {
                 if ((data.pos ?? '').includes(flag)) {
                     //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
@@ -252,268 +518,31 @@ export function simai_decode(_data) {
                     data[flags[flag]] = true;
                 }
             }
-        }
 
-        const timeMatch = data.pos.match(/h\[([ -~]+?)\]/);
-        if (timeMatch) {
-            const result = parseParameter(timeMatch[1], data.bpm);
-            tempNote[i].holdTime = result.duration;
-        }
-
-        const miniHold = data.pos.match(/\dh$/);
-        if (miniHold) {
-            tempNote[i].holdTime = 1E-64;
-        }
-
-        const touchMatch = data.pos.match(/([ABCDE])(\d)|(C)/);
-        if (touchMatch) {
-            if (touchMatch[0] == 'C') {
-                tempNote[i].pos = '1';
-                tempNote[i].touch = 'C';
-                if (tempNote[i].holdTime) {
-                    tempNote[i].touchTime = tempNote[i].holdTime;
-                    delete tempNote[i].holdTime;
-                }
-            } else {
-                tempNote[i].pos = touchMatch[2];
-                tempNote[i].touch = touchMatch[1];
-                if (tempNote[i].holdTime) {
-                    tempNote[i].touchTime = tempNote[i].holdTime;
-                    delete tempNote[i].holdTime;
-                }
+            if(isNaN(tempNote[i].pos) && tempNote[i].pos){
+                throw new Error("pos is not number");
             }
-        }
-
-        if (timeMatch && !touchMatch) {
-            tempNote[i].pos = tempNote[i].pos[0];
-        }
-
-        if (slideMatch) {
-            let temp = data.pos;
-            let sp = { data: [], slideInfo: [] };
-            let skip = 0;
-            for (let j = 0; j < slideMatch.length; j++) {
-                const e = slideMatch[j];
-                const l = ((slideMatch[j - 1] ?? " ").length - 1) + (data.head ? 0 : 1) + skip;
-                let a = temp.indexOf(e, l);
-                sp.data.push(temp.slice(0, a));
-                console.log(temp, l);
-                temp = temp.slice(a);
-                console.log(temp);
-                skip = temp.indexOf(slideMatch[j + 1] ?? "", 1) - 1;
-            }
-            sp.data.push(temp);
-            console.log(sp);
-
-            for (let j = 0; j < sp.data.length; j++) {
-                if (sp.data[0] && j == 0) {
-                    sp.head = sp.data[0];
-                }
-
-                const slideMatch = sp.data[j].match(/(?:pp)|(?:qq)|[-<>^vpqszVw]/);
-                if (slideMatch && sp.data[j]) {
-                    let g = sp.data[j].split(slideMatch[0])[1];
-
-                    if (g) {
-                        sp.data[j] = [slideMatch[0], g];
-                        g = g.match(/\[([ -~]+?)\]/);
-                        if (g) {
-                            sp.slideInfo[j] = parseParameter(g[1], data.bpm);
-                            sp.data[j][1] = sp.data[j][1].slice(0, sp.data[j][1].indexOf("[")) + sp.data[j][1].slice(sp.data[j][1].indexOf("]") + 1);
-                        }
-                    } else {
-                        console.warn("找不到時間：[]");
-                    }
-                }
-
-                if (!sp.slideInfo[j]) {
-                    sp.slideInfo[j] = {};
-                }
-            }
-            console.groupEnd();
-
-            function getSlideLen(type, startNp, endNp, hw, hh, hbw) {
-                let len = render.path(
-                    type,
-                    startNp,
-                    endNp,
-                    hw, hh, hbw,
-                    // 傳入一個角度旋轉函式，如果 render.path 裡面要用的話
-                    ang => ({ x: Math.sin(ang), y: Math.cos(ang) * -1 })
-                ).getTotalLength();
-
-                return len;
-            }
-
-            for (let flag in flags) {
-                if (sp.data[0].includes(flag)) {
-                    sp.data[0] = sp.data[0].replaceAll(flag, "");
-                    sp.slideInfo[0][flags[flag]] = true;
-                }
-
-                let shouldApplyToAll = false;
-                for (let j = 1; j < sp.data.length; j++) {
-                    const element = sp.data[j];
-                    if (!element) continue;
-                    if (element[1].includes(flag)) {
-                        element[1] = element[1].replaceAll(flag, "");
-                        shouldApplyToAll = true; // 發現任何一段有 break，就標記
-                    }
-                }
-
-                // 套用 break 給全部 slideInfo
-                if (shouldApplyToAll) {
-                    for (let j = 1; j < sp.slideInfo.length; j++) {
-                        if (!sp.slideInfo[j]) continue;
-                        sp.slideInfo[j][flags[flag]] = true;
-                    }
-                }
-            }
-
-            if (sp.head) {
-                if (sp.head.includes("?") || sp.head.includes("!")) {
-                    tempNote[i].delete = true;
-                }
-                tempNote[i].pos = sp.head;
-                tempNote[i].star = true;
-            }
-
-            if (!sp.data[0]) {
-                sp.data[0] = tempNote[i].head;
-                tempNote[i].delete = true;
-            }
-
-            // --- 1. 先把每一段 slide 長度一次算好，存到 slideLens 陣列 ---
-            const slideCount = sp.data.length - 1; // 因為 sp.data[0] 只是 slideHead，真正有 slide 段的是從 index=1 開始到最後
-            const slideLens = new Array(slideCount + 1).fill(0);
-            // slideLens[j] 代表從 sp.data[j-1]→sp.data[j] 這段的長度；index 0 不用
-            let wholeLen = 0;
-
-            for (let j = 1; j <= slideCount; j++) {
-                const prev = sp.data[j - 1];
-                let headIndex = parseInt(Array.isArray(prev)
-                    ? Array.isArray(prev[1]) ? prev[1][1] : prev[1]
-                    : prev).toString();
-                const startNp = parseInt(headIndex.length >= 2 ? headIndex[headIndex.length - 1] : headIndex);
-                const curr = sp.data[j];
-                const endIndex = (Array.isArray(curr[1]) ? curr[1] : curr[1]);
-                const endNp = parseInt(endIndex) - 1;
-
-                // 1.3. 呼叫一次 getSlideLen
-                const len = getSlideLen(
-                    sp.data[j][0],   // slideType
-                    startNp - 1,
-                    endNp,
-                    100, 100, 100     // 你的 hw, hh, hbw 實參
-                );
-
-                slideLens[j] = len;
-                wholeLen += len;
-            }
-
-            // --- 2. 逆向掃一遍 slideInfo，先把「下一個有 delay 的 index」存到 nextDelayIndex 陣列 ---
-            const nextDelayIndex = new Array(slideCount + 2).fill(-1);
-            // 我們讓 nextDelayIndex[j] = k，代表 k 是第一個 k>j 而 sp.slideInfo[k].delay 已有值
-            let lastIdxWithDelay = -1;
-            for (let j = slideCount; j >= 1; j--) {
-                if (sp.slideInfo[j] && sp.slideInfo[j].delay != null) {
-                    lastIdxWithDelay = j;
-                }
-                nextDelayIndex[j] = lastIdxWithDelay;
-            }
-            // 最後 nextDelayIndex 裡就有 O(1) 拿到下一個有 delay 的 index
-
-            // --- 3. 逐段計算每段的 delay / duration，並把重組好的物件放到 qqq ---
-            const tempData = [];
-
-            for (let j = 1; j <= slideCount; j++) {
-                // 3.1. 拷貝原本的 sp.slideInfo[j]（可能是空物件）
-                const base = sp.slideInfo[j] || {};
-
-                // 3.2. 如果這一段還沒計算 delay，就去拿「下一個有 delay 的 index」
-                if (base.delay == null) {
-                    const k = nextDelayIndex[j]; // 下一個有 .delay 的位置
-                    if (k > 0) {
-                        // 3.2.1 將 sp.slideInfo[j].delay 設成 sp.slideInfo[k].delay
-                        base.delay = sp.slideInfo[k].delay;
-
-                        // 3.2.2 重新計算 sp.slideInfo[j].duration：按比例分攤
-                        //       per = slideLens[j] / wholeLen
-                        const per = slideLens[j] / wholeLen;
-                        //       這裡 set 新的 duration = sp.slideInfo[k].duration * per
-                        base.duration = sp.slideInfo[k].duration * per;
-
-                        // 3.2.3 判斷：如果下一段 (j+1) 恰好就是 k，也就是 k = j+1，代表要同時重算 j+1 的 duration
-                        if (k === j + 1) {
-                            const nextBase = sp.slideInfo[j + 1];
-                            nextBase.duration = sp.slideInfo[k].duration * (slideLens[j + 1] / wholeLen);
-                        }
-                    }
-                }
-
-                // 3.3. 如果 j>1，基於前一段的 delay+duration 設置本段 delay
-                if (j > 1 && sp.slideInfo[j - 1] && sp.slideInfo[j - 1].duration != null) {
-                    base.delay = sp.slideInfo[j - 1].duration + sp.slideInfo[j - 1].delay;
-                }
-
-                // 3.4. 用解構把新的屬性打進去，做成一筆要插入 tempNote 的物件
-                const prev = sp.data[j - 1];
-                let headIndex = parseInt(Array.isArray(prev)
-                    ? Array.isArray(prev[1]) ? prev[1][1] : prev[1]
-                    : prev).toString();
-                headIndex = headIndex.length >= 2 ? headIndex[headIndex.length - 1] : headIndex;
-                const curr = sp.data[j];
-                const endIndex = (Array.isArray(curr[1]) ? curr[1] : curr[1]);
-
-                let newNote = {
-                    ...base,
-                    time: tempNote[i].time,
-                    slide: true,
-                    slideHead: headIndex,
-                    slideType: curr[0],
-                    slideEnd: (endIndex ?? "").toString(),
-                    slideTime: base.duration,              // 計算後的這段 duration
-                    chain: sp.data.length > 2,
-                    chainTarget: i + 1,
-                    delay: base.delay,
-                    // 若原本 sp.slideInfo[j] 有其他不想保留的欄位，這裡就只挑必要的塞
-                };
-                delete newNote.duration;
-
-                // 把 newNote 推到 qqq 裡
-                tempData.push(newNote);
-
-                // 同步更新 sp.slideInfo[j] 回質算好的 base（如果需要後續再用）
-                //sp.slideInfo[j] = base;
-            }
-
-            // --- 4. 一次性把 qqq 全部插入 tempNote，就不用一筆筆 splice 了 ---
-            if (tempData.length > 0) {
-                // i 是原本外面那個迴圈的索引
-                // 把「從 i+1 開始」一次插入所有 newNote
-                tempNote.splice(i + 1, 0, ...tempData);
-            }
-
-            // --- 5. 處理原本要刪除的情況，再調整外層的 i 指標 ---
-            if (tempNote[i].delete) {
-                tempNote.splice(i, 1);
-                i--;
-            }
-
-            // 原本最後要 i += sp.data.length - 1，這裡改成：
-            i += slideCount; // 直接跳過整組 slide 段
-        }
-
-        for (let flag in flags) {
-            if ((data.pos ?? '').includes(flag)) {
-                //tempNote[i].pos = tempNote[i].pos.replaceAll(flag, "");
-                //tempNote[i][flags[flag]] = true;
-                data.pos = data.pos.replaceAll(flag, "");
-                data[flags[flag]] = true;
-            }
+        } catch (error) {
+            console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`,error);
+            tempNote[i].invalid = true;
+            continue;
         }
     }
 
     console.log(tempNote);
-    return tempNote;
+    console.log(`tap: ${tapCounts}`);
+    console.log(`hold: ${holdCounts}`);
+    console.log(`slide: ${slideCounts}`);
+    console.log(`touch: ${touchCounts}`);
+    console.log(`break: ${breakCounts}`);
+    return {
+        notes: tempNote, data: {
+            tapCounts,
+            holdCounts,
+            slideCounts,
+            touchCounts,
+            breakCounts,
+            val: (tapCounts + holdCounts * 2 + slideCounts * 3 + touchCounts + breakCounts * 5)
+        }
+    };
 }

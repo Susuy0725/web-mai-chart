@@ -17,6 +17,8 @@ export let settings = { // Keep export if other modules might need direct access
     'nowDiff': 5,
     'showEffect': true,
     'effectDecayTime': 0.25,
+    'noSensor': false,
+    'disableSensorWhenPlaying': true,
 };
 // Make play and soundSettings local if not modified externallyaa
 let play = {
@@ -29,6 +31,8 @@ let play = {
     'pause': true,
     'btnPause': true,
     'nowIndex': 0,
+    'combo': 0,
+    'score': 0,
 };
 let soundSettings = {
     'answer': true,
@@ -41,6 +45,8 @@ let soundSettings = {
     'touchVol': 0.2,
     'breakVol': 0.3,
     'musicVol': 0.8,
+    'hanabiVol': 0.4,
+    'slideVol': 0.5,
 };
 let maidata; // Chart data
 
@@ -74,7 +80,7 @@ const settingsConfig = {
     ]
 };
 
-let notes = [{}]; // Use `let` as it's reassigned
+let notes = [{}], notesData = {}; // Use `let` as it's reassigned
 let triggered = [];
 let startTime = 0; // Initialize
 let maxTime = 1;
@@ -90,6 +96,8 @@ const soundFiles = {
     break_woo: 'break.wav',
     touch: 'touch.wav',
     hanabi: 'hanabi.wav',
+    slide: 'slide.wav',
+    breakSlide: 'break_slide_start.wav',
     answer: 'answer.wav',
 };
 
@@ -140,24 +148,36 @@ loadAllSounds(soundFiles).then(buffers => {
 
 function _playEffect(note, hold = false) {
     if (!sfxReady || play.pause) return;
-    if (soundSettings.answer && soundBuffers.answer) {
+    if (soundSettings.answer && soundBuffers.answer && !note.slide) {
         playSound(soundBuffers, 'answer', { volume: soundSettings.answerVol });
     }
     if (soundSettings.sfxs) {
         if (note.ex && soundBuffers.ex && !hold) { // Ensure it's not touch before playing tap
             playSound(soundBuffers, 'ex', { volume: soundSettings.judgeExVol });
         }
-        if (note.break && !hold) {
-            if (soundBuffers.break_woo) playSound(soundBuffers, 'break_woo', { volume: soundSettings.breakVol });
-            if (soundBuffers.break) playSound(soundBuffers, 'break', { volume: soundSettings.breakJudgeVol });
+        if (hold) {
+            if (note.touchTime && note.hanabi) {
+                if (soundBuffers.hanabi) playSound(soundBuffers, 'hanabi', { volume: soundSettings.hanabiVol });
+            }
         } else {
-            if (note.touch && soundBuffers.touch) {
-                if (note.hanabi && soundBuffers.hanabi) {
-                    playSound(soundBuffers, 'hanabi', { volume: soundSettings.touchVol });
+            if (note.break) {
+                if (note.slide) {
+                    if (soundBuffers.breakSlide) playSound(soundBuffers, 'breakSlide', { volume: soundSettings.breakSlideVol });
+                } else {
+                    if (soundBuffers.break_woo) playSound(soundBuffers, 'break_woo', { volume: soundSettings.breakVol });
+                    if (soundBuffers.break) playSound(soundBuffers, 'break', { volume: soundSettings.breakJudgeVol });
                 }
-                playSound(soundBuffers, 'touch', { volume: soundSettings.touchVol });
-            } else if (soundBuffers.tap) { // Ensure it's not touch before playing tap
-                playSound(soundBuffers, 'tap', { volume: soundSettings.judgeVol });
+            } else {
+                if (note.slide) {
+                    if (soundBuffers.slide) playSound(soundBuffers, 'slide', { volume: soundSettings.slideVol });
+                } else if (note.touch) {
+                    if (soundBuffers.touch) playSound(soundBuffers, 'touch', { volume: soundSettings.touchVol });
+                    if (!note.touchTime && note.hanabi) {
+                        if (soundBuffers.hanabi) playSound(soundBuffers, 'hanabi', { volume: soundSettings.hanabiVol });
+                    }
+                } else if (soundBuffers.tap) { // Ensure it's not touch before playing tap
+                    playSound(soundBuffers, 'tap', { volume: soundSettings.judgeVol });
+                }
             }
         }
     }
@@ -539,66 +559,61 @@ $(document).ready(function () {
     controls.stop.text(icons[2]);
 
     function processChartData() { // Renamed from doSomethingToDataIThink
-        try {
-            notes = simai_decode(data.getNowDiff(settings.nowDiff)); // This now returns notes with pre-calculated path objects if possible
-            triggered = [];
-            let newMaxTime = 1; // Local variable for calculation
+        const temp = simai_decode(data.getNowDiff(settings.nowDiff));
+        notes = temp.notes, notesData = temp.data; // This now returns notes with pre-calculated path objects if possible
+        triggered = [];
+        let newMaxTime = 1; // Local variable for calculation
 
-            // Pre-process notes for "double" checks and other render-time optimizations
-            // This is a placeholder. Actual logic depends on how "double" is defined.
-            // Example: Mark notes that occur at the exact same time for different rendering.
-            const timeMap = new Map();
-            notes.forEach(note => {
-                if (!note) return;
-                if (!timeMap.has(note.time)) timeMap.set(note.time, []);
-                timeMap.get(note.time).push(note);
-            });
+        // Pre-process notes for "double" checks and other render-time optimizations
+        // This is a placeholder. Actual logic depends on how "double" is defined.
+        // Example: Mark notes that occur at the exact same time for different rendering.
+        const timeMap = new Map();
+        notes.forEach(note => {
+            if (!note) return;
+            if (!timeMap.has(note.time)) timeMap.set(note.time, []);
+            timeMap.get(note.time).push(note);
+        });
 
-            notes.forEach(note => {
-                if (!note) return;
-                const notesAtSameTime = timeMap.get(note.time) || [];
-                if (note.slide) {
-                    note.isDoubleSlide = notesAtSameTime.filter((n, indx) => n !== note && n.slide && (n.chainTarget != note.chainTarget && note.chainTarget != indx)).length > 0;
-                } else if (note.touch) {
-                    note.isDoubleTouch = notesAtSameTime.filter(n => n !== note && n.touch && !n.starTime).length > 0;
-                } else { // Tap or Hold
-                    note.isDoubleTapHold = notesAtSameTime.filter(n => n !== note && !n.slide && !n.touch).length > 0;
-                }
-
-
-                let noteEndTime = note.time;
-                if (note.holdTime) noteEndTime = Math.max(noteEndTime, note.time + note.holdTime * 1000);
-                if (note.slideTime && note.delay) noteEndTime = Math.max(noteEndTime, note.time + (note.slideTime + note.delay) * 1000);
-                if (note.touchTime) noteEndTime = Math.max(noteEndTime, note.time + note.touchTime * 1000);
-                newMaxTime = Math.max(newMaxTime, noteEndTime);
-
-                if (note.holdTime || note.touchTime || (note.slideTime && note.delay)) { // Simplified condition
-                    triggered.push([false, false]); // For notes with duration
-                } else {
-                    triggered.push(false); // For tap/star notes
-                }
-            });
-
-            maxTime = newMaxTime + 1000; // Add 1s buffer
-            if (bgm[0].duration) {
-                maxTime = Math.max(maxTime, (bgm[0].duration + 1) * 1000);
+        notes.forEach(note => {
+            if (!note || note.invalid) return;
+            const notesAtSameTime = timeMap.get(note.time) || [];
+            if (note.slide) {
+                note.isDoubleSlide = notesAtSameTime.filter((n, indx) => n !== note && n.slide && (n.chainTarget != note.chainTarget && note.chainTarget != indx)).length > 0;
+            } else if (note.touch) {
+                note.isDoubleTouch = notesAtSameTime.filter(n => n !== note && n.touch && !n.starTime).length > 0;
+            } else { // Tap or Hold
+                note.isDoubleTapHold = notesAtSameTime.filter(n => n !== note && !n.slide && !n.touch).length > 0;
             }
-            maxTime = isNaN(maxTime) ? 1000 : maxTime;
-            controls.timeline.prop("max", maxTime / 1000);
-            if (currentTimelineValue > maxTime) {
-                currentTimelineValue = maxTime;
+
+            let noteEndTime = note.time;
+            if (note.holdTime) noteEndTime = Math.max(noteEndTime, note.time + note.holdTime * 1000);
+            if (note.slideTime && note.delay) noteEndTime = Math.max(noteEndTime, note.time + (note.slideTime + note.delay) * 1000);
+            if (note.touchTime) noteEndTime = Math.max(noteEndTime, note.time + note.touchTime * 1000);
+            newMaxTime = Math.max(newMaxTime, noteEndTime);
+
+            if (note.holdTime || note.touchTime || (note.slideTime && note.delay)) { // Simplified condition
+                triggered.push([false, false]); // For notes with duration
+            } else {
+                triggered.push(false); // For tap/star notes
             }
-            play.pauseBoth(controls.play, icons);
-            bgm[0].pause();
-            //currentTimelineValue = 0; // Reset timeline value
-            controls.timeline.val(currentTimelineValue); // Reset slider position
-            updateTimelineVisual(currentTimelineValue);
-            startTime = Date.now(); // Reset start time for paused state
-        } catch (error) {
-            console.error("Error processing chart data:", error);
-            notes = [];
-            triggered = [];
+        });
+
+        maxTime = newMaxTime + 1000; // Add 1s buffer
+        if (bgm[0].duration) {
+            maxTime = Math.max(maxTime, (bgm[0].duration + 1) * 1000);
         }
+        maxTime = isNaN(maxTime) ? 1000 : maxTime;
+        controls.timeline.prop("max", maxTime / 1000);
+        if (currentTimelineValue > maxTime) {
+            currentTimelineValue = maxTime;
+        }
+        play.pauseBoth(controls.play, icons);
+        bgm[0].pause();
+        //currentTimelineValue = 0; // Reset timeline value
+        controls.timeline.val(currentTimelineValue); // Reset slider position
+        updateTimelineVisual(currentTimelineValue);
+        startTime = Date.now(); // Reset start time for paused state
+
     }
 
     $editor.on("input", debounce(function () { // Debounced input
@@ -718,6 +733,8 @@ $(document).ready(function () {
         }
 
         const t = (currentTimelineValue - settings.musicDelay) * 1000; // Use JS variable
+        const sVal = 100 / notesData.val;
+        const bVal = (notesData.breakCounts == 0 ? 0 : 1) / notesData.breakCounts;
 
         if (notes && notes.length > 0 && sfxReady) {
             for (let i = notes.length - 1; i >= 0; i--) {
@@ -745,15 +762,19 @@ $(document).ready(function () {
                             }
                         }
                     } else { // Reset trigger if time is before note
-                        if (Array.isArray(triggered[i])) triggered[i][0] = false;
-                        else triggered[i] = false;
+                        if (Array.isArray(triggered[i])) {
+                            triggered[i][0] = false;
+                        }
+                        else {
+                            triggered[i] = false;
+                        }
                         //play.nowIndex = note.index ?? play.nowIndex;
                         //console.log(note, play.nowIndex);
                     }
                     // Hold (end) logic
                     if (note.holdTime && _t_note_relative >= note.holdTime) { // Use note.holdTime directly
-                        if (Array.isArray(triggered[i]) && triggered[i][0] && !triggered[i][1] && !settings.holdEndNoSound) {
-                            _playEffect(note, true);
+                        if (Array.isArray(triggered[i]) && triggered[i][0] && !triggered[i][1]) {
+                            if (!settings.holdEndNoSound) _playEffect(note, true);
                             triggered[i][1] = true;
                         }
                     } else if (note.holdTime && Array.isArray(triggered[i])) { // Reset end trigger if before end time
@@ -763,11 +784,11 @@ $(document).ready(function () {
                 // Slide logic (sound typically at start, if any)
                 else if (note.slide) {
                     // Slides might not have a specific sound here, but visual trigger
-                    if (_t_note_relative >= 0 && !triggered[i]) {
-                        // _playEffect(note); // If slides have sound
+                    if (_t_note_relative >= note.delay && !triggered[i]) {
+                        if (!note.chain || note.firstOne) _playEffect(note);
                         triggered[i] = true; // Mark as visually active
                         play.nowIndex = note.index ?? play.nowIndex;
-                    } else if (_t_note_relative < 0 && triggered[i]) {
+                    } else if (_t_note_relative < note.delay && triggered[i]) {
                         triggered[i] = false; // Reset if time is before
                     }
                 }
@@ -788,10 +809,12 @@ $(document).ready(function () {
                             }
                         }
                     } else {
-                        if (Array.isArray(triggered[i])) triggered[i][0] = false;
-                        else triggered[i] = false;
-                        //play.nowIndex = note.index ?? play.nowIndex;
-                        //console.log(note, play.nowIndex);
+                        if (Array.isArray(triggered[i])) {
+                            triggered[i][0] = false;
+                        }
+                        else {
+                            triggered[i] = false;
+                        }
                     }
                     // Touch Hold (end) logic
                     if (note.touchTime && _t_note_relative >= note.touchTime) {

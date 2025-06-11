@@ -30,14 +30,16 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
     ctx.fillStyle = "black";
     ctx.font = Math.floor(hbw / 4) + "px monospace"
-    ctx.fillText(`${play.nowIndex}`, hw - hbw / 16, hh);
+    ctx.fillText(`${play.score}`, hw - hbw / 16, hh + hbw / 16);
 
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 4;
     // images.sensor.style.fontFamily = 'monospace'; // Setting style on image element directly, not canvas related for drawing
-    ctx.drawImage(images.sensor,
-        (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
-        bw, bw);
+    if (currentSettings.disableSensorWhenPlaying && play.pause) {
+        ctx.drawImage(images.sensor,
+            (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
+            bw, bw);
+    }
     ctx.shadowColor = '#00000000';
     ctx.shadowBlur = 0;
 
@@ -560,44 +562,79 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
     // CRITICAL REWRITE: drawArrow should not use SVG DOM elements.
     // It should calculate points mathematically using the path object.
     function drawArrowAndStar(pathObject, spacing, _t_arrow_progress, currentCtx, arrowColor, arrowSize, wSlide, fading, noteData) {
-        const totalLen = pathObject.getTotalLength(); // Assumes pathObject.getTotalLength() is now mathematical
+        const totalLen = pathObject.getTotalLength();
         if (totalLen <= 0) return;
+        // 預先調整 spacing
+        spacing *= (1 + wSlide / 2);
 
-        spacing *= ((1 + wSlide / 2));
+        // 設定填色
         currentCtx.fillStyle = arrowColor;
+        //if (noteData.lastOne) { currentCtx.fillStyle = "red"; }
+
+        // 預先計算 t_progress 下限
+        const _t_arrow = t_progress < 0 ? 0 : t_progress;
+        // 預先計算 wSlide 影響的 b 增量因子
+        const bIncrementPer = arrowSize * (wSlide ? 0.3 : 0);
+
+        // 計算可畫箭頭數量（視情況可用 Math.floor 以確保整數次數）
+        const fin = Math.floor(totalLen / spacing - 1);
+
+        const arrow = new Path2D();
+        // 這邊照原本比例，改寫一個以 (0,0) 為基準的 arrow shape
+        arrow.moveTo(arrowSize * 0.55, 0);
+        arrow.lineTo(arrowSize * 0.35, arrowSize * -0.4);
+        arrow.lineTo(0, arrowSize * -0.4);
+        arrow.lineTo(arrowSize * 0.2, 0);
+        arrow.lineTo(0, arrowSize * 0.4);
+        arrow.lineTo(arrowSize * 0.35, arrowSize * 0.4);
+        arrow.closePath();
 
         let b = 0;
-        const _t_arrow = t_progress < 0 ? 0 : t_progress;
-        for (let len = spacing / 2; len < totalLen - spacing / 2; len += spacing) {
-            if (len / totalLen >= _t_arrow) { // Only draw if part of the remaining path
-                // getPointAtLength should return {x, y, angle}
-                const p = pathObject.getPointAtLength(len);
+        for (let i = 0; i < fin; i++) {
+            const lenAlong = (i + 0.5) * spacing;
+            // 只有當在剩餘進度區段，才繪製
+            if (lenAlong / totalLen >= _t_arrow) {
+                // 取得路徑上該長度位置點與角度
+                const p = pathObject.getPointAtLength(lenAlong);
+                const x = p.x, y = p.y, angle = p.angle;
 
-                currentCtx.save();
-                currentCtx.translate(p.x, p.y);
-                currentCtx.rotate(p.angle);
-                currentCtx.beginPath();
-                // Define arrow shape relative to (0,0)
-                currentCtx.moveTo(arrowSize * 0.55, 0); // Tip of arrow
-                currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * -0.4 - b);
-                currentCtx.lineTo(0 - b / 2, arrowSize * -0.4 - b);
-                currentCtx.lineTo(arrowSize * 0.2, 0);
-                currentCtx.lineTo(0 - b / 2, arrowSize * 0.4 + b);
-                currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * 0.4 + b);
-                currentCtx.closePath();
-                currentCtx.fill();
-                currentCtx.restore();
+                // 手動 translate + rotate
+                currentCtx.translate(x, y);
+                currentCtx.rotate(angle);
+                if (wSlide) {
+                    // 開始畫箭頭，相對於 (0,0) 畫法和原本近似
+                    currentCtx.beginPath();
+
+                    // Tip
+                    currentCtx.moveTo(arrowSize * 0.55, 0);
+                    currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * -0.4 - b);
+                    currentCtx.lineTo(0 - b / 2, arrowSize * -0.4 - b);
+                    currentCtx.lineTo(arrowSize * 0.2, 0);
+                    currentCtx.lineTo(0 - b / 2, arrowSize * 0.4 + b);
+                    currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * 0.4 + b);
+                    currentCtx.closePath();
+                    currentCtx.fill();
+                } else {
+                    currentCtx.fill(arrow);
+                }
+                // 手動還原：先 rotate 回去，再 translate 回去
+                currentCtx.rotate(-angle);
+                currentCtx.translate(-x, -y);
             }
-            b += arrowSize * (wSlide ? 0.3 : 0);
+            b += bIncrementPer;
         }
         if (!fading) {
-            const k = (noteData.chainTarget ? true : false) ? (_t_arrow_progress > 0) + 0 : Math.min(_t_arrow_progress * noteData.slideTime + 1, 1);
+            const k = (noteData.chain && !noteData.firstOne) ? (_t_arrow_progress > 0) + 0 : Math.min(_t_arrow_progress * noteData.slideTime / noteData.delay + 1, 1);
 
             const p = pathObject.getPointAtLength(_t_arrow * totalLen);
             currentCtx.save();
             currentCtx.translate(p.x, p.y);
             currentCtx.rotate(p.angle);
-            drawStar(0, 0, k, color, noteData.ex ?? false, 90, currentCtx, hbw, currentSettings, calAng, s, Math.min(_t_arrow_progress + 1, 1));
+
+            //ctx.font = "bold 24px Segoe UI"; // Smaller font
+            //ctx.fillStyle = "black";
+            //ctx.fillText(`${_t_arrow_progress * noteData.slideTime / noteData.delay}`, 0, 50);
+            drawStar(0, 0, k, color, noteData.ex ?? false, 90, currentCtx, hbw, currentSettings, calAng, s, k);
             currentCtx.restore();
         }
     }
