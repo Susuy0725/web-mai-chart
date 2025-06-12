@@ -8,6 +8,11 @@
     src: url('../Fonts/Handlee-Regular.ttf') format('truetype');
 }
 
+@font-face {
+    font-family: 'combo';
+    src: url('../Fonts/Inter-VariableFont_opsz\,wght.ttf') format('truetype');
+}
+
 @media (max-aspect-ratio: 1/1) {
 
     /* 當 vw < vh，也就是畫面偏「高」時 */

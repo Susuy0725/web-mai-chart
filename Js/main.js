@@ -20,9 +20,11 @@ export let settings = { // Keep export if other modules might need direct access
     'noSensor': false,
     'disableSensorWhenPlaying': true,
 };
-// Make play and soundSettings local if not modified externallyaa
+// Make play and soundSettings local if not modified externally
+const icons = ['\uE103', '\uE102', '\uE100']; // Use const
+
 let play = {
-    'pauseBoth': function (btn, icons) {
+    'pauseBoth': function (btn) {
         play.btnPause = true;
         play.pause = true;
         $(btn).text(icons[0 + play.btnPause]);
@@ -33,6 +35,7 @@ let play = {
     'nowIndex': 0,
     'combo': 0,
     'score': 0,
+    'playbackSpeed': 0.75,
 };
 let soundSettings = {
     'answer': true,
@@ -77,6 +80,8 @@ const settingsConfig = {
         { target: soundSettings, key: 'breakJudgeVol', label: 'Break judge音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'touchVol', label: 'Touch 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'breakVol', label: 'Break 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'slideVol', label: 'Slide 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: soundSettings, key: 'hanabiVol', label: '煙火音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
     ]
 };
 
@@ -98,6 +103,7 @@ const soundFiles = {
     hanabi: 'hanabi.wav',
     slide: 'slide.wav',
     breakSlide: 'break_slide_start.wav',
+    breakSlideEnd: 'break_slide.wav',
     answer: 'answer.wav',
 };
 
@@ -158,6 +164,11 @@ function _playEffect(note, hold = false) {
         if (hold) {
             if (note.touchTime && note.hanabi) {
                 if (soundBuffers.hanabi) playSound(soundBuffers, 'hanabi', { volume: soundSettings.hanabiVol });
+            }
+            if (note.break) {
+                if (note.slide) {
+                    if (soundBuffers.breakSlideEnd) playSound(soundBuffers, 'breakSlideEnd', { volume: soundSettings.breakSlideVol });
+                }
             }
         } else {
             if (note.break) {
@@ -311,7 +322,6 @@ $(document).ready(function () {
     }
 
     const _sliderColor = ['#ff3232', '#FFE9E9']; // Use const
-    const icons = ['\uE103', '\uE102', '\uE100']; // Use const
     const controls = { // Use const
         'timeline': $("#timeline"),
         'play': $('#playBtn'),
@@ -338,19 +348,19 @@ $(document).ready(function () {
 
     $('.file-menu .a-btn2').on('click', function () { // Load Audio
         handleFileUpload('audio/*', (file) => {
-            play.pauseBoth(controls.play, icons);
+            play.pauseBoth(controls.play);
             if (bgm.attr('src')) URL.revokeObjectURL(bgm.attr('src')); // Revoke old URL
             bgm.attr('src', '');
             const objectURL = URL.createObjectURL(file);
             bgm.attr('src', objectURL);
             bgm[0].load();
             bgm.off('loadedmetadata').on('loadedmetadata', function () { // Use .off to prevent multiple bindings
-                bgm[0].volume = soundSettings.musicVol;
+                bgm[0].volume = soundSettings.musicVol * soundSettings.music;
                 const audioDurationMs = (bgm[0].duration + 1) * 1000;
                 maxTime = Math.max(maxTime, audioDurationMs);
                 controls.timeline.prop("max", maxTime / 1000);
+                bgm[0].playbackRate = play.playbackSpeed;
                 updateTimelineVisual(currentTimelineValue); // Update visual based on current time
-                console.log(bgm);
             });
         });
     });
@@ -367,6 +377,12 @@ $(document).ready(function () {
                 }
                 settings.musicDelay = parseFloat(data.first ?? "0");
                 $editor.val(data.getNowDiff(settings.nowDiff)); // Update editor content
+                play.pauseBoth(controls.play);
+                bgm[0].pause();
+                currentTimelineValue = 0;
+                controls.timeline.val(0); // Reset slider position
+                updateTimelineVisual(0);
+                startTime = Date.now(); // Reset start time for paused state
                 processChartData();
             };
             reader.readAsText(file);
@@ -551,7 +567,7 @@ $(document).ready(function () {
         }
         $('#settings-popup').hide();
         $('#settings-overlay').hide();
-        bgm[0].volume = soundSettings.musicVol;
+        bgm[0].volume = soundSettings.musicVol * soundSettings.music;
     });
 
     _updCanvasRes();
@@ -560,6 +576,8 @@ $(document).ready(function () {
 
     function processChartData() { // Renamed from doSomethingToDataIThink
         const temp = simai_decode(data.getNowDiff(settings.nowDiff));
+        play.combo = 0;
+        play.score = 0;
         notes = temp.notes, notesData = temp.data; // This now returns notes with pre-calculated path objects if possible
         triggered = [];
         let newMaxTime = 1; // Local variable for calculation
@@ -591,7 +609,7 @@ $(document).ready(function () {
             if (note.touchTime) noteEndTime = Math.max(noteEndTime, note.time + note.touchTime * 1000);
             newMaxTime = Math.max(newMaxTime, noteEndTime);
 
-            if (note.holdTime || note.touchTime || (note.slideTime && note.delay)) { // Simplified condition
+            if (note.holdTime || note.touchTime || note.slide) { // Simplified condition
                 triggered.push([false, false]); // For notes with duration
             } else {
                 triggered.push(false); // For tap/star notes
@@ -607,13 +625,12 @@ $(document).ready(function () {
         if (currentTimelineValue > maxTime) {
             currentTimelineValue = maxTime;
         }
-        play.pauseBoth(controls.play, icons);
+        play.pauseBoth(controls.play);
         bgm[0].pause();
         //currentTimelineValue = 0; // Reset timeline value
         controls.timeline.val(currentTimelineValue); // Reset slider position
         updateTimelineVisual(currentTimelineValue);
         startTime = Date.now(); // Reset start time for paused state
-
     }
 
     $editor.on("input", debounce(function () { // Debounced input
@@ -644,10 +661,12 @@ $(document).ready(function () {
         })
         .on("mouseup touchend", function (e) {
             $editor.trigger('focus');
-            bgm[0].volume = soundSettings.musicVol;
+            bgm[0].volume = soundSettings.musicVol * soundSettings.music;
             currentTimelineValue = parseFloat($(this).val());
-            startTime = Date.now() - currentTimelineValue * 1000;
+            startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
             play.pause = play.btnPause;
+
+            bgm[0].playbackRate = play.playbackSpeed;
             if (!play.pause) {
                 bgm[0].currentTime = currentTimelineValue;
                 bgm[0].play().catch(e => console.error("BGM play error:", e));
@@ -659,7 +678,7 @@ $(document).ready(function () {
         .on("input", function (e) {
             currentTimelineValue = parseFloat($(this).val());
             if (play.pause) { // Update startTime if paused to reflect drag
-                startTime = Date.now() - currentTimelineValue * 1000;
+                startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
             }
 
             if (settings.followText) {
@@ -673,12 +692,13 @@ $(document).ready(function () {
         });
 
     controls.play.click(function (e) {
-        bgm[0].volume = soundSettings.musicVol;
+        bgm[0].volume = soundSettings.musicVol * soundSettings.music;
         play.btnPause = !play.btnPause;
         play.pause = play.btnPause;
         $(this).text(icons[0 + play.btnPause]);
         currentTimelineValue = parseFloat(controls.timeline.val()); // Get current value from slider
-        startTime = Date.now() - currentTimelineValue * 1000;
+        bgm[0].playbackRate = play.playbackSpeed;
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
 
         if (!play.pause) {
             bgm[0].currentTime = currentTimelineValue;
@@ -689,7 +709,7 @@ $(document).ready(function () {
     });
 
     controls.stop.click(function (e) {
-        play.pauseBoth(controls.play, icons);
+        play.pauseBoth(controls.play);
         currentTimelineValue = 0; // Get current value from slider
         startTime = Date.now();
 
@@ -723,7 +743,7 @@ $(document).ready(function () {
 
     function update() {
         if (!play.pause) {
-            const newTimelineVal = (Date.now() - startTime) / 1000;
+            const newTimelineVal = ((Date.now() - startTime) / 1000) * play.playbackSpeed;
             // Only update if the value has changed significantly
             if (Math.abs(currentTimelineValue - newTimelineVal) > 0.01) {
                 currentTimelineValue = newTimelineVal;
@@ -759,6 +779,7 @@ $(document).ready(function () {
                                 _playEffect(note);
                                 triggered[i] = true;
                                 play.nowIndex = note.index ?? play.nowIndex;
+                                play.combo++;
                             }
                         }
                     } else { // Reset trigger if time is before note
@@ -766,6 +787,9 @@ $(document).ready(function () {
                             triggered[i][0] = false;
                         }
                         else {
+                            if (triggered[i]) {
+                                play.combo--;
+                            }
                             triggered[i] = false;
                         }
                         //play.nowIndex = note.index ?? play.nowIndex;
@@ -776,20 +800,45 @@ $(document).ready(function () {
                         if (Array.isArray(triggered[i]) && triggered[i][0] && !triggered[i][1]) {
                             if (!settings.holdEndNoSound) _playEffect(note, true);
                             triggered[i][1] = true;
+                            play.combo++;
                         }
                     } else if (note.holdTime && Array.isArray(triggered[i])) { // Reset end trigger if before end time
+                        if (triggered[i][1]) {
+                            play.combo--;
+                        }
                         triggered[i][1] = false;
                     }
                 }
                 // Slide logic (sound typically at start, if any)
                 else if (note.slide) {
                     // Slides might not have a specific sound here, but visual trigger
-                    if (_t_note_relative >= note.delay && !triggered[i]) {
-                        if (!note.chain || note.firstOne) _playEffect(note);
-                        triggered[i] = true; // Mark as visually active
-                        play.nowIndex = note.index ?? play.nowIndex;
-                    } else if (_t_note_relative < note.delay && triggered[i]) {
-                        triggered[i] = false; // Reset if time is before
+                    if (_t_note_relative >= note.delay) {
+                        if (Array.isArray(triggered[i])) { // Touch Hold note
+                            if (!triggered[i][0]) {
+                                if (!note.chain || note.firstOne) _playEffect(note);
+                                triggered[i][0] = true;
+                                play.nowIndex = note.index ?? play.nowIndex;
+                            }
+                        }
+                    } else {
+                        if (Array.isArray(triggered[i])) {
+                            triggered[i][0] = false;
+                        }
+                    }
+                    // Slide (end) logic
+                    if (note.slideTime && _t_note_relative >= note.slideTime + note.delay) {
+                        if (Array.isArray(triggered[i]) && triggered[i][0] && !triggered[i][1] && !settings.holdEndNoSound) {
+                            if (!note.chain || note.lastOne) {
+                                _playEffect(note, true);
+                                play.combo++;
+                            }
+                            triggered[i][1] = true;
+                        }
+                    } else if (note.slideTime && Array.isArray(triggered[i])) {
+                        if (triggered[i][1]) {
+                            if (!note.chain || note.lastOne) play.combo--;
+                        }
+                        triggered[i][1] = false;
                     }
                 }
                 // Touch logic
@@ -804,6 +853,7 @@ $(document).ready(function () {
                         } else { // Touch Tap note
                             if (!triggered[i]) {
                                 _playEffect(note);
+                                play.combo++;
                                 triggered[i] = true;
                                 play.nowIndex = note.index ?? play.nowIndex;
                             }
@@ -813,6 +863,9 @@ $(document).ready(function () {
                             triggered[i][0] = false;
                         }
                         else {
+                            if (triggered[i]) {
+                                play.combo--;
+                            }
                             triggered[i] = false;
                         }
                     }
@@ -820,14 +873,21 @@ $(document).ready(function () {
                     if (note.touchTime && _t_note_relative >= note.touchTime) {
                         if (Array.isArray(triggered[i]) && triggered[i][0] && !triggered[i][1] && !settings.holdEndNoSound) {
                             _playEffect(note, true);
+                            play.combo++;
                             triggered[i][1] = true;
                         }
                     } else if (note.touchTime && Array.isArray(triggered[i])) {
+                        if (triggered[i][1]) {
+                            play.combo--;
+                        }
                         triggered[i][1] = false;
                     }
+                } else {
+                    console.log("what", note)
                 }
             }
         }
+
         if (settings.followText && !play.pause) {
             $editor.trigger('focus');
             const b = textarea.value.split(",");

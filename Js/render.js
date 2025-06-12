@@ -28,9 +28,21 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     // Cache note base size
     const noteBaseSize = hbw * currentSettings.noteSize;
 
-    ctx.fillStyle = "black";
-    ctx.font = Math.floor(hbw / 4) + "px monospace"
-    ctx.fillText(`${play.score}`, hw - hbw / 16, hh + hbw / 16);
+    if (play.combo != 0) {
+        ctx.fillStyle = "#FF569B";
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = Math.floor(hbw * 0.015);
+        ctx.font = "bold " + Math.floor(hbw * 0.14) + "px combo"
+        ctx.textAlign = "center";
+        ctx.letterSpacing = "0px";
+        ctx.strokeText("COMBO", hw, hh - hbw * 0.18 * 0.3);
+        ctx.fillText("COMBO", hw, hh - hbw * 0.18 * 0.3);
+        ctx.letterSpacing = Math.floor(hbw * 0.04) + "px";
+        ctx.font = "bold " + Math.floor(hbw * 0.18) + "px combo"
+        ctx.strokeText(`${play.combo}`, hw + Math.floor(hbw * 0.04), hh + hbw * 0.18 * 0.75);
+        ctx.fillText(`${play.combo}`, hw + Math.floor(hbw * 0.04), hh + hbw * 0.18 * 0.75);
+    }
+    ctx.letterSpacing = "0px";
 
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 4;
@@ -120,8 +132,8 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
             let currentX, currentY, currentSize = 1;
 
+            const scaleFactor = (Math.min(_t, 0) * currentSettings.speed + 1);
             if (_t >= -d / currentSettings.speed) {
-                const scaleFactor = (Math.min(_t, 0) * currentSettings.speed + 1);
                 currentX = hw + hbw * np.x * scaleFactor;
                 currentY = hh + hbw * np.y * scaleFactor;
             } else {
@@ -138,8 +150,30 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 if (_t >= -d / currentSettings.speed) {
                     holdLength = (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * currentSettings.speed, (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / currentSettings.speed)) / (d / currentSettings.speed))) * hbw;
                 }
+                drawVaryingArc(ctx, {
+                    centerX: hw,
+                    centerY: hh,
+                    radius: Math.max(scaleFactor, (1 - d)) * hbw,
+                    startAngle: getNoteAng(nang, 6) - Math.PI * 0.25,
+                    endAngle: getNoteAng(nang, 6) + Math.PI * 0.25,
+                    minWidth: 0.1,
+                    maxWidth: Math.max(scaleFactor, (1 - d)) * hbw * 0.03,
+                    steps: 28,
+                    strokeStyle: color,
+                });
                 drawHold(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, holdLength, ctx, hbw, currentSettings, calAng, noteBaseSize);
             } else {
+                drawVaryingArc(ctx, {
+                    centerX: hw,
+                    centerY: hh,
+                    radius: Math.max(scaleFactor, (1 - d)) * hbw,
+                    startAngle: getNoteAng(nang, 6) - Math.PI * 0.25,
+                    endAngle: getNoteAng(nang, 6) + Math.PI * 0.25,
+                    minWidth: 0.1,
+                    maxWidth: Math.max(scaleFactor, (1 - d)) * hbw * 0.03,
+                    steps: 28,
+                    strokeStyle: color,
+                });
                 drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize);
             }
         }
@@ -229,7 +263,7 @@ export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSetti
         return 1 - Math.pow(x, 2);
     }
     function ani1(x) {
-        return Math.log(9 * x + 1) / Math.log(10);
+        return Math.log(99 * x + 1) / Math.log(100);
     }
     sizeFactor = Math.min(Math.max(sizeFactor, 0), 1);
     let s = noteBaseSize; // Use passed base size
@@ -238,7 +272,6 @@ export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSetti
     localColor.addColorStop(0, '#FCFF0A00');
     localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(sizeFactor)));
 
-    ctx.shadowBlur = 0;
     ctx.shadowColor = "#00000000";
     ctx.lineWidth = currentSize * 0.75;
     ctx.fillStyle = localColor;
@@ -314,6 +347,42 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
     ctx.stroke(starShape);
 
     ctx.restore();
+}
+
+
+function drawVaryingArc(ctx, options) {
+    const {
+        centerX = 0,
+        centerY = 0,
+        radius = 100,
+        startAngle = 0,
+        endAngle = Math.PI,
+        minWidth = 1,
+        maxWidth = 10,
+        steps = 100,
+        strokeStyle = 'black',
+    } = options;
+
+    for (let i = 0; i < steps; i++) {
+        const t = i / steps;
+        const angle1 = startAngle + (endAngle - startAngle) * t;
+        const angle2 = startAngle + (endAngle - startAngle) * (t + 1 / steps);
+
+        const progress = t * 2 - 1; // 從 -1 到 1
+        const width = minWidth + (1 - Math.abs(progress)) * (maxWidth - minWidth);
+
+        const x1 = centerX + radius * Math.cos(angle1);
+        const y1 = centerY + radius * Math.sin(angle1);
+        const x2 = centerX + radius * Math.cos(angle2);
+        const y2 = centerY + radius * Math.sin(angle2);
+
+        ctx.beginPath();
+        ctx.lineWidth = width;
+        ctx.strokeStyle = strokeStyle;
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+    }
 }
 
 
@@ -795,11 +864,13 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
                 hw + calAng(Math.PI * (startNp / 4 - 1.5)).x * hbw / 2,
                 hh + calAng(Math.PI * (startNp / 4 - 1.5)).y * hbw / 2 + hbw / 16,
                 hbw / 2.25,
-                Math.PI * ((startNp + 13) % 8 - 0.25) / 4,
+                Math.PI * (
+                    8 * ((startNp - endNp + 4) % 8 == 0)
+                    + (startNp + 13) % 8 - 0.25) / 4,
                 Math.PI * (0 - (
                     1 * ((startNp - endNp + 8) % 8 == 0) +
-                    8 * ((startNp - endNp + 4) % 8 == 0) +
-                    0.5 * (0.5 - ((endNp - startNp + 7) % 8 > 1))
+                    0.5 * (0.5 - ((endNp - startNp + 7) % 8 > 1)) -
+                    0.51 * ((startNp - endNp + 4) % 8 == 0)
                 ) + (endNp + 8) % 8) / 4,
                 true);
             pathRec.lineTo(np[1].x, np[1].y);

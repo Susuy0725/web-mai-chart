@@ -19,16 +19,21 @@ export function simai_decode(_data) {
         let data = dataTemp[i];
         if (data) {
             // 解析 BPM 設定：用括號包住的數字，例如 "(120)"
-            //let match = [data.match(/\(\d+\)|\(\d+.\d+\)/), data.match(/\{\d+\}|\{\d+.\d+\}/)];
+            //let match = [data.match(/\(\d+\)|\(\d+.\d+\)/g), data.match(/\{\d+\}|\{\d+.\d+\}/g)];
             //console.log(match);
             while (data.includes("(") && data.includes(")")) {
                 bpm = parseFloat(data.slice(data.indexOf("(") + 1, data.indexOf(")")));
-                if (data.lastIndexOf("(") < data.indexOf(")")) {
+                console.log(bpm, data.lastIndexOf("("), data.indexOf(")"))
+                if (data.lastIndexOf("(") < data.lastIndexOf(")")) {
                     data = data.slice(0, data.slice(0, data.indexOf(")")).lastIndexOf("(")) +
                         data.slice(data.indexOf(")") + 1);
                 } else {
                     break;
                 }
+            }
+            if (isNaN(bpm)) {
+                bpm = 60;
+                console.error("Invaild BPM!")
             }
             dataTemp[i] = data;
 
@@ -69,8 +74,8 @@ export function simai_decode(_data) {
                 data = data.pos.split("`");
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
-                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time + j * 10, bpm, index: tempNote[i].index }; continue; }
-                    tempNote.push({ pos: data[j], time: tempNote[i].time + j * 10, bpm, index: tempNote[i].index });
+                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time + j * 10, bpm: tempNote[i].bpm, index: tempNote[i].index }; continue; }
+                    tempNote.push({ pos: data[j], time: tempNote[i].time + j * 10, bpm: tempNote[i].bpm, index: tempNote[i].index });
                 }
             }
         }
@@ -83,8 +88,8 @@ export function simai_decode(_data) {
                 data = data.pos.split("*");
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
-                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm, index: tempNote[i].index }; continue; }
-                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm, head: data[0][0], index: tempNote[i].index });
+                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, index: tempNote[i].index }; continue; }
+                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, head: data[0][0], index: tempNote[i].index });
                 }
             }
         }
@@ -285,8 +290,9 @@ export function simai_decode(_data) {
                 let skip = 0;
                 for (let j = 0; j < slideMatch.length; j++) {
                     const e = slideMatch[j];
-                    const l = ((slideMatch[j - 1] ?? " ").length - 1) + (data.head ? 0 : 1) + skip;
-                    let a = temp.indexOf(e, l);
+                    //const l = ((slideMatch[j - 1] ?? " ").length - 1) + (data.head ? 0 : 1) + skip;
+                    //let a = temp.indexOf(e, l);
+                    let a = temp.indexOf(e, skip);
                     sp.data.push(temp.slice(0, a));
                     temp = temp.slice(a);
                     skip = (slideMatch[j + 1] ?? "").length;
@@ -519,22 +525,27 @@ export function simai_decode(_data) {
                 }
             }
 
-            if(isNaN(tempNote[i].pos) && tempNote[i].pos){
+            if (isNaN(tempNote[i].pos) && tempNote[i].pos) {
                 throw new Error("pos is not number");
             }
         } catch (error) {
-            console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`,error);
+            console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
             tempNote[i].invalid = true;
             continue;
         }
     }
+    tempNote.sort(function (a,b) {
+        return a.time - b.time;
+    });
 
+    let combo = (tapCounts + holdCounts + slideCounts + touchCounts + breakCounts);
     console.log(tempNote);
     console.log(`tap: ${tapCounts}`);
     console.log(`hold: ${holdCounts}`);
     console.log(`slide: ${slideCounts}`);
     console.log(`touch: ${touchCounts}`);
     console.log(`break: ${breakCounts}`);
+    console.log(`combo: ${combo}`);
     return {
         notes: tempNote, data: {
             tapCounts,
@@ -542,6 +553,7 @@ export function simai_decode(_data) {
             slideCounts,
             touchCounts,
             breakCounts,
+            combo,
             val: (tapCounts + holdCounts * 2 + slideCounts * 3 + touchCounts + breakCounts * 5)
         }
     };
