@@ -3,7 +3,7 @@ import * as render from "../Js/render.js";
 
 export let settings = { // Keep export if other modules might need direct access
     'musicDelay': 0,
-    'distanceToMid': 0.28,
+    'distanceToMid': 0.3,
     'roundStroke': true,
     'noteSize': 0.09,
     'speed': 2,
@@ -19,11 +19,14 @@ export let settings = { // Keep export if other modules might need direct access
     'effectDecayTime': 0.25,
     'noSensor': false,
     'disableSensorWhenPlaying': true,
+    'lineWidthFactor': 0.8,
+    'noNoteArc': false,
+    'middleDisplay': 1,
 };
 // Make play and soundSettings local if not modified externally
 const icons = ['\uE103', '\uE102', '\uE100']; // Use const
 
-let play = {
+export let play = {
     'pauseBoth': function (btn) {
         play.btnPause = true;
         play.pause = true;
@@ -35,38 +38,43 @@ let play = {
     'nowIndex': 0,
     'combo': 0,
     'score': 0,
-    'playbackSpeed': 0.75,
+    'playbackSpeed': 1,
 };
 let soundSettings = {
     'answer': true,
     'sfxs': true,
     'music': true,
     'answerVol': 0.8,
-    'judgeVol': 0.1,
+    'judgeVol': 0.2,
     'judgeExVol': 0.1,
-    'breakJudgeVol': 0.1,
+    'breakJudgeVol': 0.3,
     'touchVol': 0.2,
-    'breakVol': 0.3,
-    'musicVol': 0.8,
-    'hanabiVol': 0.4,
-    'slideVol': 0.5,
+    'breakVol': 0.2,
+    'musicVol': 0.7,
+    'hanabiVol': 0.3,
+    'slideVol': 0.2,
 };
 let maidata; // Chart data
 
 const settingsConfig = {
     game: [
         { target: settings, key: 'musicDelay', label: '譜面偏移 (音樂延遲)', type: 'number', step: 0.01, min: -20, max: 20 },
-        { target: settings, key: 'distanceToMid', label: 'Note 出現位置 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: play, key: 'playbackSpeed', label: '回放速度', type: 'number', step: 0.01, min: 0.01, max: 4 },
         { target: settings, key: 'followText', label: '文本跟隨', type: 'boolean' },
-        { target: settings, key: 'roundStroke', label: '圓滑邊緣', type: 'boolean' },
-        { target: settings, key: 'noteSize', label: 'Note 大小 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: settings, key: 'speed', label: 'Tap/Hold 速度倍率', type: 'number', step: 0.1 },
         { target: settings, key: 'pinkStar', label: '粉紅色星星', type: 'boolean' },
-        { target: settings, key: 'touchSpeed', label: 'Touch 速度倍率', type: 'number', step: 0.1 },
         { target: settings, key: 'slideSpeed', label: 'Slide 速度倍率', type: 'number', step: 0.1 },
-        { target: settings, key: 'holdEndNoSound', label: 'Hold 結尾無音效', type: 'boolean' },
-        { target: settings, key: 'showSlide', label: '顯示 Slide 軌跡', type: 'boolean' },
+        { target: settings, key: 'touchSpeed', label: 'Touch 速度倍率', type: 'number', step: 0.1 },
+        { target: settings, key: 'middleDisplay', label: '中央顯示 (0: 無,1: COMBO,2: 分數(累加))', type: 'number', step: 1, min: 0, max: 2 },
+        { target: settings, key: 'roundStroke', label: '圓滑邊緣', type: 'boolean' },
         { target: settings, key: 'showEffect', label: '顯示簡單效果', type: 'boolean' },
+        { target: settings, key: 'holdEndNoSound', label: 'Hold 結尾無音效', type: 'boolean' },
+        { target: settings, key: 'distanceToMid', label: 'Note 出現位置 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: settings, key: 'noteSize', label: 'Note 大小 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+        { target: settings, key: 'lineWidthFactor', label: 'Note 粗細 (不影響 Touch) (0-1)', type: 'number', step: 0.01, min: 0, max: 2 },
+        { target: settings, key: 'showSlide', label: '顯示 Slide 軌跡', type: 'boolean' },
+        { target: settings, key: 'disableSensorWhenPlaying', label: '播放時隱藏 Touch 位置文本', type: 'boolean' },
+        { target: settings, key: 'noNoteArc', label: '不顯示音符弧線', type: 'boolean' },
         { target: settings, key: 'effectDecayTime', label: '效果持續時間', type: 'number', step: 0.01 },
     ],
     sound: [
@@ -89,7 +97,7 @@ let notes = [{}], notesData = {}; // Use `let` as it's reassigned
 let triggered = [];
 let startTime = 0; // Initialize
 let maxTime = 1;
-let sfxReady = false;
+let sfxReady = false, inSettings = false;
 let currentTimelineValue = 0; // JS variable to store timeline value
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -494,6 +502,7 @@ $(document).ready(function () {
         generateSettingsForm();
         $('#settings-popup').show();
         $('#settings-overlay').show();
+        inSettings = true;
     });
 
     function generateSettingsForm() {
@@ -567,7 +576,9 @@ $(document).ready(function () {
         }
         $('#settings-popup').hide();
         $('#settings-overlay').hide();
+        inSettings = false;
         bgm[0].volume = soundSettings.musicVol * soundSettings.music;
+        bgm[0].playbackRate = play.playbackSpeed;
     });
 
     _updCanvasRes();
@@ -718,9 +729,9 @@ $(document).ready(function () {
         updateTimelineVisual(0);
     });
 
-    if (example) {
-        $editor.val(example);
-        data["inote_" + settings.nowDiff] = example;
+    if (masterExample) {
+        $editor.val(masterExample);
+        data["inote_" + settings.nowDiff] = masterExample;
         processChartData();
     }
 
@@ -740,6 +751,10 @@ $(document).ready(function () {
         ctx.canvas.height = Math.max(150, (doc_height - (controlsHeight + actionsHeight)) * 2); // Ensure min height, adjust multiplier if needed
     }
 
+    // count method
+    // https://stackoverflow.com/questions/4787431/how-do-i-check-framerate-in-javascript
+    var filterStrength = 20;
+    var frameTime = 0, lastLoop = new Date, thisLoop;
 
     function update() {
         if (!play.pause) {
@@ -759,7 +774,7 @@ $(document).ready(function () {
         if (notes && notes.length > 0 && sfxReady) {
             for (let i = notes.length - 1; i >= 0; i--) {
                 const note = notes[i];
-                if (!note) continue;
+                if (!note || note.invalid) continue;
 
                 const _t_note_relative = (t - note.time) / 1000;
 
@@ -780,6 +795,8 @@ $(document).ready(function () {
                                 triggered[i] = true;
                                 play.nowIndex = note.index ?? play.nowIndex;
                                 play.combo++;
+                                if (note.break) { play.score += sVal * 5 + bVal; }
+                                else { play.score += sVal; }
                             }
                         }
                     } else { // Reset trigger if time is before note
@@ -789,6 +806,8 @@ $(document).ready(function () {
                         else {
                             if (triggered[i]) {
                                 play.combo--;
+                                if (note.break) { play.score -= sVal * 5 + bVal; }
+                                else { play.score -= sVal; }
                             }
                             triggered[i] = false;
                         }
@@ -801,10 +820,14 @@ $(document).ready(function () {
                             if (!settings.holdEndNoSound) _playEffect(note, true);
                             triggered[i][1] = true;
                             play.combo++;
+                            if (note.break) { play.score += sVal * 5 + bVal; }
+                            else { play.score += sVal * 2; }
                         }
                     } else if (note.holdTime && Array.isArray(triggered[i])) { // Reset end trigger if before end time
                         if (triggered[i][1]) {
                             play.combo--;
+                            if (note.break) { play.score -= sVal * 5 + bVal; }
+                            else { play.score -= sVal * 2; }
                         }
                         triggered[i][1] = false;
                     }
@@ -831,12 +854,18 @@ $(document).ready(function () {
                             if (!note.chain || note.lastOne) {
                                 _playEffect(note, true);
                                 play.combo++;
+                                if (note.break) { play.score += sVal * 5 + bVal; }
+                                else { play.score += sVal * 3; }
                             }
                             triggered[i][1] = true;
                         }
                     } else if (note.slideTime && Array.isArray(triggered[i])) {
                         if (triggered[i][1]) {
-                            if (!note.chain || note.lastOne) play.combo--;
+                            if (!note.chain || note.lastOne) {
+                                play.combo--;
+                                if (note.break) { play.score -= sVal * 5 + bVal; }
+                                else { play.score -= sVal * 3; }
+                            }
                         }
                         triggered[i][1] = false;
                     }
@@ -854,6 +883,7 @@ $(document).ready(function () {
                             if (!triggered[i]) {
                                 _playEffect(note);
                                 play.combo++;
+                                play.score += sVal;
                                 triggered[i] = true;
                                 play.nowIndex = note.index ?? play.nowIndex;
                             }
@@ -865,6 +895,7 @@ $(document).ready(function () {
                         else {
                             if (triggered[i]) {
                                 play.combo--;
+                                play.score -= sVal;
                             }
                             triggered[i] = false;
                         }
@@ -874,11 +905,13 @@ $(document).ready(function () {
                         if (Array.isArray(triggered[i]) && triggered[i][0] && !triggered[i][1] && !settings.holdEndNoSound) {
                             _playEffect(note, true);
                             play.combo++;
+                            play.score += sVal * 2;
                             triggered[i][1] = true;
                         }
                     } else if (note.touchTime && Array.isArray(triggered[i])) {
                         if (triggered[i][1]) {
                             play.combo--;
+                            play.score -= sVal * 2;
                         }
                         triggered[i][1] = false;
                     }
@@ -888,7 +921,7 @@ $(document).ready(function () {
             }
         }
 
-        if (settings.followText && !play.pause) {
+        if (settings.followText && !play.pause && !inSettings) {
             $editor.trigger('focus');
             const b = textarea.value.split(",");
             const a = b.slice(0, play.nowIndex + 1);
@@ -896,7 +929,11 @@ $(document).ready(function () {
             textarea.selectionEnd = a.toString().length;
         }
 
-        render.renderGame(ctx, notes, settings, noteImages, t, triggered, play);
+        render.renderGame(ctx, notes, settings, noteImages, t, triggered, play, (1000 / frameTime).toFixed(1));
+
+        var thisFrameTime = (thisLoop = new Date) - lastLoop;
+        frameTime += (thisFrameTime - frameTime) / filterStrength;
+        lastLoop = thisLoop;
         requestAnimationFrame(update);
     }
 
@@ -909,7 +946,8 @@ function getImgs() {
     try {
         Images.outline = $("#outline")[0];
         Images.sensor = $("#sensor")[0];
-        if (!Images.outline || !Images.sensor) {
+        Images.sensorText = $("#sensor_text")[0];
+        if (!Images.outline || !Images.sensor || !Images.sensorText) {
             console.warn("Outline or Sensor image not found in DOM. Rendering might be affected.");
         }
     } catch (e) {

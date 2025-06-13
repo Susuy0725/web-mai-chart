@@ -8,13 +8,14 @@
     <script src="Js/jquery-3.7.1.min.js"></script>
     <script src="Js/main.js" type="module"></script>
     <script type="module">
-        import { settings } from './Js/main.js';
+        import { settings, play } from './Js/main.js';
         window.settings = settings;
+        window.play = play;
     </script>
     <link rel="stylesheet" href="Styles/main.css">
 </head>
 <script>
-    let example = ``;
+    let masterExample = ``;
 </script>
 
 <body>
@@ -35,6 +36,11 @@
         <div class="controls-btns">
             <div id="stopBtn"></div>
             <div id="playBtn"></div>
+            <!-- <div>
+                <label for="speedControl">Speed:</label>
+                <input id="speedControl" type="range" min="0.5" max="3" step="0.1" value="1">
+                <span id="speedValue">1×</span>
+            </div> -->
         </div>
         <input type="range" id="timeline" value="0.0" min="0" max="8" step="0.01">
     </div>
@@ -74,34 +80,10 @@
         <button type="button" id="save-settings-btn">儲存</button>
         <button type="button" id="cancel-settings-btn">取消</button>
     </div>
-
-    <!--<div class="bruh">
-        <div class="a1">
-            <div>
-                tap速度
-                <input type="range" id="speed" value="1" min="0.025" max="10" step="0.025">
-            </div>
-            <div>
-                音樂偏移
-                <input type="number" id="offset" value="0">
-            </div>
-            <div>
-                <button id="collapse">></button>
-            </div>
-        </div>
-    </div>
-    <div class="time-line">
-        <div class="a1">
-            <div><input type="checkbox" id="viewMode">暫停</div>
-            <div><input type="checkbox" id="loop">循環</div>
-            <div id="bgm-time">0:00/0:00</div>
-            <div><input type="file" id="music" accept="audio/*">背景音</div>
-        </div>
-        <input type="range" id="time" value="0" min="0" max="8" step="10" disabled>
-    </div> -->
     <div class="imgs">
         <img src="Skin/outline.svg" id="outline">
         <img src="Skin/sensor.svg" id="sensor">
+        <img src="Skin/sensor_text.svg" id="sensor_text">
         <img src="Skin/tap.png" id="tap">
         <img src="Skin/tap_break.png" id="break">
         <img src="Skin/tap_each.png" id="each">

@@ -11,15 +11,23 @@ for (let j = 0; j < 8; j++) {
     EIGHT_POSITIONS_ANG.push({ 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 });
 }
 
-export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes, play) {
+export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes, play, fps) {
     const calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } }; // Keep if dynamic angles needed elsewhere
 
+    ctx.resetTransform();
     const w = ctx.canvas.width,
         h = ctx.canvas.height,
         hw = w / 2,
         hh = h / 2;
 
+    const factor = 0.9; // 缩小
+    ctx.resetTransform();
     ctx.clearRect(0, 0, w, h);
+    // 平移到中心，缩放，再平移回：
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(factor, factor);
+    ctx.translate(-w / 2, -h / 2);
+
     ctx.lineJoin = currentSettings.roundStroke ? 'round' : 'butt';
 
     const bw = (h > w ? w : h), // circle screen width
@@ -28,27 +36,61 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     // Cache note base size
     const noteBaseSize = hbw * currentSettings.noteSize;
 
-    if (play.combo != 0) {
-        ctx.fillStyle = "#FF569B";
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = Math.floor(hbw * 0.015);
-        ctx.font = "bold " + Math.floor(hbw * 0.14) + "px combo"
-        ctx.textAlign = "center";
-        ctx.letterSpacing = "0px";
-        ctx.strokeText("COMBO", hw, hh - hbw * 0.18 * 0.3);
-        ctx.fillText("COMBO", hw, hh - hbw * 0.18 * 0.3);
-        ctx.letterSpacing = Math.floor(hbw * 0.04) + "px";
-        ctx.font = "bold " + Math.floor(hbw * 0.18) + "px combo"
-        ctx.strokeText(`${play.combo}`, hw + Math.floor(hbw * 0.04), hh + hbw * 0.18 * 0.75);
-        ctx.fillText(`${play.combo}`, hw + Math.floor(hbw * 0.04), hh + hbw * 0.18 * 0.75);
+    ctx.fillStyle = "black";
+    ctx.strokeStyle = "white";
+    ctx.textAlign = "left";
+    ctx.lineWidth = Math.floor(hbw * 0.02);
+    ctx.font = "bold " + Math.floor(hbw * 0.1) + "px combo"
+    ctx.strokeText(`FPS: ${Math.floor(fps)}`, 0, 0);
+    ctx.fillText(`FPS: ${Math.floor(fps)}`, 0, 0);
+
+    switch (currentSettings.middleDisplay) {
+        case 1:
+            if (play.combo != 0) {
+                ctx.fillStyle = "#FF569B";
+                ctx.strokeStyle = "white";
+                ctx.lineWidth = Math.floor(hbw * 0.015);
+                ctx.font = "bold " + Math.floor(hbw * 0.12) + "px combo"
+                ctx.textAlign = "center";
+                ctx.letterSpacing = "0px";
+                ctx.strokeText("COMBO", hw, hh - hbw * 0.16 * 0.3);
+                ctx.fillText("COMBO", hw, hh - hbw * 0.16 * 0.3);
+                ctx.letterSpacing = Math.floor(hbw * 0.03) + "px";
+                ctx.font = "bold " + Math.floor(hbw * 0.16) + "px combo"
+                ctx.strokeText(`${play.combo}`, hw + Math.floor(hbw * 0.04), hh + hbw * 0.18 * 0.75);
+                ctx.fillText(`${play.combo}`, hw + Math.floor(hbw * 0.04), hh + hbw * 0.18 * 0.75);
+            }
+            ctx.letterSpacing = "0px";
+            break;
+        case 2:
+            ctx.fillStyle = "#FF569B";
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = Math.floor(hbw * 0.015);
+            ctx.textAlign = "left";
+            ctx.letterSpacing = "0px";
+            ctx.font = "bold " + Math.floor(hbw * 0.13) + "px combo"
+            const smolText = (Math.max(play.score, 0) % 1).toFixed(4).slice(1, 6);
+            ctx.strokeText(`${smolText}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.fillText(`${smolText}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.textAlign = "right";
+            ctx.letterSpacing = "0px";
+            ctx.font = "bold " + Math.floor(hbw * 0.16) + "px combo"
+            const bigText = Math.floor(Math.max(play.score, 0));
+            ctx.strokeText(`${bigText}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.fillText(`${bigText}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            break;
+        default:
+            break;
     }
-    ctx.letterSpacing = "0px";
 
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 4;
     // images.sensor.style.fontFamily = 'monospace'; // Setting style on image element directly, not canvas related for drawing
-    if (currentSettings.disableSensorWhenPlaying && play.pause) {
-        ctx.drawImage(images.sensor,
+    ctx.drawImage(images.sensor,
+        (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
+        bw, bw);
+    if (!currentSettings.disableSensorWhenPlaying || play.pause) {
+        ctx.drawImage(images.sensorText,
             (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
             bw, bw);
     }
@@ -141,7 +183,24 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 currentY = hh + hbw * np.y * (1 - d);
                 currentSize = (_t * currentSettings.speed + (2 - currentSettings.distanceToMid));
             }
-
+            if (!currentSettings.noNoteArc) {
+                drawNoteArc(ctx, {
+                    centerX: hw,
+                    centerY: hh,
+                    radius: Math.max(scaleFactor, (1 - d)) * hbw,
+                    angle: getNoteAng(nang, 5) - Math.PI * 0.25,
+                    width: Math.max(scaleFactor, (1 - d)) * hbw * 0.015,
+                    strokeStyle: color,
+                    transparency: currentSize * 0.55,
+                });
+                drawNoteDot(ctx, {
+                    x: currentX,
+                    y: currentY,
+                    size: currentSize * 2,
+                    color: color,
+                    transparency: currentSize,
+                });
+            }
             if (note.star) {
                 drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize);
             } else if (note.holdTime != null) { // Check for truthiness (not just existence)
@@ -150,30 +209,8 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 if (_t >= -d / currentSettings.speed) {
                     holdLength = (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * currentSettings.speed, (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / currentSettings.speed)) / (d / currentSettings.speed))) * hbw;
                 }
-                drawVaryingArc(ctx, {
-                    centerX: hw,
-                    centerY: hh,
-                    radius: Math.max(scaleFactor, (1 - d)) * hbw,
-                    startAngle: getNoteAng(nang, 6) - Math.PI * 0.25,
-                    endAngle: getNoteAng(nang, 6) + Math.PI * 0.25,
-                    minWidth: 0.1,
-                    maxWidth: Math.max(scaleFactor, (1 - d)) * hbw * 0.03,
-                    steps: 28,
-                    strokeStyle: color,
-                });
                 drawHold(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, holdLength, ctx, hbw, currentSettings, calAng, noteBaseSize);
             } else {
-                drawVaryingArc(ctx, {
-                    centerX: hw,
-                    centerY: hh,
-                    radius: Math.max(scaleFactor, (1 - d)) * hbw,
-                    startAngle: getNoteAng(nang, 6) - Math.PI * 0.25,
-                    endAngle: getNoteAng(nang, 6) + Math.PI * 0.25,
-                    minWidth: 0.1,
-                    maxWidth: Math.max(scaleFactor, (1 - d)) * hbw * 0.03,
-                    steps: 28,
-                    strokeStyle: color,
-                });
                 drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize);
             }
         }
@@ -246,12 +283,12 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
     } else {
         ctx.shadowColor = 'black';
     }
-    ctx.lineWidth = currentSize * 0.75;
+    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = 'white';
     _arc(x, y, currentSize, ctx);
     ctx.shadowBlur = 0;
     ctx.shadowColor = '#00000000';
-    ctx.lineWidth = currentSize * 0.5;
+    ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = color;
     ctx.fillStyle = '#00000000';
     _arc(x, y, currentSize, ctx);
@@ -273,7 +310,7 @@ export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSetti
     localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(sizeFactor)));
 
     ctx.shadowColor = "#00000000";
-    ctx.lineWidth = currentSize * 0.75;
+    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
     ctx.fillStyle = localColor;
     ctx.beginPath();
     ctx.arc(x, y, currentSize, 0, 2 * Math.PI);
@@ -335,14 +372,14 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
     // --- 第一次描邊：白色外框 + 陰影 (製造外發光效果) ---
     ctx.shadowBlur = noteBaseSize * 0.2;
     ctx.shadowColor = (ex ? '#ffffff' : '#000000') + alphaHex;
-    ctx.lineWidth = currentSize * 0.6;
+    ctx.lineWidth = currentSize * 0.6 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = '#ffffff' + alphaHex;
     ctx.stroke(starShape);
 
     // --- 第二次描邊：主題顏色內框 ---
     ctx.shadowBlur = 0; // 關閉陰影
     ctx.shadowColor = '#00000000';
-    ctx.lineWidth = currentSize * 0.35;
+    ctx.lineWidth = currentSize * 0.35 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = localColor;
     ctx.stroke(starShape);
 
@@ -350,39 +387,54 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
 }
 
 
-function drawVaryingArc(ctx, options) {
+export function drawNoteArc(ctx, options) {
     const {
         centerX = 0,
         centerY = 0,
         radius = 100,
-        startAngle = 0,
-        endAngle = Math.PI,
-        minWidth = 1,
-        maxWidth = 10,
-        steps = 100,
-        strokeStyle = 'black',
+        angle = 0,
+        width = 1,
+        strokeStyle = '#FF0000',
+        transparency = 1,
+    } = options;
+    const _calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } };
+
+    const preAng = _calAng(angle);
+
+    const localColor = ctx.createLinearGradient(
+        centerX + preAng.x * radius, centerY + preAng.y * radius,
+        centerX - preAng.x * radius, centerY - preAng.y * radius);
+    localColor.addColorStop(1, hexWithAlpha(strokeStyle, transparency));
+    localColor.addColorStop(0, hexWithAlpha(strokeStyle, 0));
+    ctx.beginPath();
+    ctx.lineWidth = width;
+    ctx.strokeStyle = localColor;
+    ctx.arc(centerX, centerY, radius, angle, angle + Math.PI * 2);
+    ctx.stroke();
+}
+
+export function drawNoteDot(ctx, options) {
+    const {
+        x = 0,
+        y = 0,
+        size = 100,
+        color = "#FF0000",
+        transparency = 1,
     } = options;
 
-    for (let i = 0; i < steps; i++) {
-        const t = i / steps;
-        const angle1 = startAngle + (endAngle - startAngle) * t;
-        const angle2 = startAngle + (endAngle - startAngle) * (t + 1 / steps);
-
-        const progress = t * 2 - 1; // 從 -1 到 1
-        const width = minWidth + (1 - Math.abs(progress)) * (maxWidth - minWidth);
-
-        const x1 = centerX + radius * Math.cos(angle1);
-        const y1 = centerY + radius * Math.sin(angle1);
-        const x2 = centerX + radius * Math.cos(angle2);
-        const y2 = centerY + radius * Math.sin(angle2);
-
-        ctx.beginPath();
-        ctx.lineWidth = width;
-        ctx.strokeStyle = strokeStyle;
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-    }
+    const localColor = ctx.createRadialGradient(x, y, 0, x, y, size * 5);
+    localColor.addColorStop(0, hexWithAlpha(color, transparency));
+    localColor.addColorStop(1, hexWithAlpha(color, 0));
+    ctx.beginPath();
+    ctx.fillStyle = localColor;
+    ctx.arc(x, y, size * 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.closePath();
+    ctx.beginPath();
+    ctx.fillStyle = hexWithAlpha("#FFFFFF", transparency);
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.closePath();
 }
 
 
@@ -646,7 +698,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         const bIncrementPer = arrowSize * (wSlide ? 0.3 : 0);
 
         // 計算可畫箭頭數量（視情況可用 Math.floor 以確保整數次數）
-        const fin = Math.floor(totalLen / spacing - 1);
+        const fin = Math.floor(totalLen / spacing - 0.5);
 
         const arrow = new Path2D();
         // 這邊照原本比例，改寫一個以 (0,0) 為基準的 arrow shape
@@ -718,7 +770,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         localColor = color.length === 7 ? color + alphaHex : color.substring(0, 7) + alphaHex; // Handle existing alpha
         ctx.shadowColor = '#000000' + alphaHex;
     }
-    ctx.lineWidth = s * 0.15;
+    ctx.lineWidth = s * 0.15 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = localColor;
 
     // Path generation (assuming render.path returns a PathRecorder instance)
@@ -909,23 +961,24 @@ export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentS
     } else {
         ctx.shadowColor = 'black';
     }
-    ctx.lineWidth = currentSize * 0.75;
+    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = 'white';
     ctx.stroke(holdPath);
 
     ctx.shadowBlur = 0;
     ctx.shadowColor = '#00000000';
-    ctx.lineWidth = currentSize * 0.5;
+    ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = color;
     ctx.stroke(holdPath);
 }
 
 export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize) {
     opacity = Math.min(Math.max(opacity, 0), 1); // Clamp opacity
+
     const r = parseInt(color.substring(1, 3), 16);
     const g = parseInt(color.substring(3, 5), 16);
     const b = parseInt(color.substring(5, 7), 16);
-    let localColor = `rgba(${r},${g},${b},${opacity})`;
+    let localColor = hexWithAlpha(color, opacity);
 
     let s = noteBaseSize;
     let currentSize = Math.max(sizeFactor * s, 0); // sizeFactor seems to be a base, not multiplier here. Original: size = size * s;
@@ -1062,6 +1115,7 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
 export function hexWithAlpha(hex, alpha) {
     // 移除開頭的 "#"（如果有）
     hex = hex.replace(/^#/, '');
+    alpha = Math.max(Math.min(alpha, 1), 0);
 
     // 如果是短格式（例如 #abc），轉換成長格式（#aabbcc）
     if (hex.length === 3) {

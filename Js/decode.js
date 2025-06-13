@@ -23,7 +23,6 @@ export function simai_decode(_data) {
             //console.log(match);
             while (data.includes("(") && data.includes(")")) {
                 bpm = parseFloat(data.slice(data.indexOf("(") + 1, data.indexOf(")")));
-                console.log(bpm, data.lastIndexOf("("), data.indexOf(")"))
                 if (data.lastIndexOf("(") < data.lastIndexOf(")")) {
                     data = data.slice(0, data.slice(0, data.indexOf(")")).lastIndexOf("(")) +
                         data.slice(data.indexOf(")") + 1);
@@ -230,22 +229,6 @@ export function simai_decode(_data) {
                         data[flags[flag]] = true;
                     }
                 }
-
-                if (data.break) {
-                    breakCounts++;
-                } else {
-                    const touchMatch = data.pos.match(/([ABCDE])(\d)|(C)/);
-                    const holdMatch = data.pos.match(/h\[([ -~]+?)\]/);
-                    const miniHold = data.pos.match(/\dh$/);
-
-                    if (touchMatch) {
-                        touchCounts++;
-                    } else if (holdMatch || miniHold) {
-                        holdCounts++;
-                    } else {
-                        tapCounts++;
-                    }
-                }
             }
 
             const holdMatch = data.pos.match(/h\[([ -~]+?)\]/);
@@ -295,7 +278,7 @@ export function simai_decode(_data) {
                     let a = temp.indexOf(e, skip);
                     sp.data.push(temp.slice(0, a));
                     temp = temp.slice(a);
-                    skip = (slideMatch[j + 1] ?? "").length;
+                    skip = slideMatch[j].length;
                 }
                 sp.data.push(temp);
 
@@ -364,19 +347,6 @@ export function simai_decode(_data) {
                     }
                 }
 
-                if (sp.data[0]) {
-                    if (sp.slideInfo[0].break) {
-                        breakCounts++;
-                    } else {
-                        tapCounts++;
-                    }
-                }
-
-                if (sp.slideInfo[sp.data.length - 1].break) {
-                    breakCounts++;
-                } else {
-                    slideCounts++;
-                }
                 if (sp.data.length > 2) {
                     sp.slideInfo[sp.data.length - 1].lastOne = true;
                     sp.slideInfo[1].firstOne = true;
@@ -534,8 +504,28 @@ export function simai_decode(_data) {
             continue;
         }
     }
-    tempNote.sort(function (a,b) {
+    tempNote.sort(function (a, b) {
         return a.time - b.time;
+    });
+
+    tempNote.forEach((e) => {
+        if (!e.invalid) {
+            if (e.slideTime) {
+                if (!e.chain || e.lastOne) {
+                    if (e.break) breakCounts++;
+                    else slideCounts++;
+                }
+            } else if (e.touch) {
+                if (e.touchTime) holdCounts++;
+                else touchCounts++;
+            } else if (e.holdTime) {
+                if (e.break) breakCounts++;
+                else holdCounts++;
+            } else {
+                if (e.break) breakCounts++;
+                else tapCounts++;
+            }
+        }
     });
 
     let combo = (tapCounts + holdCounts + slideCounts + touchCounts + breakCounts);
