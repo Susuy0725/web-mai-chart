@@ -1,6 +1,7 @@
 @font-face {
     font-family: 'Icon';
-    src: url('../Fonts/SEGOEICONS.TTF') format('truetype');
+    font-style: normal;
+    src: url('../Fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf') format('truetype-variations');
 }
 
 @font-face {
@@ -68,7 +69,17 @@ body {
     top: 30px;
     left: 0;
     width: 50%;
-    height: calc(100% - (60px + 30px));
+    height: 100%;
+    transition: width ease 0.5s;
+    z-index: -10;
+}
+
+#audioRender {
+    position: absolute;
+    bottom: 80px;
+    left: 0;
+    width: 50%;
+    height: 40px;
     transition: width ease 0.5s;
     z-index: -10;
 }
@@ -110,26 +121,34 @@ body {
     position: absolute;
     left: 0;
     bottom: 0;
-    height: 60px;
+    height: 80px;
     width: 50%;
 }
 
 .controls-btns {
-    padding-top: 20px;
+    padding-top: 40px;
     display: flex;
-    height: calc(100% - 20px);
+    height: calc(100% - 40px);
     width: 100%;
     align-items: center;
     justify-content: space-evenly;
-    background: white;
+    background: linear-gradient(to top, #000000aa, #00000000 90%, #00000060 100%);
 }
 
 .controls-btns>div {
-    background: white;
+    background: #00000000;
     font-family: Icon;
-    width: 25px;
+    font-variation-settings:
+        'FILL' 1,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24;
+    font-size: 20px;
+    backdrop-filter: blur(8px);
+    color: white;
+    width: 50px;
     height: 25px;
-    box-shadow: 0 0 2px black;
+    box-shadow: 0 1px 3px #00000080;
     border-radius: 5px;
     display: flex;
     align-items: center;
@@ -138,12 +157,13 @@ body {
 }
 
 .controls-btns>div:hover {
-    background: #ddd;
+    background: #00000020;
+    box-shadow: 0 1px 2px #00000080, 0 0 1px #0000005e inset;
 }
 
 .controls-btns>div:active {
     background: #aaa;
-    box-shadow: 0 0 2px black inset;
+    box-shadow: 0 0 1px #00000080, 0 0 2px black inset;
 }
 
 #timeline {
@@ -158,7 +178,7 @@ body {
     outline: none;
     margin: 0;
     transform: translateX(-50%) translateY(50%);
-    box-shadow: 0 0 3px #0000005e inset;
+    box-shadow: 0 0 3px #0000005e inset, 0 1px 3px #0000005e;
     border-radius: 2px;
     box-sizing: initial;
 }

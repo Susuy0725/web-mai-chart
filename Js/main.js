@@ -21,10 +21,10 @@ export let settings = { // Keep export if other modules might need direct access
     'disableSensorWhenPlaying': true,
     'lineWidthFactor': 0.8,
     'noNoteArc': false,
-    'middleDisplay': 1,
+    'middleDisplay': 2,
 };
 // Make play and soundSettings local if not modified externally
-const icons = ['\uE103', '\uE102', '\uE100']; // Use const
+const icons = ['pause', 'play_arrow', 'skip_previous']; // Use const
 
 export let play = {
     'pauseBoth': function (btn) {
@@ -329,7 +329,7 @@ $(document).ready(function () {
         return data['inote_' + e];
     }
 
-    const _sliderColor = ['#ff3232', '#FFE9E9']; // Use const
+    const _sliderColor = ['#ff3232', '#FFFFFF60']; // Use const
     const controls = { // Use const
         'timeline': $("#timeline"),
         'play': $('#playBtn'),
@@ -541,7 +541,6 @@ $(document).ready(function () {
         settingsConfig.sound.forEach(config => createField(config, 'sound'));
     }
 
-
     $('#save-settings-btn, #cancel-settings-btn').on('click', function () {
         if (this.id === "save-settings-btn") {
             try {
@@ -577,8 +576,16 @@ $(document).ready(function () {
         $('#settings-popup').hide();
         $('#settings-overlay').hide();
         inSettings = false;
-        bgm[0].volume = soundSettings.musicVol * soundSettings.music;
-        bgm[0].playbackRate = play.playbackSpeed;
+        if (bgm[0]) {
+            bgm[0].volume = soundSettings.musicVol * soundSettings.music;
+            if (isFinite(play.playbackSpeed) && play.playbackSpeed > 0) {
+                bgm[0].playbackRate = play.playbackSpeed;
+            } else {
+                play.playbackSpeed = 1;
+                bgm[0].playbackRate = 1;
+            }
+            startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+        }
     });
 
     _updCanvasRes();
@@ -748,7 +755,7 @@ $(document).ready(function () {
         ctx.canvas.width = doc_width * 2 * ($editor.position().left / $("body").width());
         const controlsHeight = $('.controls').outerHeight(true) || 0; // Use outerHeight(true) for margins
         const actionsHeight = $('.actions').outerHeight(true) || 0;
-        ctx.canvas.height = Math.max(150, (doc_height - (controlsHeight + actionsHeight)) * 2); // Ensure min height, adjust multiplier if needed
+        ctx.canvas.height = Math.max(150, (doc_height - (actionsHeight)) * 2); // Ensure min height, adjust multiplier if needed
     }
 
     // count method
@@ -768,8 +775,8 @@ $(document).ready(function () {
         }
 
         const t = (currentTimelineValue - settings.musicDelay) * 1000; // Use JS variable
-        const sVal = 100 / notesData.val;
-        const bVal = (notesData.breakCounts == 0 ? 0 : 1) / notesData.breakCounts;
+        const sVal = 1000000 / notesData.val;
+        const bVal = (notesData.breakCounts == 0 ? 0 : 10000) / notesData.breakCounts;
 
         if (notes && notes.length > 0 && sfxReady) {
             for (let i = notes.length - 1; i >= 0; i--) {

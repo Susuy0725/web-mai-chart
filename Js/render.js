@@ -69,15 +69,14 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             ctx.textAlign = "left";
             ctx.letterSpacing = "0px";
             ctx.font = "bold " + Math.floor(hbw * 0.13) + "px combo"
-            const smolText = (Math.max(play.score, 0) % 1).toFixed(4).slice(1, 6);
-            ctx.strokeText(`${smolText}`, hw - hbw * 0.1, hh + hbw * 0.06);
-            ctx.fillText(`${smolText}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            const trueScore = Math.round(Math.max(play.score, 0));
+            ctx.strokeText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.fillText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.1, hh + hbw * 0.06);
             ctx.textAlign = "right";
             ctx.letterSpacing = "0px";
             ctx.font = "bold " + Math.floor(hbw * 0.16) + "px combo"
-            const bigText = Math.floor(Math.max(play.score, 0));
-            ctx.strokeText(`${bigText}`, hw - hbw * 0.1, hh + hbw * 0.06);
-            ctx.fillText(`${bigText}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.strokeText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.fillText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.1, hh + hbw * 0.06);
             break;
         default:
             break;
@@ -698,7 +697,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         const bIncrementPer = arrowSize * (wSlide ? 0.3 : 0);
 
         // 計算可畫箭頭數量（視情況可用 Math.floor 以確保整數次數）
-        const fin = Math.floor(totalLen / spacing - 0.5);
+        const fin = Math.floor(totalLen / spacing - 0.5 * !wSlide);
 
         const arrow = new Path2D();
         // 這邊照原本比例，改寫一個以 (0,0) 為基準的 arrow shape
@@ -755,7 +754,9 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             //ctx.font = "bold 24px Segoe UI"; // Smaller font
             //ctx.fillStyle = "black";
             //ctx.fillText(`${_t_arrow_progress * noteData.slideTime / noteData.delay}`, 0, 50);
-            drawStar(0, 0, k, color, noteData.ex ?? false, 90, currentCtx, hbw, currentSettings, calAng, s, k);
+            drawStar(0, 0, k, color, false, 90, currentCtx, hbw, currentSettings, calAng, s, k);
+            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * fin / 2, 0 - bIncrementPer * _t_arrow * fin, k, color, false, 90, currentCtx, hbw, currentSettings, calAng, s, k);
+            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * fin / 2, bIncrementPer * _t_arrow * fin, k, color, false, 90, currentCtx, hbw, currentSettings, calAng, s, k);
             currentCtx.restore();
         }
     }
