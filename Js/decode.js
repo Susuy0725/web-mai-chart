@@ -4,8 +4,10 @@ export function simai_decode(_data) {
     // 先移除空白與換行
     _data = _data.replace(/(\r\n|\n|\r| )/gm, "");
     let tempNote = [],
+        bpmMarks = [],
         dataTemp = _data.split(","),
         timeSum = 0,
+        lastbpm,
         slice = 1,
         bpm = 60,
         tapCounts = 0,
@@ -33,6 +35,10 @@ export function simai_decode(_data) {
             if (isNaN(bpm)) {
                 bpm = 60;
                 console.error("Invaild BPM!")
+            }
+            if (lastbpm !== bpm) {
+                bpmMarks.push({ bpm, time: timeSum });
+                lastbpm = bpm;
             }
             dataTemp[i] = data;
 
@@ -65,6 +71,7 @@ export function simai_decode(_data) {
         // 累加時間：此處公式依 slice 與 bpm 計算，4000 為單位比例，可依需求調整
         timeSum += (1 / slice) * (60 / bpm) * 4000;
     }
+    console.log(bpmMarks);
 
     for (let i = 0; i < tempNote.length; i++) {
         let data = tempNote[i];

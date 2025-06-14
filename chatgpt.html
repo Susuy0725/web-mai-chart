@@ -164,7 +164,7 @@
 
       // 編輯器內容變動
       $("#editor")
-        .html(example)
+        .html("")
         .on("input", function () {
           data = $(this).val().replace(/(\r\n|\n|\r)/gm, "");
           try {

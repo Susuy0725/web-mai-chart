@@ -102,6 +102,14 @@ let currentTimelineValue = 0; // JS variable to store timeline value
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+// START: audioRender 相關變數
+let analyser;
+let audioWaveform_dataArray;
+let audioWaveform_bufferLength;
+let isAudioSourceConnected = false;
+let fullAudioBuffer;
+// END: audioRender 相關變數
+
 const soundFiles = {
     tap: 'judge.wav',
     ex: 'judge_ex.wav',
@@ -212,7 +220,6 @@ function debounce(func, delay) {
     };
 }
 
-
 $(document).ready(function () {
     $('.file-menu-button').on('click', function () {
         $('.dropdownlist .diff-menu').hide();
@@ -237,6 +244,13 @@ $(document).ready(function () {
     const textarea = $editor[0];
     let doc_width = $(document).width(); // Keep let as it's updated on resize
     let doc_height = $(document).height();
+
+    // START: 初始化 audioRender
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    audioWaveform_bufferLength = analyser.frequencyBinCount;
+    audioWaveform_dataArray = new Uint8Array(audioWaveform_bufferLength);
+    // END: 初始化 audioRender
 
     $("body").on("contextmenu", function (e) {
         //console.log(e);
@@ -347,7 +361,7 @@ $(document).ready(function () {
         fileInput.on('change', function (event) {
             const file = event.target.files[0];
             if (file) {
-                callback(file);
+                callback(file, event);
             }
             fileInput.remove(); // Clean up
         });
@@ -355,21 +369,68 @@ $(document).ready(function () {
     }
 
     $('.file-menu .a-btn2').on('click', function () { // Load Audio
-        handleFileUpload('audio/*', (file) => {
+        handleFileUpload('audio/*', (file, e) => {
             play.pauseBoth(controls.play);
             if (bgm.attr('src')) URL.revokeObjectURL(bgm.attr('src')); // Revoke old URL
             bgm.attr('src', '');
-            const objectURL = URL.createObjectURL(file);
-            bgm.attr('src', objectURL);
-            bgm[0].load();
-            bgm.off('loadedmetadata').on('loadedmetadata', function () { // Use .off to prevent multiple bindings
-                bgm[0].volume = soundSettings.musicVol * soundSettings.music;
-                const audioDurationMs = (bgm[0].duration + 1) * 1000;
-                maxTime = Math.max(maxTime, audioDurationMs);
-                controls.timeline.prop("max", maxTime / 1000);
-                bgm[0].playbackRate = play.playbackSpeed;
-                updateTimelineVisual(currentTimelineValue); // Update visual based on current time
-            });
+
+            // 步驟 1: 讀取檔案為 ArrayBuffer
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const arrayBuffer = event.target.result;
+
+                // 步驟 2: 使用 decodeAudioData 解碼 ArrayBuffer 以獲得 AudioBuffer
+                audioCtx.decodeAudioData(arrayBuffer, function (audioBuffer) {
+                    // 成功解碼後，您可以在這裡存取 audioBuffer
+                    // 您可以將其儲存在一個全域變數中以便後續使用
+                    fullAudioBuffer = audioBuffer; // 將 AudioBuffer 儲存在全域變數 (或您需要的範圍)
+                    console.log("AudioBuffer 成功載入:", fullAudioBuffer);
+
+                    // 現在您可以創建一個 AudioBufferSourceNode 來播放 AudioBuffer
+                    // 但是如果您仍然想使用 HTMLMediaElement，那麼這一步是額外且可選的。
+                    // 如果您想完全使用 Web Audio API 來播放，則需要創建 AudioBufferSourceNode。
+
+                    // 保持原有的 HTMLMediaElement 載入方式，因為您已經有 AnalyserNode 的連接
+                    const objectURL = URL.createObjectURL(file);
+                    bgm.attr('src', objectURL);
+                    bgm[0].load();
+
+                    bgm.off('loadedmetadata').on('loadedmetadata', function () { // Use .off to prevent multiple bindings
+                        bgm[0].volume = soundSettings.musicVol * soundSettings.music;
+                        // 使用 AudioBuffer 的 duration 代替 bgm[0].duration 可能更精確，
+                        // 但對於 HTMLMediaElement 而言，bgm[0].duration 已經足夠。
+                        const audioDurationMs = (bgm[0].duration + 1) * 1000;
+                        maxTime = Math.max(maxTime, audioDurationMs);
+                        controls.timeline.prop("max", maxTime / 1000);
+                        bgm[0].playbackRate = play.playbackSpeed;
+                        updateTimelineVisual(currentTimelineValue); // Update visual based on current time
+
+                        // START: 連接 BGM 到 AnalyserNode (這部分保持不變，因為它連接的是 HTMLMediaElement)
+                        if (!isAudioSourceConnected) {
+                            try {
+                                const source = audioCtx.createMediaElementSource(bgm[0]);
+                                source.connect(analyser);
+                                analyser.connect(audioCtx.destination);
+                                isAudioSourceConnected = true;
+                                console.log("Audio source connected to analyser.");
+                            } catch (e) {
+                                console.error("Error connecting media element source:", e);
+                            }
+                        }
+                        // END: 連接 BGM 到 AnalyserNode
+                    });
+
+                }, function (error) {
+                    console.error("解碼音訊資料時發生錯誤:", error);
+                });
+            };
+
+            reader.onerror = function (event) {
+                console.error("檔案讀取失敗:", event.target.error);
+            };
+
+            // 讀取檔案為 ArrayBuffer
+            reader.readAsArrayBuffer(file);
         });
     });
 
@@ -756,12 +817,75 @@ $(document).ready(function () {
         const controlsHeight = $('.controls').outerHeight(true) || 0; // Use outerHeight(true) for margins
         const actionsHeight = $('.actions').outerHeight(true) || 0;
         ctx.canvas.height = Math.max(150, (doc_height - (actionsHeight)) * 2); // Ensure min height, adjust multiplier if needed
+
+        // START: 新增 audioRender 畫布尺寸更新
+        const audioCanvas = $("#audioRender")[0];
+        if (audioCanvas) {
+            audioCanvas.width = ctx.canvas.width; // 讓寬度與主畫布一致
+            audioCanvas.height = 100 * 2; // CSS 中是 100px，高 DPI 螢幕需要乘2
+        }
+        // END: 新增 audioRender 畫布尺寸更新
     }
 
     // count method
     // https://stackoverflow.com/questions/4787431/how-do-i-check-framerate-in-javascript
     var filterStrength = 20;
     var frameTime = 0, lastLoop = new Date, thisLoop;
+
+    // START: 新增 audioRender 繪圖函數
+    function drawAudioWaveform() {
+        const zoom = 500;
+
+        const audioCanvas = $("#audioRender")[0];
+        const audioCtx2d = audioCanvas.getContext("2d");
+
+        // 取得 AudioBuffer 中的 PCM 資料 (以左聲道為例)
+
+        // ---接下來是繪圖邏輯，與之前類似，但資料來源是 dataSlice---
+
+        // (注意: pcmData 的值是 -1.0 到 1.0 之間的浮點數，而不是 0-255 的整數)
+        audioCtx2d.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
+        audioCtx2d.beginPath();
+        audioCtx2d.strokeStyle = "#00000060";
+        audioCtx2d.lineWidth = 3;
+        const a = audioCanvas.width / 2;
+        let sampleRate = 44100;
+
+        if (fullAudioBuffer && bgm) {
+            const pcmData = fullAudioBuffer.getChannelData(0);
+            sampleRate = fullAudioBuffer.sampleRate;
+
+            for (let i = -a; i < a; i++) {
+                const data = pcmData[(Math.floor(i + currentTimelineValue * sampleRate / zoom)) * zoom];
+                // 將 -1.0 到 1.0 的值應到畫布高度
+                const y = (data + 1) * audioCanvas.height / 2;
+                const x = i + a;
+                if (i === 0) {
+                    audioCtx2d.moveTo(x, y);
+                } else {
+                    audioCtx2d.lineTo(x, y);
+                }
+            }
+            audioCtx2d.stroke();
+        }
+
+        /*for (let i = 0; i < 8; i++) {
+            audioCtx2d.beginPath();
+            audioCtx2d.strokeStyle = "#ffffff";
+            audioCtx2d.lineWidth = 2;
+            audioCtx2d.moveTo(a + (i - currentTimelineValue) * 48 * 2, audioCanvas.height / 2);
+            audioCtx2d.lineTo(a + (i - currentTimelineValue) * 48 * 2, audioCanvas.height);
+            audioCtx2d.stroke();
+        }*/
+
+        audioCtx2d.beginPath();
+        audioCtx2d.strokeStyle = "red";
+        audioCtx2d.lineWidth = 4;
+        audioCtx2d.moveTo(a, 0);
+        audioCtx2d.lineTo(a, audioCanvas.height);
+        audioCtx2d.stroke();
+    }
+    // END: 新增 audioRender 繪圖函數
 
     function update() {
         if (!play.pause) {
@@ -923,7 +1047,7 @@ $(document).ready(function () {
                         triggered[i][1] = false;
                     }
                 } else {
-                    console.log("what", note)
+                    console.log("what", note);
                 }
             }
         }
@@ -937,6 +1061,10 @@ $(document).ready(function () {
         }
 
         render.renderGame(ctx, notes, settings, noteImages, t, triggered, play, (1000 / frameTime).toFixed(1));
+
+        // START: 在主循環中呼叫繪圖函數
+        drawAudioWaveform();
+        // END: 在主循環中呼叫繪圖函數
 
         var thisFrameTime = (thisLoop = new Date) - lastLoop;
         frameTime += (thisFrameTime - frameTime) / filterStrength;

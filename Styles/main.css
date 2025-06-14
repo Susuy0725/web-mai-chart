@@ -82,6 +82,7 @@ body {
     height: 40px;
     transition: width ease 0.5s;
     z-index: -10;
+    box-shadow: 0 0 10px #00000080;
 }
 
 .actions {
@@ -132,7 +133,7 @@ body {
     width: 100%;
     align-items: center;
     justify-content: space-evenly;
-    background: linear-gradient(to top, #000000aa, #00000000 90%, #00000060 100%);
+    background: linear-gradient(to top, #000000aa, #00000000 100%);
 }
 
 .controls-btns>div {
