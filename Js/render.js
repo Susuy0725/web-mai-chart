@@ -195,7 +195,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawNoteDot(ctx, {
                     x: currentX,
                     y: currentY,
-                    size: currentSize * 2,
+                    size: currentSize * hbw * 0.0075,
                     color: color,
                     transparency: currentSize,
                 });
@@ -396,6 +396,7 @@ export function drawNoteArc(ctx, options) {
         strokeStyle = '#FF0000',
         transparency = 1,
     } = options;
+    if (radius < 0) return;
     const _calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } };
 
     const preAng = _calAng(angle);

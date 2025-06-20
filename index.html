@@ -15,14 +15,20 @@
     <link rel="stylesheet" href="Styles/main.css">
 </head>
 <script>
-    let masterExample = ``;
+    let masterExample = `(60){4}
+1b,(120){8}1,1,(240){16}1,1,1,1,(480){32}1,1,1,1,1,1,1,1,(960){64}1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+`;
 </script>
 
 <body>
+    <div id="hideContorls">
+        <div>stat_minus_1</div>
+        <span>minimize controls</span>
+    </div>
     <canvas id="render"></canvas>
     <canvas id="audioRender"></canvas>
     <textarea id="editor" placeholder="-- No context, Please enter simai here or load maidata"></textarea>
-    <div id="customMenu">
+    <div id="customMenu" class="hide">
         <div class="menu-item" data-action="cut">剪下</div>
         <div class="menu-item" data-action="copy">複製</div>
         <div class="menu-item" data-action="paste">貼上</div>
@@ -34,9 +40,17 @@
     </div>
     <audio id="bgm"></audio>
     <div class="controls">
+        <div class="time-display">
+            <div id="timekeep"></div>
+            <span id="nowTrackTime">0:00.00 / 0:00.00</span>
+        </div>
         <div class="controls-btns">
             <div id="stopBtn"></div>
             <div id="playBtn"></div>
+            <div id="back10Btn"></div>
+            <div id="back5Btn"></div>
+            <div id="fast5Btn"></div>
+            <div id="fast10Btn"></div>
             <!-- <div>
                 <label for="speedControl">Speed:</label>
                 <input id="speedControl" type="range" min="0.5" max="3" step="0.1" value="1">
@@ -53,14 +67,14 @@
         <div class="sett-menu-button"><span>設定</span></div>
     </div>
     <div class="dropdownlist">
-        <ul class="file-menu" style="display: none;">
+        <ul class="file-menu hide">
             <li class="a-btn0">新建空白</li>
             <li class="a-btn1">開啟 Maidata</li>
             <li class="a-btn2">開啟音檔</li>
             <li class="a-btn2">關閉音檔</li>
             <li class="a-btn3">儲存</li>
         </ul>
-        <ul class="diff-menu" style="display: none;">
+        <ul class="diff-menu hide">
             <li class="a-btn0">EASY</li>
             <li class="a-btn1">BASIC</li>
             <li class="a-btn2">ADVANCED</li>

@@ -1,13 +1,16 @@
 import * as render from "./render.js";
 
 export function simai_decode(_data) {
+    // 註解
+    _data = _data.replace(/^\|\|.*$/gm, "");
     // 先移除空白與換行
     _data = _data.replace(/(\r\n|\n|\r| )/gm, "");
     let tempNote = [],
-        bpmMarks = [],
+        marks = [],
         dataTemp = _data.split(","),
         timeSum = 0,
         lastbpm,
+        lastslice,
         slice = 1,
         bpm = 60,
         tapCounts = 0,
@@ -37,7 +40,7 @@ export function simai_decode(_data) {
                 console.error("Invaild BPM!")
             }
             if (lastbpm !== bpm) {
-                bpmMarks.push({ bpm, time: timeSum });
+                marks.push({ bpm, time: timeSum, type: "bpm" });
                 lastbpm = bpm;
             }
             dataTemp[i] = data;
@@ -46,6 +49,10 @@ export function simai_decode(_data) {
             while (data.includes("{") && data.includes("}")) {
                 slice = parseFloat(data.slice(data.lastIndexOf("{") + 1, data.indexOf("}")));
                 data = data.slice(data.indexOf("}") + 1);
+            }
+            if (lastslice !== slice) {
+                marks.push({ slice, bpm, time: timeSum, type: "slice" });
+                lastslice = slice;
             }
             dataTemp[i] = data;
 
@@ -71,7 +78,7 @@ export function simai_decode(_data) {
         // 累加時間：此處公式依 slice 與 bpm 計算，4000 為單位比例，可依需求調整
         timeSum += (1 / slice) * (60 / bpm) * 4000;
     }
-    console.log(bpmMarks);
+    console.log(marks);
 
     for (let i = 0; i < tempNote.length; i++) {
         let data = tempNote[i];
@@ -515,6 +522,10 @@ export function simai_decode(_data) {
         return a.time - b.time;
     });
 
+    marks.sort(function (a, b) {
+        return a.time - b.time;
+    });
+
     tempNote.forEach((e) => {
         if (!e.invalid) {
             if (e.slideTime) {
@@ -552,6 +563,6 @@ export function simai_decode(_data) {
             breakCounts,
             combo,
             val: (tapCounts + holdCounts * 2 + slideCounts * 3 + touchCounts + breakCounts * 5)
-        }
+        }, marks
     };
 }

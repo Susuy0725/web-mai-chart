@@ -64,6 +64,10 @@ body {
     background: #232323;
 }
 
+#editor:disabled {
+    background: red;
+}
+
 #render {
     position: absolute;
     top: 30px;
@@ -92,6 +96,7 @@ body {
     width: 100%;
     background: rgb(68, 78, 93);
     align-items: center;
+    z-index: 1;
 }
 
 .actions div {
@@ -118,6 +123,54 @@ body {
     background: #00000020;
 }
 
+#hideContorls {
+    position: absolute;
+    top: 30px;
+    right: 50%;
+    width: 30px;
+    height: 30px;
+    margin: 10px;
+    background: #00000020;
+    font-family: Icon;
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-size: 20px;
+    backdrop-filter: blur(8px);
+    color: white;
+    box-shadow: 0 1px 3px #00000080;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 240ms ease;
+}
+
+#hideContorls:hover {
+    width: 160px;
+    background: #00000030;
+    box-shadow: 0 1px 2px #00000080, 0 0 1px #0000005e inset;
+}
+
+#hideContorls:active {
+    background: #bbb;
+    box-shadow: 0 0 1px #00000080, 0 0 3px #00000060 inset;
+}
+
+#hideContorls>span {
+    width: 0%;
+    white-space: nowrap;
+    overflow-x: hidden;
+    font-family: combo;
+    font-size: 12px;
+    opacity: 0;
+    transition: all 100ms ease;
+}
+
+#hideContorls:hover>span {
+    width: calc(100% - 30px);
+    opacity: 1;
+    font-size: 16px;
+}
+
 .controls {
     position: absolute;
     left: 0;
@@ -126,9 +179,36 @@ body {
     width: 50%;
 }
 
-.controls-btns {
-    padding-top: 40px;
+.time-display {
+    height: 24px;
+    width: 100%;
     display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+#timekeep {
+    width: 50%;
+}
+
+#nowTrackTime {
+    font-family: monospace;
+    font-weight: bold;
+    width: 50%;
+    text-align: right;
+    padding-right: 10px;
+    margin-right: 10px;
+    font-size: min(2vw, 12px);
+    color: white;
+    text-shadow: 0 1px 1px black;
+    border-radius: 10px;
+    background: #00000020;
+}
+
+.controls-btns {
+    overflow-x: auto;
+    display: flex;
+    padding-top: 16px;
     height: calc(100% - 40px);
     width: 100%;
     align-items: center;
@@ -147,7 +227,9 @@ body {
     font-size: 20px;
     backdrop-filter: blur(8px);
     color: white;
-    width: 50px;
+    min-width: 25px;
+    max-width: 50px;
+    width: 15%;
     height: 25px;
     box-shadow: 0 1px 3px #00000080;
     border-radius: 5px;
@@ -210,14 +292,17 @@ body {
 }
 
 #customMenu {
+    display: block;
     color: #fff;
     position: absolute;
-    display: none;
     background: #232323;
     border: 1px solid #444;
     border-radius: 6px;
     box-shadow: 0px 2px 5px rgb(0 0 0 / 50%);
-    z-index: 1000;
+    z-index: 100;
+    overflow-y: auto;
+    height: 190px;
+    transition: height 0.1s ease,top 60ms ease,left 60ms ease,opacity 300ms ease;
 }
 
 #customMenu>div {
@@ -236,7 +321,7 @@ body {
     display: none;
 }
 
-#collapse {
+/*#collapse {
     width: 50px;
     height: 80%;
     transform: translateY(10%);
@@ -246,27 +331,42 @@ body {
     font-size: 20px;
     color: #fff;
     box-shadow: 0 2px 3px 0 #0000005e;
-}
+}*/
 
 textarea {
     resize: none;
 }
 
+.hide {
+    display: none;
+    transform: translateY(-100px);
+    opacity: 0;
+    pointer-events: none;
+    backdrop-filter: blur(1px);
+    height: 0px !important;
+}
+
+
 .dropdownlist {
+    display: block;
     position: absolute;
     top: 30px;
-    width: 200px;
     font-size: 16px;
     font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
 }
 
 .dropdownlist ul {
+    position: absolute;
+    display: block;
+    width: 200px;
     box-sizing: border-box;
     padding: 2px;
     margin: 0;
-    background: #232323;
+    background: #232323cc;
     border-radius: 0 0 10px 10px;
     box-shadow: 0 0 4px #0000005e;
+    backdrop-filter: blur(4px);
+    transition: opacity 0.2s ease, transform 0.2s ease, backdrop-filter 0.4s ease;
 }
 
 .dropdownlist ul li {

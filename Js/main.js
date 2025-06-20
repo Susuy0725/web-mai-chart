@@ -24,7 +24,7 @@ export let settings = { // Keep export if other modules might need direct access
     'middleDisplay': 2,
 };
 // Make play and soundSettings local if not modified externally
-const icons = ['pause', 'play_arrow', 'skip_previous']; // Use const
+const icons = ['pause', 'play_arrow', 'skip_previous', 'replay_10', 'replay_5', 'forward_5', 'forward_10']; // Use const
 
 export let play = {
     'pauseBoth': function (btn) {
@@ -93,10 +93,10 @@ const settingsConfig = {
     ]
 };
 
-let notes = [{}], notesData = {}; // Use `let` as it's reassigned
+let notes = [{}], notesData = {}, marks = {}; // Use `let` as it's reassigned
 let triggered = [];
 let startTime = 0; // Initialize
-let maxTime = 1;
+let maxTime = 1000;
 let sfxReady = false, inSettings = false;
 let currentTimelineValue = 0; // JS variable to store timeline value
 
@@ -157,6 +157,7 @@ function playSound(buffers, name, { volume = 0.1 } = {}) {
     source.connect(gainNode).connect(audioCtx.destination);
     source.start(0);
 }
+
 
 loadAllSounds(soundFiles).then(buffers => {
     soundBuffers = buffers;
@@ -222,18 +223,19 @@ function debounce(func, delay) {
 
 $(document).ready(function () {
     $('.file-menu-button').on('click', function () {
-        $('.dropdownlist .diff-menu').hide();
-        $('.dropdownlist .file-menu').toggle();
+        $('.dropdownlist .diff-menu').addClass('hide');
+        $('.dropdownlist .file-menu').toggleClass('hide');
     });
+
     $('.diff-menu-button').on('click', function () {
-        $('.dropdownlist .file-menu').hide();
-        $('.dropdownlist .diff-menu').toggle();
+        $('.dropdownlist .file-menu').addClass('hide');
+        $('.dropdownlist .diff-menu').toggleClass('hide');
     });
 
     $(document).on('click', function (event) {
         if (!$(event.target).closest('.actions').length && !$(event.target).closest('.dropdownlist').length) {
-            $('.dropdownlist .file-menu').hide();
-            $('.dropdownlist .diff-menu').hide();
+            $('.dropdownlist .file-menu').addClass('hide');
+            $('.dropdownlist .diff-menu').addClass('hide');
         }
     });
 
@@ -242,6 +244,7 @@ $(document).ready(function () {
     const $menu = $("#customMenu");
     const $editor = $("#editor");
     const textarea = $editor[0];
+    const timeDisplay = $("#nowTrackTime");
     let doc_width = $(document).width(); // Keep let as it's updated on resize
     let doc_height = $(document).height();
 
@@ -256,11 +259,33 @@ $(document).ready(function () {
         //console.log(e);
         e.preventDefault();
         if (e.target === $("#editor")[0]) {
+            const menuWidth = $menu.outerWidth();
+            const menuHeight = $menu.outerHeight();
+            const windowWidth = $(window).width();
+            const windowHeight = $(window).height();
+
+            let left = e.pageX;
+            let top = e.pageY;
+
+            // 如果超出右邊，就往左偏移整個 menu 寬度
+            if (left + menuWidth > windowWidth) {
+                left = e.pageX - menuWidth;
+            }
+
+            // 如果超出底部，就往上偏移整個 menu 高度
+            if (top + menuHeight > windowHeight) {
+                top = e.pageY - menuHeight;
+            }
+
+            // 防止負值
+            left = Math.max(0, left);
+            top = Math.max(0, top);
+
+            // 設定位置並顯示
             $menu.css({
-                top: e.pageY + "px",
-                left: e.pageX + "px",
-                display: "block"
-            });
+                left: left + "px",
+                top: top + "px",
+            }).removeClass("hide");
         }
     });
 
@@ -324,12 +349,12 @@ $(document).ready(function () {
 
         // 更新焦點
         textarea.focus();
-        $menu.hide();
+        $menu.addClass('hide');
     });
 
     // 點其他地方關閉選單
     $(document).on("click", function () {
-        $menu.hide();
+        $menu.addClass('hide');
     });
 
     let data = typeof {} !== 'undefined' ? {} : '';
@@ -348,6 +373,10 @@ $(document).ready(function () {
         'timeline': $("#timeline"),
         'play': $('#playBtn'),
         'stop': $('#stopBtn'),
+        'b10': $('#back10Btn'),
+        'b5': $('#back5Btn'),
+        'f5': $('#fast5Btn'),
+        'f10': $('#fast10Btn'),
     };
 
     const bgm = $("#bgm"); // Use const
@@ -652,12 +681,17 @@ $(document).ready(function () {
     _updCanvasRes();
     controls.play.text(icons[0 + play.btnPause]);
     controls.stop.text(icons[2]);
+    controls.b10.text(icons[3]);
+    controls.b5.text(icons[4]);
+    controls.f5.text(icons[5]);
+    controls.f10.text(icons[6]);
+    controls.timeline.prop("max", maxTime / 1000);
 
     function processChartData() { // Renamed from doSomethingToDataIThink
         const temp = simai_decode(data.getNowDiff(settings.nowDiff));
         play.combo = 0;
         play.score = 0;
-        notes = temp.notes, notesData = temp.data; // This now returns notes with pre-calculated path objects if possible
+        notes = temp.notes, notesData = temp.data, marks = temp.marks; // This now returns notes with pre-calculated path objects if possible
         triggered = [];
         let newMaxTime = 1; // Local variable for calculation
 
@@ -712,10 +746,29 @@ $(document).ready(function () {
         startTime = Date.now(); // Reset start time for paused state
     }
 
-    $editor.on("input", debounce(function () { // Debounced input
+    // 先定义一个 handler，方便 add/remove
+    function beforeUnloadHandler(e) {
+        e.preventDefault();
+        // 这行告诉浏览器“弹出确认对话框”
+        e.returnValue = "";
+    }
+
+    // 在初始化时，不要直接绑定
+    // let isDirty = false; // 如果你还想单纯用标记方式
+
+    $editor.on("input", debounce(function () {
+        // 把内容写入 data
         data["inote_" + settings.nowDiff] = $editor.val();
         processChartData();
-    }, 500)); // 500ms debounce delay
+
+        if ($editor.val() !== "") {
+            // 当有内容时，绑定提示
+            window.addEventListener("beforeunload", beforeUnloadHandler);
+        } else {
+            // 编辑框清空了，就不需要再提示
+            window.removeEventListener("beforeunload", beforeUnloadHandler);
+        }
+    }, 500));
 
     function updateTimelineVisual(value) {
         const min = parseFloat(controls.timeline.prop('min')) || 0;
@@ -797,6 +850,67 @@ $(document).ready(function () {
         updateTimelineVisual(0);
     });
 
+    controls.b10.click(function (e) {
+        currentTimelineValue -= 10; // Get current value from slider
+        currentTimelineValue = Math.max(currentTimelineValue, 0);
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+
+        bgm[0].playbackRate = play.playbackSpeed;
+        bgm[0].currentTime = currentTimelineValue;
+        if (!play.pause) {
+            bgm[0].play().catch(e => console.error("BGM play error:", e));
+        }
+
+        controls.timeline.val(currentTimelineValue);
+        updateTimelineVisual(currentTimelineValue);
+    });
+
+    controls.b5.click(function (e) {
+        currentTimelineValue -= 5; // Get current value from slider
+        currentTimelineValue = Math.max(currentTimelineValue, 0);
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+
+        bgm[0].playbackRate = play.playbackSpeed;
+        bgm[0].currentTime = currentTimelineValue;
+        if (!play.pause) {
+            bgm[0].play().catch(e => console.error("BGM play error:", e));
+        }
+
+        controls.timeline.val(currentTimelineValue);
+        updateTimelineVisual(currentTimelineValue);
+    });
+
+    controls.f5.click(function (e) {
+        currentTimelineValue += 5; // Get current value from slider
+        currentTimelineValue = Math.min(currentTimelineValue, maxTime / 1000);
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+
+        bgm[0].playbackRate = play.playbackSpeed;
+        bgm[0].currentTime = currentTimelineValue;
+        if (!play.pause) {
+            bgm[0].play().catch(e => console.error("BGM play error:", e));
+        }
+
+        controls.timeline.val(currentTimelineValue);
+        updateTimelineVisual(currentTimelineValue);
+    });
+
+    controls.f10.click(function (e) {
+        currentTimelineValue += 10; // Get current value from slider
+        currentTimelineValue = Math.min(currentTimelineValue, maxTime / 1000);
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+
+        bgm[0].playbackRate = play.playbackSpeed;
+        bgm[0].currentTime = currentTimelineValue;
+        if (!play.pause) {
+            bgm[0].play().catch(e => console.error("BGM play error:", e));
+        }
+
+        controls.timeline.val(currentTimelineValue);
+        updateTimelineVisual(currentTimelineValue);
+    });
+
+
     if (masterExample) {
         $editor.val(masterExample);
         data["inote_" + settings.nowDiff] = masterExample;
@@ -834,7 +948,7 @@ $(document).ready(function () {
 
     // START: 新增 audioRender 繪圖函數
     function drawAudioWaveform() {
-        const zoom = 500;
+        const zoom = 200;
 
         const audioCanvas = $("#audioRender")[0];
         const audioCtx2d = audioCanvas.getContext("2d");
@@ -869,14 +983,26 @@ $(document).ready(function () {
             audioCtx2d.stroke();
         }
 
-        /*for (let i = 0; i < 8; i++) {
-            audioCtx2d.beginPath();
-            audioCtx2d.strokeStyle = "#ffffff";
-            audioCtx2d.lineWidth = 2;
-            audioCtx2d.moveTo(a + (i - currentTimelineValue) * 48 * 2, audioCanvas.height / 2);
-            audioCtx2d.lineTo(a + (i - currentTimelineValue) * 48 * 2, audioCanvas.height);
-            audioCtx2d.stroke();
-        }*/
+        for (let i = 0; i < marks.length; i++) {
+            switch (marks[i].type) {
+                case "bpm":
+                    audioCtx2d.beginPath();
+                    audioCtx2d.strokeStyle = "#FFF200";
+                    audioCtx2d.lineWidth = 4;
+                    audioCtx2d.moveTo(a + (marks[i].time / 1000 - currentTimelineValue) * 48000 / zoom, 0);
+                    audioCtx2d.lineTo(a + (marks[i].time / 1000 - currentTimelineValue) * 48000 / zoom, audioCanvas.height);
+                    audioCtx2d.stroke();
+                    break;
+                case "slice":
+                    audioCtx2d.beginPath();
+                    audioCtx2d.strokeStyle = "#FFFFFF";
+                    audioCtx2d.lineWidth = 2;
+                    audioCtx2d.moveTo(a + (marks[i].time / 1000 - currentTimelineValue) * 48000 / zoom, audioCanvas.height / 2);
+                    audioCtx2d.lineTo(a + (marks[i].time / 1000 - currentTimelineValue) * 48000 / zoom, audioCanvas.height);
+                    audioCtx2d.stroke();
+                    break;
+            }
+        }
 
         audioCtx2d.beginPath();
         audioCtx2d.strokeStyle = "red";
@@ -892,7 +1018,7 @@ $(document).ready(function () {
             const newTimelineVal = ((Date.now() - startTime) / 1000) * play.playbackSpeed;
             // Only update if the value has changed significantly
             if (Math.abs(currentTimelineValue - newTimelineVal) > 0.01) {
-                currentTimelineValue = newTimelineVal;
+                currentTimelineValue = newTimelineVal > maxTime / 1000 ? maxTime / 1000 : newTimelineVal;
                 controls.timeline.val(currentTimelineValue); // Update slider position
                 updateTimelineVisual(currentTimelineValue); // Update visual
             }
@@ -1065,6 +1191,16 @@ $(document).ready(function () {
         // START: 在主循環中呼叫繪圖函數
         drawAudioWaveform();
         // END: 在主循環中呼叫繪圖函數
+
+        timeDisplay.text(
+            Math.floor(currentTimelineValue / 60) + ":" +
+            Math.floor(currentTimelineValue % 60).toString().padStart(2, "0") +
+            (currentTimelineValue % 1).toFixed(2).slice(1, 4) +
+            " / " +
+            Math.floor(maxTime / 60000) + ":" +
+            Math.floor((maxTime / 1000) % 60).toString().padStart(2, "0") +
+            ((maxTime / 1000) % 1).toFixed(2).slice(1, 4)
+        );
 
         var thisFrameTime = (thisLoop = new Date) - lastLoop;
         frameTime += (thisFrameTime - frameTime) / filterStrength;
