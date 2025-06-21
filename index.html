@@ -15,8 +15,11 @@
     <link rel="stylesheet" href="Styles/main.css">
 </head>
 <script>
-    let masterExample = `(60){4}
-1b,(120){8}1,1,(240){16}1,1,1,1,(480){32}1,1,1,1,1,1,1,1,(960){64}1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    let masterExample = `(190){1},
+{16}1-5-8[4:1],,,,,,,,
+{8},,,,
+{4},,
+{32},,,,,,,,,,,,,,,1,
 `;
 </script>
 
@@ -85,10 +88,10 @@
         </ul>
     </div>
 
-    <div id="settings-overlay"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 999;">
+    <div id="settings-overlay" class="hide"
+        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 999;">
     </div>
-    <div id="settings-popup">
+    <div id="settings-popup" class="hide">
         <form id="settings-form">
         </form>
         <br>

@@ -384,7 +384,7 @@ $(document).ready(function () {
 
     // --- File Input Logic ---
     function handleFileUpload(accept, callback) {
-        $('.dropdownlist .file-menu').hide();
+        $('.dropdownlist .file-menu').addClass("hide");
         const fileInput = $('<input type="file" style="display: none;">').attr('accept', accept).removeAttr('capture'); // 防止 iOS 啟用麥克風
         $('body').append(fileInput);
         fileInput.on('change', function (event) {
@@ -494,37 +494,37 @@ $(document).ready(function () {
     }
 
     $('.diff-menu .a-btn0').on('click', function () { // Load EASY
-        $('.dropdownlist .diff-menu').hide();
+        $('.dropdownlist .diff-menu').addClass("hide");
         loadDiff(1, data);
     });
 
     $('.diff-menu .a-btn1').on('click', function () { // Load BASIC
-        $('.dropdownlist .diff-menu').hide();
+        $('.dropdownlist .diff-menu').addClass("hide");
         loadDiff(2, data);
     });
 
     $('.diff-menu .a-btn2').on('click', function () { // Load ADVANCED
-        $('.dropdownlist .diff-menu').hide();
+        $('.dropdownlist .diff-menu').addClass("hide");
         loadDiff(3, data);
     });
 
     $('.diff-menu .a-btn3').on('click', function () { // Load EXPERT
-        $('.dropdownlist .diff-menu').hide();
+        $('.dropdownlist .diff-menu').addClass("hide");
         loadDiff(4, data);
     });
 
     $('.diff-menu .a-btn4').on('click', function () { // Load MASTER
-        $('.dropdownlist .diff-menu').hide();
+        $('.dropdownlist .diff-menu').addClass("hide");
         loadDiff(5, data);
     });
 
     $('.diff-menu .a-btn5').on('click', function () { // Load RE:MASTER
-        $('.dropdownlist .diff-menu').hide();
+        $('.dropdownlist .diff-menu').addClass("hide");
         loadDiff(6, data);
     });
 
     $('.diff-menu .a-btn6').on('click', function () { // Load ORIGINAL
-        $('.dropdownlist .diff-menu').hide();
+        $('.dropdownlist .diff-menu').addClass("hide");
         loadDiff(7, data);
     });
 
@@ -588,10 +588,10 @@ $(document).ready(function () {
     }
 
     $('.sett-menu-button').on('click', function () {
-        $('.dropdownlist .file-menu').hide();
+        $('.dropdownlist .file-menu').addClass("hide");
         generateSettingsForm();
-        $('#settings-popup').show();
-        $('#settings-overlay').show();
+        $('#settings-popup').removeClass("hide");
+        $('#settings-overlay').removeClass("hide");
         inSettings = true;
     });
 
@@ -663,8 +663,8 @@ $(document).ready(function () {
                 return;
             }
         }
-        $('#settings-popup').hide();
-        $('#settings-overlay').hide();
+        $('#settings-popup').addClass("hide");
+        $('#settings-overlay').addClass("hide");
         inSettings = false;
         if (bgm[0]) {
             bgm[0].volume = soundSettings.musicVol * soundSettings.music;
@@ -711,9 +711,9 @@ $(document).ready(function () {
             if (note.slide) {
                 note.isDoubleSlide = notesAtSameTime.filter((n, indx) => n !== note && n.slide && (n.chainTarget != note.chainTarget && note.chainTarget != indx)).length > 0;
             } else if (note.touch) {
-                note.isDoubleTouch = notesAtSameTime.filter(n => n !== note && n.touch && !n.starTime).length > 0;
+                note.isDoubleTouch = notesAtSameTime.filter(n => n !== note && !n.starTime).length > 0;
             } else { // Tap or Hold
-                note.isDoubleTapHold = notesAtSameTime.filter(n => n !== note && !n.slide && !n.touch).length > 0;
+                note.isDoubleTapHold = notesAtSameTime.filter(n => n !== note && !n.slide).length > 0;
             }
 
             let noteEndTime = note.time;
@@ -936,7 +936,7 @@ $(document).ready(function () {
         const audioCanvas = $("#audioRender")[0];
         if (audioCanvas) {
             audioCanvas.width = ctx.canvas.width; // 讓寬度與主畫布一致
-            audioCanvas.height = 100 * 2; // CSS 中是 100px，高 DPI 螢幕需要乘2
+            audioCanvas.height = 100; // CSS 中是 100px，高 DPI 螢幕需要乘2
         }
         // END: 新增 audioRender 畫布尺寸更新
     }
@@ -984,25 +984,92 @@ $(document).ready(function () {
         }
 
         for (let i = 0; i < marks.length; i++) {
-            switch (marks[i].type) {
-                case "bpm":
+            const mark = marks[i];
+            const find = marks.find((e) => (e.time > mark.time && e.type != "bpm")) ?? { time: Infinity };
+            switch (mark.type) {
+                case "bpm": {
+                    const x = a + (mark.time / 1000 - currentTimelineValue + settings.musicDelay) * 48000 / zoom;
                     audioCtx2d.beginPath();
                     audioCtx2d.strokeStyle = "#FFF200";
                     audioCtx2d.lineWidth = 4;
-                    audioCtx2d.moveTo(a + (marks[i].time / 1000 - currentTimelineValue) * 48000 / zoom, 0);
-                    audioCtx2d.lineTo(a + (marks[i].time / 1000 - currentTimelineValue) * 48000 / zoom, audioCanvas.height);
+                    audioCtx2d.moveTo(x, 0);
+                    audioCtx2d.lineTo(x, audioCanvas.height);
                     audioCtx2d.stroke();
                     break;
-                case "slice":
-                    audioCtx2d.beginPath();
-                    audioCtx2d.strokeStyle = "#FFFFFF";
-                    audioCtx2d.lineWidth = 2;
-                    audioCtx2d.moveTo(a + (marks[i].time / 1000 - currentTimelineValue) * 48000 / zoom, audioCanvas.height / 2);
-                    audioCtx2d.lineTo(a + (marks[i].time / 1000 - currentTimelineValue) * 48000 / zoom, audioCanvas.height);
-                    audioCtx2d.stroke();
+                }
+                case "slice": {
+                    let t = (find.time - mark.time) / (4000 * 60 / (mark.slice * mark.bpm));
+                    if (t > 10000) t = 10000;
+                    else t = Math.round(t);
+                    for (let j = 0; j < t; j++) {
+                        const x = a + (mark.time / 1000 + j * (60 / ((mark.slice / 4) * mark.bpm)) - currentTimelineValue + settings.musicDelay) * 48000 / zoom;
+                        if (x > audioCanvas.width || x < 0) continue;
+                        audioCtx2d.beginPath();
+                        audioCtx2d.strokeStyle = "white";
+                        audioCtx2d.lineWidth = 2;
+                        audioCtx2d.moveTo(x, audioCanvas.height / 2);
+                        audioCtx2d.lineTo(x, audioCanvas.height);
+                        audioCtx2d.stroke();
+                    }
                     break;
+                }
             }
         }
+
+        notes.forEach(note => {
+            const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * 48000 / zoom;
+            const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;
+            if (x < audioCanvas.width && x > 0) {
+                audioCtx2d.strokeStyle = "#FF569B";
+                if (note.star || note.touch || note.slide) audioCtx2d.strokeStyle = '#0089F4';
+                if (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide) audioCtx2d.strokeStyle = "#FFD900";
+                if (note.break) audioCtx2d.strokeStyle = '#FF6C0C';
+                audioCtx2d.lineWidth = 3;
+                audioCtx2d.beginPath();
+                if (note.touch) {
+                    audioCtx2d.moveTo(x + 3, y + 3);
+                    audioCtx2d.lineTo(x + 3, y - 3);
+                    audioCtx2d.lineTo(x - 3, y - 3);
+                    audioCtx2d.lineTo(x - 3, y + 3);
+                } else if (note.slide) {
+                    audioCtx2d.lineWidth = 6;
+                    audioCtx2d.setLineDash([8, 8]);
+                    audioCtx2d.moveTo(x + note.delay * 48000 / zoom,
+                        (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height);
+                    audioCtx2d.lineTo(x + (note.slideTime + note.delay) * 48000 / zoom,
+                        (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height);
+                } else if (note.star) {
+                    const outerRadius = 5; // 五角星外圈半徑
+                    const innerRadius = 2; // 五角星內圈半徑
+                    const numPoints = 5; // 五角星有5個點
+
+                    for (let i = 0; i < numPoints * 2; i++) {
+                        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                        const angle = Math.PI / numPoints * i - Math.PI / 2; // -Math.PI/2 讓星星尖端朝上
+                        const currentX = x + radius * Math.cos(angle);
+                        const currentY = y + radius * Math.sin(angle);
+
+                        if (i === 0) {
+                            audioCtx2d.moveTo(currentX, currentY);
+                        } else {
+                            audioCtx2d.lineTo(currentX, currentY);
+                        }
+                    }
+                    audioCtx2d.closePath(); // 閉合路徑以完成五角星
+                } else {
+                    if (note.holdTime != null) {
+                        audioCtx2d.lineWidth = 6;
+                        audioCtx2d.moveTo(x, y);
+                        audioCtx2d.lineTo(x + note.holdTime * 48000 / zoom, y);
+                    } else {
+                        audioCtx2d.arc(x, y, 4, 0, 2 * Math.PI);
+                    }
+                }
+                audioCtx2d.closePath();
+                audioCtx2d.stroke();
+                audioCtx2d.setLineDash([]);
+            }
+        });
 
         audioCtx2d.beginPath();
         audioCtx2d.strokeStyle = "red";
@@ -1021,6 +1088,9 @@ $(document).ready(function () {
                 currentTimelineValue = newTimelineVal > maxTime / 1000 ? maxTime / 1000 : newTimelineVal;
                 controls.timeline.val(currentTimelineValue); // Update slider position
                 updateTimelineVisual(currentTimelineValue); // Update visual
+                if (newTimelineVal > maxTime / 1000) {
+                    play.pauseBoth(controls.play);
+                }
             }
         }
 
