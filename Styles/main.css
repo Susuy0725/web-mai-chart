@@ -73,7 +73,7 @@ body {
     top: 30px;
     left: 0;
     width: 50%;
-    height: 100%;
+    height: calc(100% - 30px);
     transition: width ease 0.5s;
     z-index: -10;
 }
@@ -88,6 +88,44 @@ body {
     z-index: -10;
     box-shadow: 0 0 10px #00000080;
 }
+
+.preview-control {
+    position: absolute;
+    left: 0;
+    bottom: 80px;
+    height: 40px;
+    width: 50%;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.preview-control>div {
+    background: #00000000;
+    font-size: 20px;
+    backdrop-filter: blur(8px);
+    color: white;
+    width: 25px;
+    height: 25px;
+    box-shadow: 0 1px 3px #00000080;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 100ms ease;
+    margin: 5px;
+}
+
+.preview-control>div:hover {
+    background: #00000020;
+    box-shadow: 0 1px 2px #00000080, 0 0 1px #0000005e inset;
+}
+
+.preview-control>div:active {
+    background: #aaa;
+    box-shadow: 0 0 1px #00000080, 0 0 2px black inset;
+}
+
 
 .actions {
     display: flex;
@@ -302,7 +340,7 @@ body {
     z-index: 100;
     overflow-y: auto;
     height: 190px;
-    transition: height 0.1s ease,top 60ms ease,left 60ms ease,opacity 300ms ease;
+    transition: height 0.1s ease, top 60ms ease, left 60ms ease, opacity 300ms ease;
 }
 
 #customMenu>div {

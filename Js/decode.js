@@ -2,7 +2,7 @@ import * as render from "./render.js";
 
 export function simai_decode(_data) {
     // 註解
-    _data = _data.replace(/^\|\|.*$/gm, "");
+    _data = _data.replace(/\|\|.*$/gm, "");
     // 先移除空白與換行
     _data = _data.replace(/(\r\n|\n|\r| )/gm, "");
     let tempNote = [],
@@ -82,6 +82,7 @@ export function simai_decode(_data) {
 
     for (let i = 0; i < tempNote.length; i++) {
         let data = tempNote[i];
+
         if (data) {
             if (data.pos.includes("`")) {
                 data = data.pos.split("`");
@@ -95,14 +96,24 @@ export function simai_decode(_data) {
     }
 
     for (let i = 0; i < tempNote.length; i++) {
+        if (tempNote[i]) {
+            const propertyMatch = tempNote[i].pos.match(/^<([a-zA-Z0-9\_\*\.\-]+)>(.*)/);
+            if (propertyMatch) {
+                tempNote[i].property = propertyMatch[1]; // 將 "<prop>" 中的 "prop" 儲存為 property
+                tempNote[i].pos = propertyMatch[2]; // 更新 pos，移除 "<prop>" 部分
+            }
+        }
+    }
+
+    for (let i = 0; i < tempNote.length; i++) {
         let data = tempNote[i];
         if (data) {
             if (data.pos.includes("*")) {
                 data = data.pos.split("*");
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
-                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, index: tempNote[i].index }; continue; }
-                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, head: data[0][0], index: tempNote[i].index });
+                    if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, index: tempNote[i].index, property: tempNote[i].property }; continue; }
+                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, head: data[0][0], index: tempNote[i].index, property: tempNote[i].property });
                 }
             }
         }

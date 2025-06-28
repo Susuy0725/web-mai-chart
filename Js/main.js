@@ -22,6 +22,7 @@ export let settings = { // Keep export if other modules might need direct access
     'lineWidthFactor': 0.8,
     'noNoteArc': false,
     'middleDisplay': 2,
+    'maxSlideOnScreenCount': 500,
 };
 // Make play and soundSettings local if not modified externally
 const icons = ['pause', 'play_arrow', 'skip_previous', 'replay_10', 'replay_5', 'forward_5', 'forward_10']; // Use const
@@ -693,7 +694,7 @@ $(document).ready(function () {
         play.score = 0;
         notes = temp.notes, notesData = temp.data, marks = temp.marks; // This now returns notes with pre-calculated path objects if possible
         triggered = [];
-        let newMaxTime = 1; // Local variable for calculation
+        let newMaxTime = 1000; // Local variable for calculation
 
         // Pre-process notes for "double" checks and other render-time optimizations
         // This is a placeholder. Actual logic depends on how "double" is defined.
@@ -706,7 +707,7 @@ $(document).ready(function () {
         });
 
         notes.forEach(note => {
-            if (!note || note.invalid) return;
+            if (!note) return;
             const notesAtSameTime = timeMap.get(note.time) || [];
             if (note.slide) {
                 note.isDoubleSlide = notesAtSameTime.filter((n, indx) => n !== note && n.slide && (n.chainTarget != note.chainTarget && note.chainTarget != indx)).length > 0;
@@ -718,7 +719,7 @@ $(document).ready(function () {
 
             let noteEndTime = note.time;
             if (note.holdTime) noteEndTime = Math.max(noteEndTime, note.time + note.holdTime * 1000);
-            if (note.slideTime && note.delay) noteEndTime = Math.max(noteEndTime, note.time + (note.slideTime + note.delay) * 1000);
+            if (note.slideTime && note.delay) noteEndTime = Math.max(noteEndTime, note.time + ((note.slideTime ?? 0) + (note.delay ?? 0)) * 1000);
             if (note.touchTime) noteEndTime = Math.max(noteEndTime, note.time + note.touchTime * 1000);
             newMaxTime = Math.max(newMaxTime, noteEndTime);
 
@@ -727,9 +728,11 @@ $(document).ready(function () {
             } else {
                 triggered.push(false); // For tap/star notes
             }
+
+            console.log(note, newMaxTime);
         });
 
-        maxTime = newMaxTime + 1000; // Add 1s buffer
+        maxTime = settings.musicDelay * 1000 + newMaxTime + 1000; // Add 1s buffer
         if (bgm[0].duration) {
             maxTime = Math.max(maxTime, (bgm[0].duration + 1) * 1000);
         }
@@ -816,9 +819,8 @@ $(document).ready(function () {
             if (settings.followText) {
                 //$editor.trigger('focus');
                 const b = textarea.value.split(",");
-                const a = b.slice(0, play.nowIndex + 1);
-                textarea.selectionStart = a.toString().length;
-                textarea.selectionEnd = a.toString().length;
+                const a = b.slice(0, play.nowIndex + 1).toString().length;
+                textarea.setSelectionRange(a, a);
             }
             updateTimelineVisual(currentTimelineValue);
         });
@@ -896,12 +898,14 @@ $(document).ready(function () {
     });
 
     controls.f10.click(function (e) {
+        play.pause = true;
         currentTimelineValue += 10; // Get current value from slider
         currentTimelineValue = Math.min(currentTimelineValue, maxTime / 1000);
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
 
         bgm[0].playbackRate = play.playbackSpeed;
         bgm[0].currentTime = currentTimelineValue;
+        play.pause = play.btnPause;
         if (!play.pause) {
             bgm[0].play().catch(e => console.error("BGM play error:", e));
         }
@@ -958,6 +962,8 @@ $(document).ready(function () {
         // ---接下來是繪圖邏輯，與之前類似，但資料來源是 dataSlice---
 
         // (注意: pcmData 的值是 -1.0 到 1.0 之間的浮點數，而不是 0-255 的整數)
+        audioCanvas.lineJoin = settings.roundStroke ? 'round' : 'butt';
+
         audioCtx2d.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
         audioCtx2d.beginPath();
         audioCtx2d.strokeStyle = "#00000060";
@@ -988,7 +994,7 @@ $(document).ready(function () {
             const find = marks.find((e) => (e.time > mark.time && e.type != "bpm")) ?? { time: Infinity };
             switch (mark.type) {
                 case "bpm": {
-                    const x = a + (mark.time / 1000 - currentTimelineValue + settings.musicDelay) * 48000 / zoom;
+                    const x = a + (mark.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
                     audioCtx2d.beginPath();
                     audioCtx2d.strokeStyle = "#FFF200";
                     audioCtx2d.lineWidth = 4;
@@ -1002,7 +1008,7 @@ $(document).ready(function () {
                     if (t > 10000) t = 10000;
                     else t = Math.round(t);
                     for (let j = 0; j < t; j++) {
-                        const x = a + (mark.time / 1000 + j * (60 / ((mark.slice / 4) * mark.bpm)) - currentTimelineValue + settings.musicDelay) * 48000 / zoom;
+                        const x = a + (mark.time / 1000 + j * (60 / ((mark.slice / 4) * mark.bpm)) - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
                         if (x > audioCanvas.width || x < 0) continue;
                         audioCtx2d.beginPath();
                         audioCtx2d.strokeStyle = "white";
@@ -1017,9 +1023,9 @@ $(document).ready(function () {
         }
 
         notes.forEach(note => {
-            const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * 48000 / zoom;
+            const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
             const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;
-            if (x < audioCanvas.width && x > 0) {
+            if (x < audioCanvas.width && x > 0 - ((note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) {
                 audioCtx2d.strokeStyle = "#FF569B";
                 if (note.star || note.touch || note.slide) audioCtx2d.strokeStyle = '#0089F4';
                 if (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide) audioCtx2d.strokeStyle = "#FFD900";
@@ -1034,9 +1040,9 @@ $(document).ready(function () {
                 } else if (note.slide) {
                     audioCtx2d.lineWidth = 6;
                     audioCtx2d.setLineDash([8, 8]);
-                    audioCtx2d.moveTo(x + note.delay * 48000 / zoom,
+                    audioCtx2d.moveTo(x + note.delay * sampleRate / zoom,
                         (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height);
-                    audioCtx2d.lineTo(x + (note.slideTime + note.delay) * 48000 / zoom,
+                    audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom,
                         (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height);
                 } else if (note.star) {
                     const outerRadius = 5; // 五角星外圈半徑
@@ -1060,7 +1066,7 @@ $(document).ready(function () {
                     if (note.holdTime != null) {
                         audioCtx2d.lineWidth = 6;
                         audioCtx2d.moveTo(x, y);
-                        audioCtx2d.lineTo(x + note.holdTime * 48000 / zoom, y);
+                        audioCtx2d.lineTo(x + note.holdTime * sampleRate / zoom, y);
                     } else {
                         audioCtx2d.arc(x, y, 4, 0, 2 * Math.PI);
                     }
@@ -1079,6 +1085,38 @@ $(document).ready(function () {
         audioCtx2d.stroke();
     }
     // END: 新增 audioRender 繪圖函數
+
+    function getScrollTopToCaret(textarea, position) {
+        const text = textarea.value.substring(0, position);
+
+        const div = document.createElement('div');
+        const pre = document.createElement('pre');
+
+        const style = window.getComputedStyle(textarea);
+
+        // 設定相同樣式
+        for (const prop of [
+            'fontFamily', 'fontSize', 'lineHeight', 'padding', 'border', 'boxSizing',
+            'whiteSpace', 'letterSpacing', 'wordWrap', 'overflowWrap', 'width'
+        ]) {
+            div.style[prop] = style[prop];
+        }
+
+        div.style.position = 'absolute';
+        div.style.visibility = 'hidden';
+        div.style.whiteSpace = 'pre-wrap';
+        div.style.wordWrap = 'break-word';
+
+        // 模擬內容
+        div.textContent = text;
+
+        document.body.appendChild(div);
+
+        const caretY = div.offsetHeight;
+        document.body.removeChild(div);
+
+        return caretY - textarea.clientHeight / 2;
+    }
 
     function update() {
         if (!play.pause) {
@@ -1251,9 +1289,9 @@ $(document).ready(function () {
         if (settings.followText && !play.pause && !inSettings) {
             $editor.trigger('focus');
             const b = textarea.value.split(",");
-            const a = b.slice(0, play.nowIndex + 1);
-            textarea.selectionStart = a.toString().length;
-            textarea.selectionEnd = a.toString().length;
+            const a = b.slice(0, play.nowIndex + 1).toString().length;
+            textarea.setSelectionRange(a, a);
+            textarea.scrollTop = getScrollTopToCaret(textarea, a);
         }
 
         render.renderGame(ctx, notes, settings, noteImages, t, triggered, play, (1000 / frameTime).toFixed(1));
