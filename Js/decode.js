@@ -41,6 +41,7 @@ export function simai_decode(_data) {
             }
             if (lastbpm !== bpm) {
                 marks.push({ bpm, time: timeSum, type: "bpm" });
+                marks.push({ slice, bpm, time: timeSum, type: "slice" });
                 lastbpm = bpm;
             }
             dataTemp[i] = data;
