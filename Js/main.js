@@ -220,6 +220,32 @@ function findClosest(el, selector) {
     return null;
 }
 
+function triggerSave(data) {
+    // 1. 把目前 data 物件序列化回 maidata 格式
+    function serializeMaidata(dataObj) {
+        const lines = [];
+        for (const key in dataObj) {
+            // 忽略沒有內容的難度
+            if (key.includes("inote_") && !dataObj[key]) continue;
+            lines.push(`&${key}=${dataObj[key] ?? ''}`);
+        };
+        return lines.join('\n');
+    }
+
+    const maidataFileName = 'maidata';
+    const text = serializeMaidata(data);
+
+    // 2. 產生 Blob 並觸發下載
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${maidataFileName}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
 document.addEventListener('DOMContentLoaded', function () {
     const renderCanvas = document.getElementById("render");
@@ -286,6 +312,19 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     // ***** END OF NEW FEATURE *****
 
+    window.addEventListener('keydown', function (event) {
+        // 檢查是否按下 Ctrl (Windows/Linux) 或 Command (Mac)
+        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+
+        // 檢查是否按下 's' 鍵
+        if (event.key.toLowerCase() === 's' && isCtrlOrCmd) {
+            // 阻止瀏覽器預設的儲存頁面行為
+            event.preventDefault();
+
+            // 呼叫我們的儲存函式
+            triggerSave();
+        }
+    });
 
     // --- Modular Dropdown Menu Logic ---
     document.querySelectorAll('.menu-trigger-button').forEach(button => {
@@ -315,16 +354,38 @@ document.addEventListener('DOMContentLoaded', function () {
 
         allDropdowns.forEach(menu => menu.classList.add('hide'));
 
-        if (target.dataset.action === 'open-maidata') {
-            handleFileUpload('text/*', (file) => {
+        if (target.dataset.action === 'new-file') {
+            data = typeof {} !== 'undefined' ? {} : '';
+            for (let i = 1; i <= 7; i++) {
+                const key = `inote_${i}`;
+                if (typeof data[key] === "undefined") data[key] = "";
+            }
+
+            data.artist = 'artist'
+            data.title = 'Untitled';
+            data.first = settings.musicDelay.toString();
+
+            settings.musicDelay = 0;
+            editor.value = '';
+            play.pauseBoth(controls.play);
+            bgm.pause();
+            currentTimelineValue = 0;
+            controls.timeline.value = 0;
+            updateTimelineVisual(0);
+            startTime = Date.now();
+            processChartData();
+        } else if (target.dataset.action === 'open-maidata') {
+            handleFileUpload('text/*', (files) => { // <--- 將參數名稱改為 `files`
+                const file = files[0]; // <--- 從 FileList 中取出第一個檔案
+                if (!file) { // 檢查是否真的有檔案被選取
+                    console.warn("沒有選擇檔案。");
+                    return;
+                }
                 const reader = new FileReader();
                 reader.onload = function (e) {
                     maidata = e.target.result;
                     data = parseMaidataToJson(maidata);
                     console.log("檔案內容：", data);
-                    let getNowDiff = function (e) {
-                        return data['inote_' + e];
-                    }
                     settings.musicDelay = parseFloat(data.first ?? "0");
                     editor.value = getNowDiff(settings.nowDiff);
                     play.pauseBoth(controls.play);
@@ -335,10 +396,83 @@ document.addEventListener('DOMContentLoaded', function () {
                     startTime = Date.now();
                     processChartData();
                 };
-                reader.readAsText(file);
+                reader.readAsText(file); // <--- 使用正確的 `file` 物件
             });
+        } else if (target.dataset.action === 'open-folder') {
+            handleFileUpload('', (files) => { // accept 參數留空，因為是選資料夾
+
+                let maidataFile = null;
+                let audioFile = null;
+                const audioFileNames = /^track\.(mp3|ogg|wav)$/i; // 用正規表示法來比對音訊檔名
+
+                // 遍歷使用者選擇資料夾中的所有檔案
+                for (const file of files) {
+                    // 尋找看起來像 maidata 的檔案 (例如 .txt)
+                    if (file.name.toLowerCase().endsWith('.txt')) {
+                        maidataFile = file;
+                    }
+                    // 尋找名為 track 的音訊檔
+                    if (audioFileNames.test(file.name)) {
+                        audioFile = file;
+                    }
+                }
+
+                // 如果找到了音訊檔，就印出訊息！
+                if (audioFile) {
+                    console.log(`偵測到音訊檔案：${audioFile.name}，將嘗試自動載入。`);
+                    // 自動載入音訊檔案的邏輯
+                    play.pauseBoth(controls.play);
+                    if (bgm.src) URL.revokeObjectURL(bgm.src);
+
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        audioCtx.decodeAudioData(e.target.result)
+                            .then(buffer => {
+                                fullAudioBuffer = buffer;
+                                bgm.src = URL.createObjectURL(audioFile);
+                                bgm.load();
+                                console.log("音訊檔已自動載入並解碼。");
+                            })
+                            .catch(error => console.error("自動載入音訊檔時發生解碼錯誤:", error));
+                    };
+                    reader.readAsArrayBuffer(audioFile);
+                }
+
+                // 如果找到了 maidata 檔案，就載入它
+                if (maidataFile) {
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        maidata = e.target.result;
+                        data = parseMaidataToJson(maidata);
+                        let getNowDiff = function (diff) {
+                            return data['inote_' + diff];
+                        }
+                        settings.musicDelay = parseFloat(data.first ?? "0");
+                        editor.value = getNowDiff(settings.nowDiff);
+                        play.pauseBoth(controls.play);
+                        // 如果沒有自動載入音訊，這裡還是要暫停
+                        if (!audioFile) bgm.pause();
+                        currentTimelineValue = 0;
+                        controls.timeline.value = 0;
+                        updateTimelineVisual(0);
+                        startTime = Date.now();
+                        processChartData();
+                        console.log("Maidata 檔案已載入。");
+                    };
+                    reader.readAsText(maidataFile);
+                } else {
+                    alert("在選擇的資料夾中找不到有效的 .txt 譜面檔案。");
+                }
+
+            }, true); // 第三個參數 true 表示啟用資料夾選擇模式
+
         } else if (target.dataset.action === 'open-audio') {
-            handleFileUpload('audio/*', (file) => {
+            handleFileUpload('audio/*', (files) => { // <--- 將參數名稱改為 `files`
+                const file = files[0]; // <--- 從 FileList 中取出第一個檔案
+                if (!file) { // 檢查是否真的有檔案被選取
+                    console.warn("沒有選擇檔案。");
+                    return;
+                }
                 play.pauseBoth(controls.play);
                 if (bgm.src) URL.revokeObjectURL(bgm.src);
                 bgm.src = '';
@@ -349,7 +483,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     audioCtx.decodeAudioData(arrayBuffer, function (audioBuffer) {
                         fullAudioBuffer = audioBuffer;
                         console.log("AudioBuffer 成功載入:", fullAudioBuffer);
-                        const objectURL = URL.createObjectURL(file);
+                        const objectURL = URL.createObjectURL(file); // <--- 使用正確的 `file`
                         bgm.src = objectURL;
                         bgm.load();
                     }, function (error) {
@@ -359,36 +493,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 reader.onerror = function (event) {
                     console.error("檔案讀取失敗:", event.target.error);
                 };
-                reader.readAsArrayBuffer(file);
+                reader.readAsArrayBuffer(file); // <--- 使用正確的 `file` 物件
             });
         } else if (target.dataset.diff) {
             loadDiff(parseInt(target.dataset.diff, 10), data);
             // 在 dropdownList 的 click handler 裡面：
         } else if (target.dataset.action === 'save-file') {
-            // 1. 把目前 data 物件序列化回 maidata 格式
-            function serializeMaidata(dataObj) {
-                console.log(dataObj);
-                const lines = [];
-                for (var key in dataObj) {
-                    if (key.includes("inote_") && !dataObj[key]) continue;
-                    lines.push(`&${key}=${dataObj[key] ?? ''}`);
-                };
-                return lines.join('\n');
-            }
-            const maidataFileName = 'maidata';
-            const text = serializeMaidata(data);
-
-            // 2. 產生 Blob 並觸發下載
-            const blob = new Blob([text], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            // 這裡可以從原檔案名稱推一個預設，如 maidata.txt
-            a.download = (maidataFileName || 'maidata') + '.txt';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            triggerSave(data);
         }
     });
 
@@ -508,17 +619,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const noteImages = getImgs();
 
-    function handleFileUpload(accept, callback) {
+    function handleFileUpload(accept, callback, isDirectory = false) {
         allDropdowns.forEach(menu => menu.classList.add('hide'));
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.style.display = 'none';
-        fileInput.accept = accept;
+
+        // 如果需要選擇資料夾，就加上 webkitdirectory 屬性
+        if (isDirectory) {
+            fileInput.webkitdirectory = true;
+        } else {
+            fileInput.accept = accept;
+        }
+
         document.body.appendChild(fileInput);
         fileInput.addEventListener('change', function (event) {
-            const file = event.target.files[0];
-            if (file) {
-                callback(file, event);
+            // fileInput.files 會是一個 FileList 物件，包含了所有選擇的檔案
+            const files = event.target.files;
+            if (files && files.length > 0) {
+                callback(files, event); // 將整個 FileList 傳給回呼函式
             }
             fileInput.remove();
         });
@@ -596,6 +715,25 @@ document.addEventListener('DOMContentLoaded', function () {
         inSettings = true;
     });
 
+    document.querySelector('.info-menu-button').addEventListener('click', function () {
+        allDropdowns.forEach(menu => menu.classList.add('hide'));
+        generateInfoForm();
+        document.getElementById('info-popup').classList.remove("hide");
+        document.getElementById('settings-overlay').classList.remove("hide");
+        inSettings = true;
+    });
+
+    document.getElementById('save-info-btn').addEventListener('click', () => {
+        saveInfoFromForm(document.getElementById('info-form'));
+        document.getElementById('settings-overlay').classList.add('hide');
+        document.getElementById('info-popup').classList.add('hide');
+    });
+
+    document.getElementById('cancel-info-btn').addEventListener('click', () => {
+        document.getElementById('settings-overlay').classList.add('hide');
+        document.getElementById('info-popup').classList.add('hide');
+    });
+
     function generateSettingsForm() {
         const form = document.getElementById('settings-form');
         form.innerHTML = '';
@@ -644,6 +782,46 @@ document.addEventListener('DOMContentLoaded', function () {
         h3Sound.textContent = '音效設定';
         form.appendChild(h3Sound);
         settingsConfig.sound.forEach(config => createField(config, 'sound'));
+    }
+
+    function generateInfoForm() {
+        const form = document.getElementById('info-form');
+        form.innerHTML = '';
+
+        const fields = [
+            { key: 'title', label: '標題' },
+            { key: 'artist', label: '作者' },
+            { key: 'wholebpm', label: '全曲 BPM' },
+            { key: 'lv_1', label: 'EASY 難度' },
+            { key: 'lv_2', label: 'BASIC 難度' },
+            { key: 'lv_3', label: 'ADVANCED 難度' },
+            { key: 'lv_4', label: 'EXPERT 難度' },
+            { key: 'lv_5', label: 'MASTER 難度' },
+            { key: 'lv_6', label: 'RE:MASTER 難度' },
+            { key: 'lv_7', label: 'ORIGINAL 難度' },
+        ];
+
+        fields.forEach(f => {
+            const val = data[f.key] || '';
+            const label = document.createElement('label');
+            label.textContent = f.label;
+            const input = document.createElement('input');
+            input.name = f.key;
+            input.value = val;
+            const a = document.createElement('div');
+            a.className = 'info-field';
+            a.appendChild(label);
+            a.appendChild(input);
+            form.appendChild(a);
+        });
+    }
+
+    // 儲存譜面資訊回 data
+    function saveInfoFromForm(form) {
+        const inputs = form.querySelectorAll('input');
+        inputs.forEach(input => {
+            data[input.name] = input.value;
+        });
     }
 
     function handleSettingsClose(save) {

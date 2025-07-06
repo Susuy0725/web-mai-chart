@@ -488,6 +488,48 @@ textarea {
     overflow-y: auto;
 }
 
+#info-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    background-color: white;
+    padding: 20px;
+    border: 1px solid #ccc;
+    z-index: 1000;
+    max-height: 80vh;
+    overflow-y: hidden;
+    border-radius: 5px;
+    border: none;
+}
+
+.info-field {
+    margin-bottom: 10px;
+    display: flex;
+    /* 或者其他佈局方式 */
+    align-items: center;
+    /* 垂直居中 */
+    justify-content: space-between;
+}
+
+.info-field label {
+    margin-right: 10px;
+    min-width: 200px;
+    /* 讓標籤寬度一致，方便對齊 */
+    display: inline-block;
+}
+
+.info-field input[type="number"] {
+    width: 80px;
+    /* 或其他合適的寬度 */
+}
+
+#info-form{
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
 /* Add these rules for the minimize controls feature */
 body.layout-minimized .controls,
 body.layout-minimized .actions,

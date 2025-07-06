@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="Styles/main.css">
 </head>
 <script>
-    let masterExample = `1w5[4:1]`;
+    let masterExample = ``;
 </script>
 
 <body>
@@ -30,7 +30,7 @@
     </div>
     <canvas id="render"></canvas>
     <canvas id="audioRender"></canvas>
-    <textarea id="editor" placeholder="-- No context, Please enter simai here or load maidata"></textarea>
+    <textarea id="editor" placeholder="-- No context, please type simai here or load maidata"></textarea>
     <div id="customMenu" class="hide">
         <div class="menu-item" data-action="cut">剪下</div>
         <div class="menu-item" data-action="copy">複製</div>
@@ -67,6 +67,7 @@
     <div class="dropdownlist">
         <ul class="file-menu dropdown-content hide">
             <li data-action="new-file">新建空白</li>
+            <li data-action="open-folder">開啟資料夾</li>
             <li data-action="open-maidata">開啟 Maidata</li>
             <li data-action="open-audio">開啟音檔</li>
             <li data-action="save-file">儲存</li>
@@ -88,6 +89,13 @@
         <button type="button" id="save-settings-btn">儲存</button>
         <button type="button" id="cancel-settings-btn">取消</button>
     </div>
+
+    <div id="info-popup" class="hide">
+        <form id="info-form"></form>
+        <button type="button" id="save-info-btn">儲存</button>
+        <button type="button" id="cancel-info-btn">取消</button>
+    </div>
+
     <div class="imgs">
         <img src="Skin/outline.svg" id="outline">
         <img src="Skin/sensor.svg" id="sensor">
