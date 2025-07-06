@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AssTroll XD chart broker</title>
     <link rel="icon" type="image/x-icon" href="deku.ico">
-    <script src="Js/jquery-3.7.1.min.js"></script>
     <script src="Js/main.js" type="module"></script>
     <script type="module">
         import { settings, play } from './Js/main.js';
@@ -15,19 +14,19 @@
     <link rel="stylesheet" href="Styles/main.css">
 </head>
 <script>
-    let masterExample = `(9600)
-{69420}1v1[1:100]/2v2[1:100]/3v3[1:100]/4v4[1:100]/5v5[1:100]/6v6[1:100]/7v7[1:100]/8v8[1:100],
-`;
+    let masterExample = `1w5[4:1]`;
 </script>
 
 <body>
     <div id="hideContorls">
-        <div>stat_minus_1</div>
-        <span>minimize controls bruh</span>
+        <div class="icon-minimize">open_in_full</div>
+        <div class="icon-maximize" style="display: none;">hide</div>
+        <span class="text-minimize">maximize</span>
+        <span class="text-maximize" style="display: none;">minimize</span>
     </div>
     <div class="preview-control">
-    <div id="zoomIn">+</div>
-    <div id="zoomOut">-</div>
+        <div id="zoomIn">+</div>
+        <div id="zoomOut">-</div>
     </div>
     <canvas id="render"></canvas>
     <canvas id="audioRender"></canvas>
@@ -55,47 +54,37 @@
             <div id="back5Btn"></div>
             <div id="fast5Btn"></div>
             <div id="fast10Btn"></div>
-            <!-- <div>
-                <label for="speedControl">Speed:</label>
-                <input id="speedControl" type="range" min="0.5" max="3" step="0.1" value="1">
-                <span id="speedValue">1×</span>
-            </div> -->
         </div>
         <input type="range" id="timeline" value="0.0" min="0" max="8" step="0.01">
     </div>
     <div class="actions">
-        <div class="file-menu-button"><span>檔案</span></div>
-        <div class="diff-menu-button"><span>難度</span></div>
+        <div class="menu-trigger-button" data-target=".file-menu"><span>檔案</span></div>
+        <div class="menu-trigger-button" data-target=".diff-menu"><span>難度</span></div>
         <div class="edit-menu-button"><span>編輯</span></div>
         <div class="info-menu-button"><span>譜面資訊</span></div>
         <div class="sett-menu-button"><span>設定</span></div>
     </div>
     <div class="dropdownlist">
-        <ul class="file-menu hide">
-            <li class="a-btn0">新建空白</li>
-            <li class="a-btn1">開啟 Maidata</li>
-            <li class="a-btn2">開啟音檔</li>
-            <li class="a-btn2">關閉音檔</li>
-            <li class="a-btn3">儲存</li>
+        <ul class="file-menu dropdown-content hide">
+            <li data-action="new-file">新建空白</li>
+            <li data-action="open-maidata">開啟 Maidata</li>
+            <li data-action="open-audio">開啟音檔</li>
+            <li data-action="save-file">儲存</li>
         </ul>
-        <ul class="diff-menu hide">
-            <li class="a-btn0">EASY</li>
-            <li class="a-btn1">BASIC</li>
-            <li class="a-btn2">ADVANCED</li>
-            <li class="a-btn3">EXPERT</li>
-            <li class="a-btn4">MASTER</li>
-            <li class="a-btn5">RE:MASTER</li>
-            <li class="a-btn6">ORIGINAL</li>
+        <ul class="diff-menu dropdown-content hide">
+            <li data-diff="1">EASY</li>
+            <li data-diff="2">BASIC</li>
+            <li data-diff="3">ADVANCED</li>
+            <li data-diff="4">EXPERT</li>
+            <li data-diff="5">MASTER</li>
+            <li data-diff="6">RE:MASTER</li>
+            <li data-diff="7">ORIGINAL</li>
         </ul>
     </div>
 
-    <div id="settings-overlay" class="hide"
-        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 999;">
-    </div>
+    <div id="settings-overlay" class="hide"></div>
     <div id="settings-popup" class="hide">
-        <form id="settings-form">
-        </form>
-        <br>
+        <form id="settings-form"></form>
         <button type="button" id="save-settings-btn">儲存</button>
         <button type="button" id="cancel-settings-btn">取消</button>
     </div>

@@ -16,22 +16,22 @@ export let settings = { // Keep export if other modules might need direct access
     'followText': true,
     'nowDiff': 5,
     'showEffect': true,
-    'effectDecayTime': 0.25,
+    'effectDecayTime': 0.3,
     'noSensor': false,
     'disableSensorWhenPlaying': true,
     'lineWidthFactor': 0.8,
     'noNoteArc': false,
     'middleDisplay': 2,
     'maxSlideOnScreenCount': 500,
+    'showFpsCounter': true,
 };
-// Make play and soundSettings local if not modified externally
-const icons = ['pause', 'play_arrow', 'skip_previous', 'replay_10', 'replay_5', 'forward_5', 'forward_10']; // Use const
+const icons = ['pause', 'play_arrow', 'skip_previous', 'replay_10', 'replay_5', 'forward_5', 'forward_10'];
 
 export let play = {
     'pauseBoth': function (btn) {
         play.btnPause = true;
         play.pause = true;
-        $(btn).text(icons[0 + play.btnPause]);
+        btn.textContent = icons[0 + play.btnPause];
     },
     'lastPauseTime': 0,
     'pause': true,
@@ -41,6 +41,7 @@ export let play = {
     'score': 0,
     'playbackSpeed': 1,
 };
+
 let soundSettings = {
     'answer': true,
     'sfxs': true,
@@ -94,41 +95,31 @@ const settingsConfig = {
     ]
 };
 
-let notes = [{}], notesData = {}, marks = {}; // Use `let` as it's reassigned
+let notes = [{}], notesData = {}, marks = {};
 let triggered = [];
-let startTime = 0; // Initialize
+let startTime = 0;
 let maxTime = 1000;
 let sfxReady = false, inSettings = false;
-let currentTimelineValue = 0; // JS variable to store timeline value
+let currentTimelineValue = 0;
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-// START: audioRender 相關變數
 let analyser;
 let audioWaveform_dataArray;
 let audioWaveform_bufferLength;
 let isAudioSourceConnected = false;
 let fullAudioBuffer;
-// END: audioRender 相關變數
 
 const soundFiles = {
-    tap: 'judge.wav',
-    ex: 'judge_ex.wav',
-    break: 'judge_break.wav',
-    break_woo: 'break.wav',
-    touch: 'touch.wav',
-    hanabi: 'hanabi.wav',
-    slide: 'slide.wav',
-    breakSlide: 'break_slide_start.wav',
-    breakSlideEnd: 'break_slide.wav',
-    answer: 'answer.wav',
+    tap: 'judge.wav', ex: 'judge_ex.wav', break: 'judge_break.wav', break_woo: 'break.wav',
+    touch: 'touch.wav', hanabi: 'hanabi.wav', slide: 'slide.wav', breakSlide: 'break_slide_start.wav',
+    breakSlideEnd: 'break_slide.wav', answer: 'answer.wav',
 };
 
-let soundBuffers = {}; // Use `let`
+let soundBuffers = {};
 
 async function loadAllSounds(list) {
     const buffers = {};
-    // Use Promise.all for concurrent loading
     const loadPromises = Object.entries(list).map(async ([key, url]) => {
         try {
             const resp = await fetch('Sounds/' + url);
@@ -137,7 +128,7 @@ async function loadAllSounds(list) {
             buffers[key] = await audioCtx.decodeAudioData(arrayBuffer);
         } catch (error) {
             console.error(`Error loading sound ${key} (${url}):`, error);
-            buffers[key] = null; // Or handle error appropriately
+            buffers[key] = null;
         }
     });
     await Promise.all(loadPromises);
@@ -145,20 +136,17 @@ async function loadAllSounds(list) {
 }
 
 function playSound(buffers, name, { volume = 0.1 } = {}) {
-    if (audioCtx.state === 'suspended') { // Resume AudioContext if suspended by browser policy
-        audioCtx.resume();
-    }
+    if (audioCtx.state === 'suspended') { audioCtx.resume(); }
     const buffer = buffers[name];
     if (!buffer) return;
 
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
     const gainNode = audioCtx.createGain();
-    gainNode.gain.setValueAtTime(volume, audioCtx.currentTime); // Use setValueAtTime
+    gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
     source.connect(gainNode).connect(audioCtx.destination);
     source.start(0);
 }
-
 
 loadAllSounds(soundFiles).then(buffers => {
     soundBuffers = buffers;
@@ -166,7 +154,7 @@ loadAllSounds(soundFiles).then(buffers => {
     sfxReady = true;
 }).catch(error => {
     console.error("Failed to load some sounds:", error);
-    sfxReady = true; // Still allow playback, some sounds might be missing
+    sfxReady = true;
 });
 
 
@@ -176,7 +164,7 @@ function _playEffect(note, hold = false) {
         playSound(soundBuffers, 'answer', { volume: soundSettings.answerVol });
     }
     if (soundSettings.sfxs) {
-        if (note.ex && soundBuffers.ex && !hold) { // Ensure it's not touch before playing tap
+        if (note.ex && soundBuffers.ex && !hold) {
             playSound(soundBuffers, 'ex', { volume: soundSettings.judgeExVol });
         }
         if (hold) {
@@ -204,7 +192,7 @@ function _playEffect(note, hold = false) {
                     if (!note.touchTime && note.hanabi) {
                         if (soundBuffers.hanabi) playSound(soundBuffers, 'hanabi', { volume: soundSettings.hanabiVol });
                     }
-                } else if (soundBuffers.tap) { // Ensure it's not touch before playing tap
+                } else if (soundBuffers.tap) {
                     playSound(soundBuffers, 'tap', { volume: soundSettings.judgeVol });
                 }
             }
@@ -212,7 +200,6 @@ function _playEffect(note, hold = false) {
     }
 }
 
-// Debounce utility
 function debounce(func, delay) {
     let timeout;
     return function (...args) {
@@ -222,79 +209,238 @@ function debounce(func, delay) {
     };
 }
 
-$(document).ready(function () {
-    $('.file-menu-button').on('click', function () {
-        $('.dropdownlist .diff-menu').addClass('hide');
-        $('.dropdownlist .file-menu').toggleClass('hide');
+// Helper to find closest ancestor matching selector (vanilla .closest())
+function findClosest(el, selector) {
+    while (el) {
+        if (el.matches(selector)) {
+            return el;
+        }
+        el = el.parentElement;
+    }
+    return null;
+}
+
+
+document.addEventListener('DOMContentLoaded', function () {
+    const renderCanvas = document.getElementById("render");
+    const ctx = renderCanvas.getContext("2d");
+    const customMenu = document.getElementById("customMenu");
+    const editor = document.getElementById("editor");
+    const timeDisplay = document.getElementById("nowTrackTime");
+    const bgm = document.getElementById("bgm");
+    const dropdownList = document.querySelector(".dropdownlist");
+    const allDropdowns = document.querySelectorAll('.dropdown-content');
+
+    // ***** NEW FEATURE: MINIMIZE CONTROLS (with Animation) *****
+    const hideControlsBtn = document.getElementById('hideContorls');
+    if (hideControlsBtn) {
+        // 選取所有需要執行動畫的元素
+        const elementsToAnimate = document.querySelectorAll('.controls, .actions, .preview-control, #audioRender, #editor');
+
+        hideControlsBtn.addEventListener('click', () => {
+            const isMinimized = document.body.classList.contains('layout-minimized');
+
+            if (isMinimized) {
+                // --- 準備最大化 (讓元素出現) ---
+                // 1. 先移除 display: none，讓元素回到文檔流中
+                elementsToAnimate.forEach(el => {
+                    el.style.display = ''; // 恢復預設 display 屬性
+                });
+
+                // 2. 強制瀏覽器重新渲染，確保 display 的改變生效
+                // 這是個小技巧，沒有這一步，動畫可能會失效
+                void hideControlsBtn.offsetWidth;
+
+                // 3. 移除 class，觸發返回的 CSS 動畫
+                document.body.classList.remove('layout-minimized');
+
+            } else {
+                // --- 準備最小化 (讓元素消失) ---
+                // 1. 加上 class，觸發消失的 CSS 動畫
+                document.body.classList.add('layout-minimized');
+
+                // 2. 監聽第一個元素的 transitionend 事件
+                // 當動畫結束時，才將所有元素 display: none
+                elementsToAnimate[0].addEventListener('transitionend', function onTransitionEnd() {
+                    // 確保只有在最小化狀態下才執行
+                    if (document.body.classList.contains('layout-minimized')) {
+                        elementsToAnimate.forEach(el => {
+                            el.style.display = 'none';
+                        });
+                    }
+                    // 移除監聽器，避免重複觸發
+                    elementsToAnimate[0].removeEventListener('transitionend', onTransitionEnd);
+                });
+            }
+
+            // 無論是最大化還是最小化，都更新按鈕外觀
+            const currentlyMinimized = document.body.classList.contains('layout-minimized');
+            hideControlsBtn.querySelector('.icon-minimize').style.display = currentlyMinimized ? 'none' : 'inline';
+            hideControlsBtn.querySelector('.text-minimize').style.display = currentlyMinimized ? 'none' : 'inline';
+            hideControlsBtn.querySelector('.icon-maximize').style.display = currentlyMinimized ? 'inline' : 'none';
+            hideControlsBtn.querySelector('.text-maximize').style.display = currentlyMinimized ? 'inline' : 'none';
+
+            // 重新計算畫布大小
+            setTimeout(() => _updCanvasRes(), 350);
+        });
+    }
+    // ***** END OF NEW FEATURE *****
+
+
+    // --- Modular Dropdown Menu Logic ---
+    document.querySelectorAll('.menu-trigger-button').forEach(button => {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const targetSelector = button.dataset.target;
+            const targetMenu = document.querySelector(targetSelector);
+
+            if (!targetMenu) return;
+
+            // Hide other menus
+            allDropdowns.forEach(menu => {
+                if (menu !== targetMenu) {
+                    menu.classList.add('hide');
+                }
+            });
+
+            // Toggle current menu
+            targetMenu.classList.toggle('hide');
+        });
     });
 
-    $('.diff-menu-button').on('click', function () {
-        $('.dropdownlist .file-menu').addClass('hide');
-        $('.dropdownlist .diff-menu').toggleClass('hide');
-    });
+    // --- File & Diff Menu Actions (Event Delegation) ---
+    dropdownList.addEventListener('click', (event) => {
+        const target = event.target;
+        if (target.tagName !== 'LI') return;
 
-    $(document).on('click', function (event) {
-        if (!$(event.target).closest('.actions').length && !$(event.target).closest('.dropdownlist').length) {
-            $('.dropdownlist .file-menu').addClass('hide');
-            $('.dropdownlist .diff-menu').addClass('hide');
+        allDropdowns.forEach(menu => menu.classList.add('hide'));
+
+        if (target.dataset.action === 'open-maidata') {
+            handleFileUpload('text/*', (file) => {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    maidata = e.target.result;
+                    data = parseMaidataToJson(maidata);
+                    console.log("檔案內容：", data);
+                    let getNowDiff = function (e) {
+                        return data['inote_' + e];
+                    }
+                    settings.musicDelay = parseFloat(data.first ?? "0");
+                    editor.value = getNowDiff(settings.nowDiff);
+                    play.pauseBoth(controls.play);
+                    bgm.pause();
+                    currentTimelineValue = 0;
+                    controls.timeline.value = 0;
+                    updateTimelineVisual(0);
+                    startTime = Date.now();
+                    processChartData();
+                };
+                reader.readAsText(file);
+            });
+        } else if (target.dataset.action === 'open-audio') {
+            handleFileUpload('audio/*', (file) => {
+                play.pauseBoth(controls.play);
+                if (bgm.src) URL.revokeObjectURL(bgm.src);
+                bgm.src = '';
+
+                const reader = new FileReader();
+                reader.onload = function (event) {
+                    const arrayBuffer = event.target.result;
+                    audioCtx.decodeAudioData(arrayBuffer, function (audioBuffer) {
+                        fullAudioBuffer = audioBuffer;
+                        console.log("AudioBuffer 成功載入:", fullAudioBuffer);
+                        const objectURL = URL.createObjectURL(file);
+                        bgm.src = objectURL;
+                        bgm.load();
+                    }, function (error) {
+                        console.error("解碼音訊資料時發生錯誤:", error);
+                    });
+                };
+                reader.onerror = function (event) {
+                    console.error("檔案讀取失敗:", event.target.error);
+                };
+                reader.readAsArrayBuffer(file);
+            });
+        } else if (target.dataset.diff) {
+            loadDiff(parseInt(target.dataset.diff, 10), data);
+            // 在 dropdownList 的 click handler 裡面：
+        } else if (target.dataset.action === 'save-file') {
+            // 1. 把目前 data 物件序列化回 maidata 格式
+            function serializeMaidata(dataObj) {
+                console.log(dataObj);
+                const lines = [];
+                for (var key in dataObj) {
+                    if (key.includes("inote_") && !dataObj[key]) continue;
+                    lines.push(`&${key}=${dataObj[key] ?? ''}`);
+                };
+                return lines.join('\n');
+            }
+            const maidataFileName = 'maidata';
+            const text = serializeMaidata(data);
+
+            // 2. 產生 Blob 並觸發下載
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            // 這裡可以從原檔案名稱推一個預設，如 maidata.txt
+            a.download = (maidataFileName || 'maidata') + '.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
     });
 
-    const $c = $("#render")[0]; // Use const
-    const ctx = $c.getContext("2d");
-    const $menu = $("#customMenu");
-    const $editor = $("#editor");
-    const textarea = $editor[0];
-    const timeDisplay = $("#nowTrackTime");
-    let doc_width = $(document).width(); // Keep let as it's updated on resize
-    let doc_height = $(document).height();
 
-    // START: 初始化 audioRender
+    document.addEventListener('click', function (event) {
+        if (!findClosest(event.target, '.actions') && !findClosest(event.target, '.dropdownlist')) {
+            allDropdowns.forEach(menu => menu.classList.add('hide'));
+        }
+        if (!findClosest(event.target, '#customMenu')) {
+            customMenu.classList.add('hide');
+        }
+    });
+
+
+    let doc_width = document.documentElement.clientWidth;
+    let doc_height = document.documentElement.clientHeight;
+
     analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;
     audioWaveform_bufferLength = analyser.frequencyBinCount;
     audioWaveform_dataArray = new Uint8Array(audioWaveform_bufferLength);
-    // END: 初始化 audioRender
 
-    $("body").on("contextmenu", function (e) {
-        //console.log(e);
-        e.preventDefault();
-        if (e.target === $("#editor")[0]) {
-            const menuWidth = $menu.outerWidth();
-            const menuHeight = $menu.outerHeight();
-            const windowWidth = $(window).width();
-            const windowHeight = $(window).height();
+    document.body.addEventListener("contextmenu", function (e) {
+        if (e.target === editor) {
+            e.preventDefault();
+            const menuWidth = customMenu.offsetWidth;
+            const menuHeight = customMenu.offsetHeight;
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
 
             let left = e.pageX;
             let top = e.pageY;
 
-            // 如果超出右邊，就往左偏移整個 menu 寬度
-            if (left + menuWidth > windowWidth) {
-                left = e.pageX - menuWidth;
-            }
+            if (left + menuWidth > windowWidth) left = e.pageX - menuWidth;
+            if (top + menuHeight > windowHeight) top = e.pageY - menuHeight;
 
-            // 如果超出底部，就往上偏移整個 menu 高度
-            if (top + menuHeight > windowHeight) {
-                top = e.pageY - menuHeight;
-            }
-
-            // 防止負值
             left = Math.max(0, left);
             top = Math.max(0, top);
 
-            // 設定位置並顯示
-            $menu.css({
-                left: left + "px",
-                top: top + "px",
-            }).removeClass("hide");
+            customMenu.style.left = left + "px";
+            customMenu.style.top = top + "px";
+            customMenu.classList.remove("hide");
         }
     });
 
-    $menu.on("click", ".menu-item", async function () {
-        const action = $(this).data("action");
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const selected = textarea.value.substring(start, end);
+    customMenu.addEventListener("click", async function (e) {
+        if (!e.target.matches(".menu-item")) return;
+
+        const action = e.target.dataset.action;
+        const start = editor.selectionStart;
+        const end = editor.selectionEnd;
+        const selected = editor.value.substring(start, end);
 
         switch (action) {
             case "copy":
@@ -302,403 +448,270 @@ $(document).ready(function () {
                 break;
             case "cut":
                 await navigator.clipboard.writeText(selected);
-                // 刪除被剪下的內容
-                textarea.setRangeText("", start, end, "start");
+                editor.setRangeText("", start, end, "start");
                 break;
             case "paste":
                 const pasteText = await navigator.clipboard.readText();
-                // 在游標處插入文字
-                textarea.setRangeText(pasteText, start, end, "end");
+                editor.setRangeText(pasteText, start, end, "end");
                 break;
             case "selectAll":
-                textarea.select();
+                editor.select();
                 break;
             case "trun-left-right": {
                 let result = '';
-                let inParen = 0;
-                let inBrace = 0;
-                let inBrack = 0;
-
+                let inParen = 0, inBrace = 0, inBrack = 0;
                 for (let i = 0; i < selected.length; i++) {
                     const ch = selected[i];
-
-                    if (ch === '(') inParen++;
-                    if (ch === ')') inParen--;
-                    if (ch === '{') inBrace++;
-                    if (ch === '}') inBrace--;
-                    if (ch === '[') inBrack++;
-                    if (ch === ']') inBrack--;
-
-                    if (inParen == 0 && inBrack == 0 && inBrace == 0 && /\d/.test(ch)) {
-                        // 只對不在括號內的數字做 9 - x
+                    if (ch === '(') inParen++; if (ch === ')') inParen--;
+                    if (ch === '{') inBrace++; if (ch === '}') inBrace--;
+                    if (ch === '[') inBrack++; if (ch === ']') inBrack--;
+                    if (inParen === 0 && inBrack === 0 && inBrace === 0 && /\d/.test(ch)) {
                         result += (9 - parseInt(ch)).toString();
                     } else {
-                        // 其他原樣輸出
                         result += ch;
                     }
                 }
-                // 在游標處插入文字
-                textarea.setRangeText(result, start, end, "end");
+                editor.setRangeText(result, start, end, "end");
                 break;
             }
-            default:
-                break;
         }
-
-        data["inote_" + settings.nowDiff] = $editor.val();
+        data["inote_" + settings.nowDiff] = editor.value;
         processChartData();
-
-        // 更新焦點
-        textarea.focus();
-        $menu.addClass('hide');
-    });
-
-    // 點其他地方關閉選單
-    $(document).on("click", function () {
-        $menu.addClass('hide');
+        editor.focus();
+        customMenu.classList.add('hide');
     });
 
     let data = typeof {} !== 'undefined' ? {} : '';
     for (let i = 1; i <= 7; i++) {
         const key = `inote_${i}`;
-        if (typeof data[key] === "undefined") {
-            data[key] = ""; // 可以換成你想要的預設值，比如 [] 或其他
-        }
+        if (typeof data[key] === "undefined") data[key] = "";
     }
-    data.getNowDiff = function (e) {
+
+    data.artist = 'artist'
+    data.title = 'Untitled';
+    data.first = settings.musicDelay.toString();
+
+    let getNowDiff = function (e) {
         return data['inote_' + e];
     }
 
-    const _sliderColor = ['#ff3232', '#FFFFFF60']; // Use const
-    const controls = { // Use const
-        'timeline': $("#timeline"),
-        'play': $('#playBtn'),
-        'stop': $('#stopBtn'),
-        'b10': $('#back10Btn'),
-        'b5': $('#back5Btn'),
-        'f5': $('#fast5Btn'),
-        'f10': $('#fast10Btn'),
+    const _sliderColor = ['#ff3232', '#FFFFFF60'];
+    const controls = {
+        'timeline': document.getElementById("timeline"),
+        'play': document.getElementById('playBtn'),
+        'stop': document.getElementById('stopBtn'),
+        'b10': document.getElementById('back10Btn'),
+        'b5': document.getElementById('back5Btn'),
+        'f5': document.getElementById('fast5Btn'),
+        'f10': document.getElementById('fast10Btn'),
     };
 
-    const bgm = $("#bgm"); // Use const
     const noteImages = getImgs();
 
-    // --- File Input Logic ---
     function handleFileUpload(accept, callback) {
-        $('.dropdownlist .file-menu').addClass("hide");
-        const fileInput = $('<input type="file" style="display: none;">').attr('accept', accept).removeAttr('capture'); // 防止 iOS 啟用麥克風
-        $('body').append(fileInput);
-        fileInput.on('change', function (event) {
+        allDropdowns.forEach(menu => menu.classList.add('hide'));
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.style.display = 'none';
+        fileInput.accept = accept;
+        document.body.appendChild(fileInput);
+        fileInput.addEventListener('change', function (event) {
             const file = event.target.files[0];
             if (file) {
                 callback(file, event);
             }
-            fileInput.remove(); // Clean up
+            fileInput.remove();
         });
         fileInput.click();
     }
 
-    $('.file-menu .a-btn2').on('click', function () { // Load Audio
-        handleFileUpload('audio/*', (file, e) => {
-            play.pauseBoth(controls.play);
-            if (bgm.attr('src')) URL.revokeObjectURL(bgm.attr('src')); // Revoke old URL
-            bgm.attr('src', '');
+    bgm.addEventListener('loadedmetadata', function () {
+        bgm.volume = soundSettings.musicVol * soundSettings.music;
+        const audioDurationMs = (bgm.duration + 1) * 1000;
+        maxTime = Math.max(maxTime, audioDurationMs);
+        controls.timeline.max = maxTime / 1000;
+        bgm.playbackRate = play.playbackSpeed;
+        updateTimelineVisual(currentTimelineValue);
 
-            // 步驟 1: 讀取檔案為 ArrayBuffer
-            const reader = new FileReader();
-            reader.onload = function (event) {
-                const arrayBuffer = event.target.result;
-
-                // 步驟 2: 使用 decodeAudioData 解碼 ArrayBuffer 以獲得 AudioBuffer
-                audioCtx.decodeAudioData(arrayBuffer, function (audioBuffer) {
-                    // 成功解碼後，您可以在這裡存取 audioBuffer
-                    // 您可以將其儲存在一個全域變數中以便後續使用
-                    fullAudioBuffer = audioBuffer; // 將 AudioBuffer 儲存在全域變數 (或您需要的範圍)
-                    console.log("AudioBuffer 成功載入:", fullAudioBuffer);
-
-                    // 現在您可以創建一個 AudioBufferSourceNode 來播放 AudioBuffer
-                    // 但是如果您仍然想使用 HTMLMediaElement，那麼這一步是額外且可選的。
-                    // 如果您想完全使用 Web Audio API 來播放，則需要創建 AudioBufferSourceNode。
-
-                    // 保持原有的 HTMLMediaElement 載入方式，因為您已經有 AnalyserNode 的連接
-                    const objectURL = URL.createObjectURL(file);
-                    bgm.attr('src', objectURL);
-                    bgm[0].load();
-
-                    bgm.off('loadedmetadata').on('loadedmetadata', function () { // Use .off to prevent multiple bindings
-                        bgm[0].volume = soundSettings.musicVol * soundSettings.music;
-                        // 使用 AudioBuffer 的 duration 代替 bgm[0].duration 可能更精確，
-                        // 但對於 HTMLMediaElement 而言，bgm[0].duration 已經足夠。
-                        const audioDurationMs = (bgm[0].duration + 1) * 1000;
-                        maxTime = Math.max(maxTime, audioDurationMs);
-                        controls.timeline.prop("max", maxTime / 1000);
-                        bgm[0].playbackRate = play.playbackSpeed;
-                        updateTimelineVisual(currentTimelineValue); // Update visual based on current time
-
-                        // START: 連接 BGM 到 AnalyserNode (這部分保持不變，因為它連接的是 HTMLMediaElement)
-                        if (!isAudioSourceConnected) {
-                            try {
-                                const source = audioCtx.createMediaElementSource(bgm[0]);
-                                source.connect(analyser);
-                                analyser.connect(audioCtx.destination);
-                                isAudioSourceConnected = true;
-                                console.log("Audio source connected to analyser.");
-                            } catch (e) {
-                                console.error("Error connecting media element source:", e);
-                            }
-                        }
-                        // END: 連接 BGM 到 AnalyserNode
-                    });
-
-                }, function (error) {
-                    console.error("解碼音訊資料時發生錯誤:", error);
-                });
-            };
-
-            reader.onerror = function (event) {
-                console.error("檔案讀取失敗:", event.target.error);
-            };
-
-            // 讀取檔案為 ArrayBuffer
-            reader.readAsArrayBuffer(file);
-        });
-    });
-
-    $('.file-menu .a-btn1').on('click', function () { // Load Chart
-        handleFileUpload('text/*', (file) => {
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                maidata = e.target.result;
-                data = parseMaidataToJson(maidata);
-                console.log("檔案內容：", data);
-                data.getNowDiff = function (e) {
-                    return data['inote_' + e];
-                }
-                settings.musicDelay = parseFloat(data.first ?? "0");
-                $editor.val(data.getNowDiff(settings.nowDiff)); // Update editor content
-                play.pauseBoth(controls.play);
-                bgm[0].pause();
-                currentTimelineValue = 0;
-                controls.timeline.val(0); // Reset slider position
-                updateTimelineVisual(0);
-                startTime = Date.now(); // Reset start time for paused state
-                processChartData();
-            };
-            reader.readAsText(file);
-        });
+        if (!isAudioSourceConnected) {
+            try {
+                const source = audioCtx.createMediaElementSource(bgm);
+                source.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                isAudioSourceConnected = true;
+                console.log("Audio source connected to analyser.");
+            } catch (e) {
+                console.error("Error connecting media element source:", e);
+            }
+        }
     });
 
     function loadDiff(diff, data) {
-        $editor.val(data.getNowDiff(diff));
+        editor.value = getNowDiff(diff);
         settings.nowDiff = diff;
         processChartData();
     }
 
-    $('.diff-menu .a-btn0').on('click', function () { // Load EASY
-        $('.dropdownlist .diff-menu').addClass("hide");
-        loadDiff(1, data);
-    });
-
-    $('.diff-menu .a-btn1').on('click', function () { // Load BASIC
-        $('.dropdownlist .diff-menu').addClass("hide");
-        loadDiff(2, data);
-    });
-
-    $('.diff-menu .a-btn2').on('click', function () { // Load ADVANCED
-        $('.dropdownlist .diff-menu').addClass("hide");
-        loadDiff(3, data);
-    });
-
-    $('.diff-menu .a-btn3').on('click', function () { // Load EXPERT
-        $('.dropdownlist .diff-menu').addClass("hide");
-        loadDiff(4, data);
-    });
-
-    $('.diff-menu .a-btn4').on('click', function () { // Load MASTER
-        $('.dropdownlist .diff-menu').addClass("hide");
-        loadDiff(5, data);
-    });
-
-    $('.diff-menu .a-btn5').on('click', function () { // Load RE:MASTER
-        $('.dropdownlist .diff-menu').addClass("hide");
-        loadDiff(6, data);
-    });
-
-    $('.diff-menu .a-btn6').on('click', function () { // Load ORIGINAL
-        $('.dropdownlist .diff-menu').addClass("hide");
-        loadDiff(7, data);
-    });
-
     function parseMaidataToJson(text) {
-        // 1. 先把所有換行統一成 "\n"
         const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-        // 2. 以 "\n" 分行
         const lines = normalized.split("\n");
-
         const result = {};
         let currentKey = null;
-        let buffer = ""; // 用來累積當前 key 的 value
+        let buffer = "";
 
         for (let rawLine of lines) {
-            // 保留原始換行位置：
-            const line = rawLine.trimEnd(); // 去除行尾可能多餘的空格或換行符
-
+            const line = rawLine.trimEnd();
             if (line.startsWith("&")) {
-                // （A）先把上一個 key + buffer 存到 result
                 if (currentKey !== null) {
-                    // 去除開頭可能的 '\n'
                     result[currentKey] = buffer.replace(/^\n/, "");
                 }
-                // （B）解析新的一行：&key=value
-                //     比如 "&title=请设置标题" → key="title", value="请设置标题"
                 const eqIndex = line.indexOf("=");
                 if (eqIndex > 0) {
-                    currentKey = line.substring(1, eqIndex);       // 看 "&" 與 "=" 之間當作 key
-                    const rest = line.substring(eqIndex + 1);      // "=" 後面到行尾當作初始 value
-                    buffer = rest.length > 0 ? rest : "";          // 如果有文字就放到 buffer，不然就空字串
+                    currentKey = line.substring(1, eqIndex);
+                    buffer = line.substring(eqIndex + 1);
                 } else {
-                    // 如果沒有 "="（極少見），就把整行（去掉 &）當 key，value 先留空
                     currentKey = line.substring(1);
                     buffer = "";
                 }
             } else {
-                // 這一行不是以 "&" 開頭，代表是「繼續累積到目前 currentKey 的 buffer」。
-                // 我們要忠於原始文字，保留換行，所以先把 "\n" 加回去，再放本行內容：
-                if (line.length > 0) {
-                    buffer += "\n" + line;
-                } else {
-                    // 如果本行是空白行，也保留一個換行符
-                    buffer += "\n";
-                }
+                buffer += "\n" + (line.length > 0 ? line : "");
             }
         }
-
-        // 最後一個 key 也要收尾
         if (currentKey !== null) {
             result[currentKey] = buffer.replace(/^\n/, "");
         }
-
         for (let i = 1; i <= 7; i++) {
-            const key = `inote_${i}`;
-            if (typeof result[key] === "undefined") {
-                result[key] = ""; // 可以換成你想要的預設值，比如 [] 或其他
+            if (typeof result[`inote_${i}`] === "undefined") {
+                result[`inote_${i}`] = "";
             }
         }
-
         return result;
     }
 
-    $('.sett-menu-button').on('click', function () {
-        $('.dropdownlist .file-menu').addClass("hide");
+    document.querySelector('.sett-menu-button').addEventListener('click', function () {
+        allDropdowns.forEach(menu => menu.classList.add('hide'));
         generateSettingsForm();
-        $('#settings-popup').removeClass("hide");
-        $('#settings-overlay').removeClass("hide");
+        document.getElementById('settings-popup').classList.remove("hide");
+        document.getElementById('settings-overlay').classList.remove("hide");
         inSettings = true;
     });
 
     function generateSettingsForm() {
-        const $form = $('#settings-form');
-        $form.empty();
+        const form = document.getElementById('settings-form');
+        form.innerHTML = '';
 
         function createField(config, groupKey) {
-            const $fieldContainer = $('<div>').addClass('setting-field');
+            const fieldContainer = document.createElement('div');
+            fieldContainer.className = 'setting-field';
             const fieldId = `setting-${groupKey}-${config.key}`;
-            const $label = $('<label>').attr('for', fieldId).text(config.label + ':');
-            let $input;
+            const label = document.createElement('label');
+            label.htmlFor = fieldId;
+            label.textContent = config.label + ':';
+            let input;
             const currentValue = config.target[config.key];
 
             if (config.type === 'boolean') {
-                $input = $('<input type="checkbox">').prop('checked', currentValue);
-                $label.css('margin-right', '5px'); // Keep for style
-                $fieldContainer.append($input).prepend($label); // Checkbox first for alignment
+                input = document.createElement('input');
+                input.type = 'checkbox';
+                input.checked = currentValue;
+                label.style.marginRight = '5px';
+                fieldContainer.appendChild(label);
+                fieldContainer.appendChild(input);
             } else if (config.type === 'number') {
-                $input = $('<input type="number">').val(currentValue);
-                if (config.step !== undefined) $input.attr('step', config.step);
-                if (config.min !== undefined) $input.attr('min', config.min);
-                if (config.max !== undefined) $input.attr('max', config.max);
-                $fieldContainer.append($label).append($input);
+                input = document.createElement('input');
+                input.type = 'number';
+                input.value = currentValue;
+                if (config.step !== undefined) input.step = config.step;
+                if (config.min !== undefined) input.min = config.min;
+                if (config.max !== undefined) input.max = config.max;
+                fieldContainer.appendChild(label);
+                fieldContainer.appendChild(input);
             }
-            // Add other types if needed
 
-            if ($input) {
-                $input.attr('id', fieldId).attr('name', config.key);
-                $form.append($fieldContainer);
+            if (input) {
+                input.id = fieldId;
+                input.name = config.key;
+                form.appendChild(fieldContainer);
             }
         }
-        $form.append($('<h3>').text('基本').css('margin-top', 0));
+        const h3Game = document.createElement('h3');
+        h3Game.textContent = '基本';
+        h3Game.style.marginTop = '0';
+        form.appendChild(h3Game);
         settingsConfig.game.forEach(config => createField(config, 'game'));
-        $form.append($('<hr>'));
-        $form.append($('<h3>').text('音效設定'));
+        form.appendChild(document.createElement('hr'));
+        const h3Sound = document.createElement('h3');
+        h3Sound.textContent = '音效設定';
+        form.appendChild(h3Sound);
         settingsConfig.sound.forEach(config => createField(config, 'sound'));
     }
 
-    $('#save-settings-btn, #cancel-settings-btn').on('click', function () {
-        if (this.id === "save-settings-btn") {
+    function handleSettingsClose(save) {
+        if (save) {
             try {
                 ['game', 'sound'].forEach(groupKey => {
                     settingsConfig[groupKey].forEach(config => {
-                        const fieldId = `setting-${groupKey}-${config.key}`;
-                        const $input = $(`#${fieldId}`);
-                        if (!$input.length) return;
+                        const input = document.getElementById(`setting-${groupKey}-${config.key}`);
+                        if (!input) return;
 
                         let newValue;
                         if (config.type === 'boolean') {
-                            newValue = $input.is(':checked');
+                            newValue = input.checked;
                         } else if (config.type === 'number') {
-                            newValue = parseFloat($input.val());
+                            newValue = parseFloat(input.value);
                             if (isNaN(newValue)) {
-                                console.warn(`Invalid number for ${config.label}: ${$input.val()}. Using original value.`);
+                                console.warn(`Invalid number for ${config.label}: ${input.value}. Using original value.`);
                                 newValue = config.target[config.key];
                             }
                         } else {
-                            newValue = $input.val();
+                            newValue = input.value;
                         }
                         config.target[config.key] = newValue;
                     });
                 });
-                // console.log("遊戲設定已儲存：", settings);
-                // console.log("音效設定已儲存：", soundSettings);
             } catch (e) {
                 alert("儲存設定時發生錯誤！請檢查輸入。");
                 console.error("儲存設定錯誤:", e);
                 return;
             }
         }
-        $('#settings-popup').addClass("hide");
-        $('#settings-overlay').addClass("hide");
+        document.getElementById('settings-popup').classList.add("hide");
+        document.getElementById('settings-overlay').classList.add("hide");
         inSettings = false;
-        if (bgm[0]) {
-            bgm[0].volume = soundSettings.musicVol * soundSettings.music;
+        if (bgm) {
+            bgm.volume = soundSettings.musicVol * soundSettings.music;
             if (isFinite(play.playbackSpeed) && play.playbackSpeed > 0) {
-                bgm[0].playbackRate = play.playbackSpeed;
+                bgm.playbackRate = play.playbackSpeed;
             } else {
                 play.playbackSpeed = 1;
-                bgm[0].playbackRate = 1;
+                bgm.playbackRate = 1;
             }
             startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
         }
-    });
+    }
+
+    document.getElementById('save-settings-btn').addEventListener('click', () => handleSettingsClose(true));
+    document.getElementById('cancel-settings-btn').addEventListener('click', () => handleSettingsClose(false));
 
     _updCanvasRes();
-    controls.play.text(icons[0 + play.btnPause]);
-    controls.stop.text(icons[2]);
-    controls.b10.text(icons[3]);
-    controls.b5.text(icons[4]);
-    controls.f5.text(icons[5]);
-    controls.f10.text(icons[6]);
-    controls.timeline.prop("max", maxTime / 1000);
+    controls.play.textContent = icons[0 + play.btnPause];
+    controls.stop.textContent = icons[2];
+    controls.b10.textContent = icons[3];
+    controls.b5.textContent = icons[4];
+    controls.f5.textContent = icons[5];
+    controls.f10.textContent = icons[6];
+    controls.timeline.max = maxTime / 1000;
 
-    function processChartData() { // Renamed from doSomethingToDataIThink
-        const temp = simai_decode(data.getNowDiff(settings.nowDiff));
+    function processChartData() {
+        const temp = simai_decode(getNowDiff(settings.nowDiff));
         play.combo = 0;
         play.score = 0;
-        notes = temp.notes, notesData = temp.data, marks = temp.marks; // This now returns notes with pre-calculated path objects if possible
+        notes = temp.notes;
+        notesData = temp.data;
+        marks = temp.marks;
         triggered = [];
-        let newMaxTime = 1000; // Local variable for calculation
+        let newMaxTime = 1000;
 
-        // Pre-process notes for "double" checks and other render-time optimizations
-        // This is a placeholder. Actual logic depends on how "double" is defined.
-        // Example: Mark notes that occur at the exact same time for different rendering.
         const timeMap = new Map();
         notes.forEach(note => {
             if (!note) return;
@@ -713,7 +726,7 @@ $(document).ready(function () {
                 note.isDoubleSlide = notesAtSameTime.filter((n, indx) => n !== note && n.slide && (n.chainTarget != note.chainTarget && note.chainTarget != indx)).length > 0;
             } else if (note.touch) {
                 note.isDoubleTouch = notesAtSameTime.filter(n => n !== note && !n.starTime).length > 0;
-            } else { // Tap or Hold
+            } else {
                 note.isDoubleTapHold = notesAtSameTime.filter(n => n !== note && !n.slide).length > 0;
             }
 
@@ -723,245 +736,191 @@ $(document).ready(function () {
             if (note.touchTime) noteEndTime = Math.max(noteEndTime, note.time + note.touchTime * 1000);
             newMaxTime = Math.max(newMaxTime, noteEndTime);
 
-            if (note.holdTime || note.touchTime || note.slide) { // Simplified condition
-                triggered.push([false, false]); // For notes with duration
+            if (note.holdTime || note.touchTime || note.slide) {
+                triggered.push([false, false]);
             } else {
-                triggered.push(false); // For tap/star notes
+                triggered.push(false);
             }
-
-            console.log(note, newMaxTime);
         });
 
-        maxTime = settings.musicDelay * 1000 + newMaxTime + 1000; // Add 1s buffer
-        if (bgm[0].duration) {
-            maxTime = Math.max(maxTime, (bgm[0].duration + 1) * 1000);
+        maxTime = settings.musicDelay * 1000 + newMaxTime + 1000;
+        if (bgm.duration) {
+            maxTime = Math.max(maxTime, (bgm.duration + 1) * 1000);
         }
         maxTime = isNaN(maxTime) ? 1000 : maxTime;
-        controls.timeline.prop("max", maxTime / 1000);
+        controls.timeline.max = maxTime / 1000;
         if (currentTimelineValue > maxTime) {
             currentTimelineValue = maxTime;
         }
         play.pauseBoth(controls.play);
-        bgm[0].pause();
-        //currentTimelineValue = 0; // Reset timeline value
-        controls.timeline.val(currentTimelineValue); // Reset slider position
+        bgm.pause();
+        controls.timeline.value = currentTimelineValue;
         updateTimelineVisual(currentTimelineValue);
-        startTime = Date.now(); // Reset start time for paused state
+        startTime = Date.now();
     }
 
-    // 先定义一个 handler，方便 add/remove
     function beforeUnloadHandler(e) {
         e.preventDefault();
-        // 这行告诉浏览器“弹出确认对话框”
         e.returnValue = "";
     }
 
-    // 在初始化时，不要直接绑定
-    // let isDirty = false; // 如果你还想单纯用标记方式
-
-    $editor.on("input", debounce(function () {
-        // 把内容写入 data
-        data["inote_" + settings.nowDiff] = $editor.val();
+    editor.addEventListener("input", debounce(function () {
+        data["inote_" + settings.nowDiff] = editor.value;
         processChartData();
-
-        if ($editor.val() !== "") {
-            // 当有内容时，绑定提示
+        if (editor.value !== "") {
             window.addEventListener("beforeunload", beforeUnloadHandler);
         } else {
-            // 编辑框清空了，就不需要再提示
             window.removeEventListener("beforeunload", beforeUnloadHandler);
         }
     }, 500));
 
     function updateTimelineVisual(value) {
-        const min = parseFloat(controls.timeline.prop('min')) || 0;
-        const max = parseFloat(controls.timeline.prop('max')) || 1;
+        const min = parseFloat(controls.timeline.min) || 0;
+        const max = parseFloat(controls.timeline.max) || 1;
         const percentage = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
-        controls.timeline.css('background', `linear-gradient(to right ,${_sliderColor[0]} 0%,${_sliderColor[0]} ${percentage}%,${_sliderColor[1]} ${percentage}%, ${_sliderColor[1]} 100%)`);
+        controls.timeline.style.background = `linear-gradient(to right ,${_sliderColor[0]} 0%,${_sliderColor[0]} ${percentage}%,${_sliderColor[1]} ${percentage}%, ${_sliderColor[1]} 100%)`;
     }
 
-    controls.timeline[0].addEventListener("touchstart", function () {
+    function onTimelineInteractionStart() {
         play.pause = true;
         if (!play.btnPause) {
-            bgm[0].pause();
+            bgm.pause();
         }
-    }, { passive: true }); // 明確標示 passive
+    }
 
-    controls.timeline
-        .on("mousedown", function (e) {
-            play.pause = true;
-            if (!play.btnPause) {
-                bgm[0].pause();
-            }
-        })
-        .on("mouseup touchend", function (e) {
-            $editor.trigger('focus');
-            bgm[0].volume = soundSettings.musicVol * soundSettings.music;
-            currentTimelineValue = parseFloat($(this).val());
+    function onTimelineInteractionEnd(e) {
+        editor.focus();
+        bgm.volume = soundSettings.musicVol * soundSettings.music;
+        currentTimelineValue = parseFloat(e.target.value);
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+        play.pause = play.btnPause;
+
+        bgm.playbackRate = play.playbackSpeed;
+        if (!play.pause) {
+            bgm.currentTime = currentTimelineValue;
+            bgm.play().catch(e => console.error("BGM play error:", e));
+        } else {
+            bgm.currentTime = currentTimelineValue;
+        }
+    }
+
+    controls.timeline.addEventListener("touchstart", onTimelineInteractionStart, { passive: true });
+    controls.timeline.addEventListener("mousedown", onTimelineInteractionStart);
+    controls.timeline.addEventListener("touchend", onTimelineInteractionEnd);
+    controls.timeline.addEventListener("mouseup", onTimelineInteractionEnd);
+
+    controls.timeline.addEventListener("input", function (e) {
+        currentTimelineValue = parseFloat(e.target.value);
+        if (play.pause) {
             startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
-            play.pause = play.btnPause;
+        }
 
-            bgm[0].playbackRate = play.playbackSpeed;
-            if (!play.pause) {
-                bgm[0].currentTime = currentTimelineValue;
-                bgm[0].play().catch(e => console.error("BGM play error:", e));
-            } else {
-                bgm[0].currentTime = currentTimelineValue;
-                // bgm[0].pause(); // Already paused or will be by master pause
-            }
-        })
-        .on("input", function (e) {
-            currentTimelineValue = parseFloat($(this).val());
-            if (play.pause) { // Update startTime if paused to reflect drag
-                startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
-            }
+        if (settings.followText) {
+            const b = editor.value.split(",");
+            const a = b.slice(0, play.nowIndex + 1).toString().length;
+            editor.setSelectionRange(a, a);
+        }
+        updateTimelineVisual(currentTimelineValue);
+    });
 
-            if (settings.followText) {
-                //$editor.trigger('focus');
-                const b = textarea.value.split(",");
-                const a = b.slice(0, play.nowIndex + 1).toString().length;
-                textarea.setSelectionRange(a, a);
-            }
-            updateTimelineVisual(currentTimelineValue);
-        });
-
-    controls.play.click(function (e) {
-        bgm[0].volume = soundSettings.musicVol * soundSettings.music;
+    controls.play.addEventListener('click', function (e) {
+        bgm.volume = soundSettings.musicVol * soundSettings.music;
         play.btnPause = !play.btnPause;
         play.pause = play.btnPause;
-        $(this).text(icons[0 + play.btnPause]);
-        currentTimelineValue = parseFloat(controls.timeline.val()); // Get current value from slider
-        bgm[0].playbackRate = play.playbackSpeed;
+        this.textContent = icons[0 + play.btnPause];
+        currentTimelineValue = parseFloat(controls.timeline.value);
+        bgm.playbackRate = play.playbackSpeed;
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
 
         if (!play.pause) {
-            bgm[0].currentTime = currentTimelineValue;
-            bgm[0].play().catch(e => null/*console.error("BGM play error:", e)*/);
+            bgm.currentTime = currentTimelineValue;
+            bgm.play().catch(e => null);
         } else {
-            bgm[0].pause();
+            bgm.pause();
         }
     });
 
-    controls.stop.click(function (e) {
+    controls.stop.addEventListener('click', function () {
         play.pauseBoth(controls.play);
-        currentTimelineValue = 0; // Get current value from slider
+        currentTimelineValue = 0;
         startTime = Date.now();
-
-        bgm[0].pause();
-        controls.timeline.val(0);
+        bgm.pause();
+        controls.timeline.value = 0;
         updateTimelineVisual(0);
     });
 
-    controls.b10.click(function (e) {
-        currentTimelineValue -= 10; // Get current value from slider
-        currentTimelineValue = Math.max(currentTimelineValue, 0);
+    function seek(seconds) {
+        const maxVal = maxTime / 1000;
+        currentTimelineValue = Math.max(0, Math.min(currentTimelineValue + seconds, maxVal));
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
 
-        bgm[0].playbackRate = play.playbackSpeed;
-        bgm[0].currentTime = currentTimelineValue;
-        if (!play.pause) {
-            bgm[0].play().catch(e => console.error("BGM play error:", e));
+        bgm.playbackRate = play.playbackSpeed;
+        bgm.currentTime = currentTimelineValue;
+        if (!play.btnPause) { // Keep playing if it was playing
+            bgm.play().catch(e => console.error("BGM play error:", e));
         }
 
-        controls.timeline.val(currentTimelineValue);
+        controls.timeline.value = currentTimelineValue;
         updateTimelineVisual(currentTimelineValue);
-    });
+    }
 
-    controls.b5.click(function (e) {
-        currentTimelineValue -= 5; // Get current value from slider
-        currentTimelineValue = Math.max(currentTimelineValue, 0);
-        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
-
-        bgm[0].playbackRate = play.playbackSpeed;
-        bgm[0].currentTime = currentTimelineValue;
-        if (!play.pause) {
-            bgm[0].play().catch(e => console.error("BGM play error:", e));
+    controls.b10.addEventListener('click', () => seek(-10));
+    controls.b5.addEventListener('click', () => seek(-5));
+    controls.f5.addEventListener('click', () => seek(5));
+    controls.f10.addEventListener('click', () => {
+        const wasPaused = play.pause;
+        play.pause = true; // Temporarily pause for seeking
+        seek(10);
+        play.pause = play.btnPause; // Restore state
+        if (!play.pause && wasPaused) {
+            bgm.play().catch(e => console.error("BGM play error:", e));
         }
-
-        controls.timeline.val(currentTimelineValue);
-        updateTimelineVisual(currentTimelineValue);
-    });
-
-    controls.f5.click(function (e) {
-        currentTimelineValue += 5; // Get current value from slider
-        currentTimelineValue = Math.min(currentTimelineValue, maxTime / 1000);
-        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
-
-        bgm[0].playbackRate = play.playbackSpeed;
-        bgm[0].currentTime = currentTimelineValue;
-        if (!play.pause) {
-            bgm[0].play().catch(e => console.error("BGM play error:", e));
-        }
-
-        controls.timeline.val(currentTimelineValue);
-        updateTimelineVisual(currentTimelineValue);
-    });
-
-    controls.f10.click(function (e) {
-        play.pause = true;
-        currentTimelineValue += 10; // Get current value from slider
-        currentTimelineValue = Math.min(currentTimelineValue, maxTime / 1000);
-        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
-
-        bgm[0].playbackRate = play.playbackSpeed;
-        bgm[0].currentTime = currentTimelineValue;
-        play.pause = play.btnPause;
-        if (!play.pause) {
-            bgm[0].play().catch(e => console.error("BGM play error:", e));
-        }
-
-        controls.timeline.val(currentTimelineValue);
-        updateTimelineVisual(currentTimelineValue);
     });
 
 
-    if (masterExample) {
-        $editor.val(masterExample);
+    if (typeof masterExample !== 'undefined' && masterExample) {
+        editor.value = masterExample;
         data["inote_" + settings.nowDiff] = masterExample;
         processChartData();
     }
 
     startTime = Date.now();
-    updateTimelineVisual(0); // Initial timeline visual
+    updateTimelineVisual(0);
 
-    $(window).on("resize", debounce(function () { // Debounce resize
-        doc_width = $(document).width();
-        doc_height = $(document).height();
+    window.addEventListener("resize", debounce(function () {
+        doc_width = document.documentElement.clientWidth;
+        doc_height = document.documentElement.clientHeight;
         _updCanvasRes();
     }, 30));
 
     function _updCanvasRes() {
-        ctx.canvas.width = doc_width * 2 * ($editor.position().left / $("body").width());
-        const controlsHeight = $('.controls').outerHeight(true) || 0; // Use outerHeight(true) for margins
-        const actionsHeight = $('.actions').outerHeight(true) || 0;
-        ctx.canvas.height = Math.max(150, (doc_height - (actionsHeight)) * 2); // Ensure min height, adjust multiplier if needed
+        const editorLeft = editor.getBoundingClientRect().left;
+        const bodyWidth = document.body.clientWidth;
+        ctx.canvas.width = doc_width * 2 * ((editorLeft == 0 ? bodyWidth : editorLeft) / bodyWidth);
 
-        // START: 新增 audioRender 畫布尺寸更新
-        const audioCanvas = $("#audioRender")[0];
+        const controlsEl = document.querySelector('.controls');
+        const actionsEl = document.querySelector('.actions');
+        // Get heights only if elements are visible
+        const controlsHeight = controlsEl ? controlsEl.offsetHeight : 0;
+        const actionsHeight = actionsEl ? actionsEl.offsetHeight : 0;
+        ctx.canvas.height = Math.max(150, (doc_height - actionsHeight) * 2);
+
+        const audioCanvas = document.getElementById("audioRender");
         if (audioCanvas) {
-            audioCanvas.width = ctx.canvas.width; // 讓寬度與主畫布一致
-            audioCanvas.height = 100; // CSS 中是 100px，高 DPI 螢幕需要乘2
+            audioCanvas.width = ctx.canvas.width;
+            audioCanvas.height = 100;
         }
-        // END: 新增 audioRender 畫布尺寸更新
     }
 
-    // count method
-    // https://stackoverflow.com/questions/4787431/how-do-i-check-framerate-in-javascript
-    var filterStrength = 20;
-    var frameTime = 0, lastLoop = new Date, thisLoop;
+    let filterStrength = 20;
+    let frameTime = 0, lastLoop = new Date(), thisLoop;
 
-    // START: 新增 audioRender 繪圖函數
     function drawAudioWaveform() {
         const zoom = 200;
-
-        const audioCanvas = $("#audioRender")[0];
+        const audioCanvas = document.getElementById("audioRender");
+        if (!audioCanvas) return;
         const audioCtx2d = audioCanvas.getContext("2d");
 
-        // 取得 AudioBuffer 中的 PCM 資料 (以左聲道為例)
-
-        // ---接下來是繪圖邏輯，與之前類似，但資料來源是 dataSlice---
-
-        // (注意: pcmData 的值是 -1.0 到 1.0 之間的浮點數，而不是 0-255 的整數)
         audioCanvas.lineJoin = settings.roundStroke ? 'round' : 'butt';
 
         audioCtx2d.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
@@ -977,14 +936,10 @@ $(document).ready(function () {
 
             for (let i = -a; i < a; i++) {
                 const data = pcmData[(Math.floor(i + currentTimelineValue * sampleRate / zoom)) * zoom];
-                // 將 -1.0 到 1.0 的值應到畫布高度
                 const y = (data + 1) * audioCanvas.height / 2;
                 const x = i + a;
-                if (i === 0) {
-                    audioCtx2d.moveTo(x, y);
-                } else {
-                    audioCtx2d.lineTo(x, y);
-                }
+                if (i === 0) audioCtx2d.moveTo(x, y);
+                else audioCtx2d.lineTo(x, y);
             }
             audioCtx2d.stroke();
         }
@@ -1005,8 +960,7 @@ $(document).ready(function () {
                 }
                 case "slice": {
                     let t = (find.time - mark.time) / (4000 * 60 / (mark.slice * mark.bpm));
-                    if (t > 10000) t = 10000;
-                    else t = Math.round(t);
+                    t = t > 10000 ? 10000 : Math.round(t);
                     for (let j = 0; j < t; j++) {
                         const x = a + (mark.time / 1000 + j * (60 / ((mark.slice / 4) * mark.bpm)) - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
                         if (x > audioCanvas.width || x < 0) continue;
@@ -1026,42 +980,27 @@ $(document).ready(function () {
             const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
             const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;
             if (x < audioCanvas.width && x > 0 - ((note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) {
-                audioCtx2d.strokeStyle = "#FF569B";
-                if (note.star || note.touch || note.slide) audioCtx2d.strokeStyle = '#0089F4';
-                if (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide) audioCtx2d.strokeStyle = "#FFD900";
-                if (note.break) audioCtx2d.strokeStyle = '#FF6C0C';
+                audioCtx2d.strokeStyle = note.break ? '#FF6C0C' : (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide ? "#FFD900" : (note.star || note.touch || note.slide ? '#0089F4' : "#FF569B"));
                 audioCtx2d.lineWidth = 3;
                 audioCtx2d.beginPath();
                 if (note.touch) {
-                    audioCtx2d.moveTo(x + 3, y + 3);
-                    audioCtx2d.lineTo(x + 3, y - 3);
-                    audioCtx2d.lineTo(x - 3, y - 3);
-                    audioCtx2d.lineTo(x - 3, y + 3);
+                    audioCtx2d.rect(x - 3, y - 3, 6, 6);
                 } else if (note.slide) {
                     audioCtx2d.lineWidth = 6;
                     audioCtx2d.setLineDash([8, 8]);
-                    audioCtx2d.moveTo(x + note.delay * sampleRate / zoom,
-                        (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height);
-                    audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom,
-                        (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height);
+                    const startY = (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height;
+                    audioCtx2d.moveTo(x + note.delay * sampleRate / zoom, startY);
+                    audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom, startY);
                 } else if (note.star) {
-                    const outerRadius = 5; // 五角星外圈半徑
-                    const innerRadius = 2; // 五角星內圈半徑
-                    const numPoints = 5; // 五角星有5個點
-
+                    const outerRadius = 5, innerRadius = 2, numPoints = 5;
                     for (let i = 0; i < numPoints * 2; i++) {
                         const radius = i % 2 === 0 ? outerRadius : innerRadius;
-                        const angle = Math.PI / numPoints * i - Math.PI / 2; // -Math.PI/2 讓星星尖端朝上
+                        const angle = Math.PI / numPoints * i - Math.PI / 2;
                         const currentX = x + radius * Math.cos(angle);
                         const currentY = y + radius * Math.sin(angle);
-
-                        if (i === 0) {
-                            audioCtx2d.moveTo(currentX, currentY);
-                        } else {
-                            audioCtx2d.lineTo(currentX, currentY);
-                        }
+                        if (i === 0) audioCtx2d.moveTo(currentX, currentY);
+                        else audioCtx2d.lineTo(currentX, currentY);
                     }
-                    audioCtx2d.closePath(); // 閉合路徑以完成五角星
                 } else {
                     if (note.holdTime != null) {
                         audioCtx2d.lineWidth = 6;
@@ -1084,62 +1023,63 @@ $(document).ready(function () {
         audioCtx2d.lineTo(a, audioCanvas.height);
         audioCtx2d.stroke();
     }
-    // END: 新增 audioRender 繪圖函數
 
     function getScrollTopToCaret(textarea, position) {
         const text = textarea.value.substring(0, position);
-
         const div = document.createElement('div');
-        const pre = document.createElement('pre');
-
         const style = window.getComputedStyle(textarea);
-
-        // 設定相同樣式
-        for (const prop of [
-            'fontFamily', 'fontSize', 'lineHeight', 'padding', 'border', 'boxSizing',
-            'whiteSpace', 'letterSpacing', 'wordWrap', 'overflowWrap', 'width'
-        ]) {
-            div.style[prop] = style[prop];
-        }
-
+        ['fontFamily', 'fontSize', 'lineHeight', 'padding', 'border', 'boxSizing', 'whiteSpace', 'letterSpacing', 'wordWrap', 'overflowWrap', 'width']
+            .forEach(prop => div.style[prop] = style[prop]);
         div.style.position = 'absolute';
         div.style.visibility = 'hidden';
         div.style.whiteSpace = 'pre-wrap';
         div.style.wordWrap = 'break-word';
-
-        // 模擬內容
         div.textContent = text;
-
         document.body.appendChild(div);
-
         const caretY = div.offsetHeight;
         document.body.removeChild(div);
-
         return caretY - textarea.clientHeight / 2;
     }
 
     function update() {
         if (!play.pause) {
             const newTimelineVal = ((Date.now() - startTime) / 1000) * play.playbackSpeed;
-            // Only update if the value has changed significantly
             if (Math.abs(currentTimelineValue - newTimelineVal) > 0.01) {
                 currentTimelineValue = newTimelineVal > maxTime / 1000 ? maxTime / 1000 : newTimelineVal;
-                controls.timeline.val(currentTimelineValue); // Update slider position
-                updateTimelineVisual(currentTimelineValue); // Update visual
+                controls.timeline.value = currentTimelineValue;
+                updateTimelineVisual(currentTimelineValue);
                 if (newTimelineVal > maxTime / 1000) {
                     play.pauseBoth(controls.play);
                 }
             }
         }
 
-        const t = (currentTimelineValue - settings.musicDelay) * 1000; // Use JS variable
+        const t = (currentTimelineValue - settings.musicDelay) * 1000;
         const sVal = 1000000 / notesData.val;
-        const bVal = (notesData.breakCounts == 0 ? 0 : 10000) / notesData.breakCounts;
+        const bVal = (notesData.breakCounts === 0 ? 0 : 10000) / notesData.breakCounts;
 
         if (notes && notes.length > 0 && sfxReady) {
+            // --- 修正開始 ---
+            let foundIndexForThisFrame = false;
+            // 如果當前時間比譜面中第一個音符還早，就將 index 設為 0
+            if (notes.length > 0 && notes[0] && t < notes[0].time) {
+                play.nowIndex = 0;
+            }
+            // --- 修正結束 ---
+
             for (let i = notes.length - 1; i >= 0; i--) {
                 const note = notes[i];
                 if (!note || note.invalid) continue;
+
+                // --- 修正開始 ---
+                // 這個判斷式會在每一幀重新尋找正確的 nowIndex。
+                // 因為迴圈是從後往前跑，所以第一個時間點小於等於當前時間的音符，就是正確的當前音符。
+                // 我們只在找到第一個符合條件的音符時更新 index。
+                if (!foundIndexForThisFrame && t >= note.time && !note.slide) {
+                    play.nowIndex = note.index ?? play.nowIndex;
+                    foundIndexForThisFrame = true; // 標記本幀已找到，防止被更早的音符覆蓋
+                }
+                // --- 修正結束 ---
 
                 const _t_note_relative = (t - note.time) / 1000;
 
@@ -1152,13 +1092,13 @@ $(document).ready(function () {
                             if (!triggered[i][0]) {
                                 _playEffect(note);
                                 triggered[i][0] = true;
-                                play.nowIndex = note.index ?? play.nowIndex;
+                                // play.nowIndex = note.index ?? play.nowIndex; // 由上方新邏輯取代
                             }
                         } else { // Tap/Star note
                             if (!triggered[i]) {
                                 _playEffect(note);
                                 triggered[i] = true;
-                                play.nowIndex = note.index ?? play.nowIndex;
+                                // play.nowIndex = note.index ?? play.nowIndex; // 由上方新邏輯取代
                                 play.combo++;
                                 if (note.break) { play.score += sVal * 5 + bVal; }
                                 else { play.score += sVal; }
@@ -1176,8 +1116,6 @@ $(document).ready(function () {
                             }
                             triggered[i] = false;
                         }
-                        //play.nowIndex = note.index ?? play.nowIndex;
-                        //console.log(note, play.nowIndex);
                     }
                     // Hold (end) logic
                     if (note.holdTime && _t_note_relative >= note.holdTime) { // Use note.holdTime directly
@@ -1197,121 +1135,102 @@ $(document).ready(function () {
                         triggered[i][1] = false;
                     }
                 }
-                // Slide logic (sound typically at start, if any)
-                else if (note.slide) {
-                    // Slides might not have a specific sound here, but visual trigger
+                // (後續的 slide 和 touch 邏輯保持不變，因為它們更新 index 的部分也被新邏輯取代了)
+                // ... [ 其餘的 slide 和 touch 判斷程式碼 ] ...
+                else if (note.slide) { // Slide
                     if (_t_note_relative >= note.delay) {
-                        if (Array.isArray(triggered[i])) { // Touch Hold note
-                            if (!triggered[i][0]) {
-                                if (!note.chain || note.firstOne) _playEffect(note);
-                                triggered[i][0] = true;
-                                play.nowIndex = note.index ?? play.nowIndex;
-                            }
+                        if (Array.isArray(triggered[i]) && !triggered[i][0]) {
+                            if (!note.chain || note.firstOne) _playEffect(note);
+                            triggered[i][0] = true;
+                            //play.nowIndex = note.index ?? play.nowIndex;
                         }
-                    } else {
-                        if (Array.isArray(triggered[i])) {
-                            triggered[i][0] = false;
-                        }
+                    } else if (Array.isArray(triggered[i])) {
+                        triggered[i][0] = false;
                     }
-                    // Slide (end) logic
-                    if (note.slideTime && _t_note_relative >= note.slideTime + note.delay) {
+
+                    if (note.slideTime && _t_note_relative >= note.slideTime + note.delay) { // Slide End
                         if (Array.isArray(triggered[i]) && triggered[i][0] && !triggered[i][1] && !settings.holdEndNoSound) {
                             if (!note.chain || note.lastOne) {
                                 _playEffect(note, true);
                                 play.combo++;
-                                if (note.break) { play.score += sVal * 5 + bVal; }
-                                else { play.score += sVal * 3; }
+                                play.score += note.break ? (sVal * 5 + bVal) : (sVal * 3);
                             }
                             triggered[i][1] = true;
                         }
-                    } else if (note.slideTime && Array.isArray(triggered[i])) {
-                        if (triggered[i][1]) {
-                            if (!note.chain || note.lastOne) {
-                                play.combo--;
-                                if (note.break) { play.score -= sVal * 5 + bVal; }
-                                else { play.score -= sVal * 3; }
-                            }
+                    } else if (note.slideTime && Array.isArray(triggered[i]) && triggered[i][1]) { // Reset Slide End
+                        if (!note.chain || note.lastOne) {
+                            play.combo--;
+                            play.score -= note.break ? (sVal * 5 + bVal) : (sVal * 3);
                         }
                         triggered[i][1] = false;
                     }
-                }
-                // Touch logic
-                else if (note.touch) {
+
+                } else if (note.touch) { // Touch
                     if (_t_note_relative >= 0) {
-                        if (Array.isArray(triggered[i])) { // Touch Hold note
+                        if (Array.isArray(triggered[i])) { // Touch Hold
                             if (!triggered[i][0]) {
                                 _playEffect(note);
                                 triggered[i][0] = true;
-                                play.nowIndex = note.index ?? play.nowIndex;
+                                //play.nowIndex = note.index ?? play.nowIndex;
                             }
-                        } else { // Touch Tap note
+                        } else { // Touch Tap
                             if (!triggered[i]) {
                                 _playEffect(note);
                                 play.combo++;
                                 play.score += sVal;
                                 triggered[i] = true;
-                                play.nowIndex = note.index ?? play.nowIndex;
+                                //play.nowIndex = note.index ?? play.nowIndex;
                             }
                         }
-                    } else {
+                    } else { // Reset
                         if (Array.isArray(triggered[i])) {
                             triggered[i][0] = false;
-                        }
-                        else {
-                            if (triggered[i]) {
-                                play.combo--;
-                                play.score -= sVal;
-                            }
+                        } else if (triggered[i]) {
                             triggered[i] = false;
+                            play.combo--;
+                            play.score -= sVal;
                         }
                     }
-                    // Touch Hold (end) logic
-                    if (note.touchTime && _t_note_relative >= note.touchTime) {
+                    if (note.touchTime && _t_note_relative >= note.touchTime) { // Touch Hold End
                         if (Array.isArray(triggered[i]) && triggered[i][0] && !triggered[i][1] && !settings.holdEndNoSound) {
                             _playEffect(note, true);
                             play.combo++;
                             play.score += sVal * 2;
                             triggered[i][1] = true;
                         }
-                    } else if (note.touchTime && Array.isArray(triggered[i])) {
-                        if (triggered[i][1]) {
-                            play.combo--;
-                            play.score -= sVal * 2;
-                        }
+                    } else if (note.touchTime && Array.isArray(triggered[i]) && triggered[i][1]) { // Reset Touch Hold End
                         triggered[i][1] = false;
+                        play.combo--;
+                        play.score -= sVal * 2;
                     }
-                } else {
-                    console.log("what", note);
                 }
             }
         }
 
+
+
         if (settings.followText && !play.pause && !inSettings) {
-            $editor.trigger('focus');
-            const b = textarea.value.split(",");
+            editor.focus();
+            const b = editor.value.split(",");
             const a = b.slice(0, play.nowIndex + 1).toString().length;
-            textarea.setSelectionRange(a, a);
-            textarea.scrollTop = getScrollTopToCaret(textarea, a);
+            editor.setSelectionRange(a, a);
+            editor.scrollTop = getScrollTopToCaret(editor, a);
         }
 
         render.renderGame(ctx, notes, settings, noteImages, t, triggered, play, (1000 / frameTime).toFixed(1));
-
-        // START: 在主循環中呼叫繪圖函數
         drawAudioWaveform();
-        // END: 在主循環中呼叫繪圖函數
 
-        timeDisplay.text(
-            Math.floor(currentTimelineValue / 60) + ":" +
-            Math.floor(currentTimelineValue % 60).toString().padStart(2, "0") +
-            (currentTimelineValue % 1).toFixed(2).slice(1, 4) +
-            " / " +
-            Math.floor(maxTime / 60000) + ":" +
-            Math.floor((maxTime / 1000) % 60).toString().padStart(2, "0") +
-            ((maxTime / 1000) % 1).toFixed(2).slice(1, 4)
-        );
+        const formatTime = (seconds) => {
+            const min = Math.floor(seconds / 60);
+            const sec = Math.floor(seconds % 60).toString().padStart(2, "0");
+            const ms = (seconds % 1).toFixed(3).slice(1);
+            return `${min}:${sec}${ms}`;
+        };
 
-        var thisFrameTime = (thisLoop = new Date) - lastLoop;
-        frameTime += (thisFrameTime - frameTime) / filterStrength;
+        timeDisplay.textContent = `${formatTime(currentTimelineValue)} / ${formatTime(maxTime / 1000)}`;
+
+        thisLoop = new Date();
+        frameTime += (thisLoop - lastLoop - frameTime) / filterStrength;
         lastLoop = thisLoop;
         requestAnimationFrame(update);
     }
@@ -1320,14 +1239,13 @@ $(document).ready(function () {
 });
 
 function getImgs() {
-    // Ensure these elements exist in your HTML
     const Images = {};
     try {
-        Images.outline = $("#outline")[0];
-        Images.sensor = $("#sensor")[0];
-        Images.sensorText = $("#sensor_text")[0];
+        Images.outline = document.getElementById("outline");
+        Images.sensor = document.getElementById("sensor");
+        Images.sensorText = document.getElementById("sensor_text");
         if (!Images.outline || !Images.sensor || !Images.sensorText) {
-            console.warn("Outline or Sensor image not found in DOM. Rendering might be affected.");
+            console.warn("Outline or Sensor image not found in DOM.");
         }
     } catch (e) {
         console.error("Error getting images:", e);

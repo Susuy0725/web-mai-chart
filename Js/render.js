@@ -35,14 +35,15 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
     // Cache note base size
     const noteBaseSize = hbw * currentSettings.noteSize;
-
-    ctx.fillStyle = "black";
-    ctx.strokeStyle = "white";
-    ctx.textAlign = "left";
-    ctx.lineWidth = Math.floor(hbw * 0.0125);
-    ctx.font = "bold " + Math.floor(hbw * 0.07) + "px combo"
-    ctx.strokeText(`FPS: ${Math.floor(fps)}`, hbw * 0.02, hbw * 0.02);
-    ctx.fillText(`FPS: ${Math.floor(fps)}`, hbw * 0.02, hbw * 0.02);
+    if (currentSettings.showFpsCounter) {
+        ctx.fillStyle = "black";
+        ctx.strokeStyle = "white";
+        ctx.textAlign = "left";
+        ctx.lineWidth = Math.floor(hbw * 0.0125);
+        ctx.font = "bold " + Math.floor(hbw * 0.07) + "px combo"
+        ctx.strokeText(`FPS: ${Math.floor(fps)}`, hbw * 0.02, hbw * 0.02);
+        ctx.fillText(`FPS: ${Math.floor(fps)}`, hbw * 0.02, hbw * 0.02);
+    }
 
     switch (currentSettings.middleDisplay) {
         case 1:
@@ -163,6 +164,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             color = '#FFD900';
         }
 
+        if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
 
         if (_t >= (currentSettings.distanceToMid - 2) / currentSettings.speed && _t < (note.holdTime ?? 0)) {
             const d = (1 - currentSettings.distanceToMid);
@@ -251,6 +253,8 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         } else if (note.isDoubleTouch) { // Assuming 'isDoubleTouch' is pre-calculated
             color = '#FFD900';
         }
+
+        if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
 
         const ani1 = function (val_t) {
             return Math.log(99 * (val_t / currentSettings.touchSpeed) + 1) / 2;
@@ -758,7 +762,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         const totalLen = pathObject.getTotalLength();
         if (totalLen <= 0) return;
         // 預先調整 spacing
-        spacing *= (1 + wSlide / 2);
+        spacing *= (1 + wSlide / 2.5);
 
         // 設定填色
         currentCtx.fillStyle = arrowColor;
@@ -770,7 +774,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         const bIncrementPer = arrowSize * (wSlide ? 0.3 : 0);
 
         // 計算可畫箭頭數量（視情況可用 Math.floor 以確保整數次數）
-        const fin = Math.floor(totalLen / spacing + 0.5 * !wSlide);
+        const fin = Math.floor(totalLen / spacing + 1 * wSlide);
 
         const arrow = new Path2D();
         // 這邊照原本比例，改寫一個以 (0,0) 為基準的 arrow shape
@@ -784,7 +788,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 
         let b = 0;
         for (let i = 0; i < fin; i++) {
-            const lenAlong = i * spacing;
+            const lenAlong = (i + 0.5) * spacing;
             // 只有當在剩餘進度區段，才繪製
             if (lenAlong / totalLen >= _t_arrow) {
                 // 取得路徑上該長度位置點與角度
@@ -797,13 +801,12 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
                 if (wSlide) {
                     // 開始畫箭頭，相對於 (0,0) 畫法和原本近似
                     currentCtx.beginPath();
-
                     // Tip
                     currentCtx.moveTo(arrowSize * 0.55, 0);
                     currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * -0.4 - b);
-                    currentCtx.lineTo(0 - b / 2, arrowSize * -0.4 - b);
+                    currentCtx.lineTo(0 - b / 2 + wSlide * arrowSize * 0.05, arrowSize * -0.4 - b + wSlide * arrowSize * 0.12);
                     currentCtx.lineTo(arrowSize * 0.2, 0);
-                    currentCtx.lineTo(0 - b / 2, arrowSize * 0.4 + b);
+                    currentCtx.lineTo(0 - b / 2 + wSlide * arrowSize * 0.05, arrowSize * 0.4 + b - wSlide * arrowSize * 0.12);
                     currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * 0.4 + b);
                     currentCtx.closePath();
                     currentCtx.fill();
@@ -828,8 +831,8 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             //ctx.fillStyle = "black";
             //ctx.fillText(`${_t_arrow_progress * noteData.slideTime / noteData.delay}`, 0, 50);
             drawStar(0, 0, k, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
-            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * fin / 2, 0 - bIncrementPer * _t_arrow * fin, k, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
-            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * fin / 2, bIncrementPer * _t_arrow * fin, k, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
+            if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
+            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
             currentCtx.restore();
         }
     }
