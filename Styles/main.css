@@ -44,7 +44,7 @@ body {
     padding: 0;
     overflow: clip;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: lightgray;
+    background: darkgray;
 }
 
 #editor {

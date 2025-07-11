@@ -790,15 +790,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const fields = [
             { key: 'title', label: '標題' },
-            { key: 'artist', label: '作者' },
+            { key: 'artist', label: '作曲' },
+            { key: 'des', label: '譜師 (未指定難度)' },
             { key: 'wholebpm', label: '全曲 BPM' },
             { key: 'lv_1', label: 'EASY 難度' },
+            { key: 'des_1', label: 'EASY 譜師' },
             { key: 'lv_2', label: 'BASIC 難度' },
+            { key: 'des_2', label: 'BASIC 譜師' },
             { key: 'lv_3', label: 'ADVANCED 難度' },
+            { key: 'des_3', label: 'ADVANCED 譜師' },
             { key: 'lv_4', label: 'EXPERT 難度' },
+            { key: 'des_4', label: 'EXPERT 譜師' },
             { key: 'lv_5', label: 'MASTER 難度' },
+            { key: 'des_5', label: 'MASTER 譜師' },
             { key: 'lv_6', label: 'RE:MASTER 難度' },
+            { key: 'des_6', label: 'RE:MASTER 譜師' },
             { key: 'lv_7', label: 'ORIGINAL 難度' },
+            { key: 'des_7', label: 'ORIGINAL 譜師' },
         ];
 
         fields.forEach(f => {

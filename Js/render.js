@@ -221,7 +221,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             }
         }
 
-        if (_t >= 0 && _t <= currentSettings.effectDecayTime) {
+        if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.holdTime ?? 0)) {
             let nang = (parseInt(note.pos[0]) - 1) % 8;
             nang = nang < 0 ? 0 : nang;
 
@@ -233,8 +233,14 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             }
             let currentX = hw + hbw * np.x;
             let currentY = hh + hbw * np.y;
-            drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
-            drawStarEffect(currentX, currentY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize);
+            if (note.holdTime) {
+                if (_t <= note.holdTime) drawHoldEffect(currentX, currentY, _t, color, ctx, hbw, currentSettings, noteBaseSize);
+                drawSimpleEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
+            } else {
+                drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
+                drawStarEffect(currentX, currentY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true);
+            }
+
             /*ctx.fillStyle = "black";
             ctx.font = "24px monospace"
             ctx.fillText(`${_t}, ${currentSettings.effectDecayTime}`, currentX, currentY);*/
@@ -260,14 +266,14 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             return Math.log(99 * (val_t / currentSettings.touchSpeed) + 1) / 2;
         }
 
-        if (_t >= -1 / currentSettings.touchSpeed && _t <= (note.touchTime ?? 0)) {
+        if (_t >= -1 / currentSettings.touchSpeed && _t < (note.touchTime ?? 0)) {
             drawTouch(note.pos, 0.8, color, note.touch,
                 ani1(_t < 0 ? _t * - currentSettings.touchSpeed : 0) * 0.6,
                 (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4
                 , note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize);
         }
 
-        if (_t >= 0 && _t <= currentSettings.effectDecayTime) {
+        if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.touchTime ?? 0)) {
             const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 }; // Make const
             const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 }; // Make const
             let ang = (note.pos - 0.5 - (touchAngleOffset[note.touch] || 0)) / 4 * Math.PI;
@@ -327,13 +333,97 @@ export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSetti
     ctx.fill();
 }
 
-export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
+export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
     if (!currentSettings.showEffect) return;
+
+    function ani(x) {
+        return 1 - Math.pow(x, 2);
+    }
+
+    function ani1(x) {
+        return Math.log(99 * x + 1) / Math.log(100);
+    }
+
+    function ani2(x, sp) {
+        return (Math.sin(x * sp + Math.sin(x * sp / 2)) + 1) / 2;
+    }
+
+    /*ctx.fillStyle = "black";
+    ctx.font = "24px monospace"
+    ctx.fillText(`${sizeFactor}, ${Math.sin(sizeFactor + Math.sin(sizeFactor / 2))}`, x + 100, y);*/
+    let s = noteBaseSize; // Use passed base size
+    let currentSize = s * ((ani2(sizeFactor, 20) / 2 + 0.5) * 1.75);
+    let localColor = ctx.createRadialGradient(x, y, 0, x, y, currentSize);
+    localColor.addColorStop(0, '#FCFF0A00');
+    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(sizeFactor)));
+
+    ctx.shadowColor = "#00000000";
+    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
+    ctx.fillStyle = localColor;
+    ctx.beginPath();
+    ctx.arc(x, y, currentSize, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.fill();
+}
+
+export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize, useFiveStar = false) {
+    if (!currentSettings.showEffect) return;
+
+    color = "#EDCE10";
 
     const calAng = function (ang) { return { 'x': Math.sin(ang) * -1, 'y': Math.cos(ang) } };
 
     function ani1(x) {
         return Math.log(99 * x + 1) / Math.log(100);
+    }
+
+    function drawRoundedStar(ctx, cx, cy, r, color, rotation = 0, cornerRadius = 8) {
+        const points = 5;
+        const rot = -Math.PI / 2;                  // 让第一个点指向正上方
+        const step = Math.PI / points;             // 36°
+
+        // 先计算所有顶点（交替外半径 / 内半径）
+        const verts = [];
+        for (let i = 0; i < points * 2; i++) {
+            const radius = (i % 2 === 0) ? r : r * 0.5;  // 内半径 = 外半径的一半
+            const angle = rot + i * step + rotation;
+            verts.push({
+                x: Math.cos(angle) * radius + cx,
+                y: Math.sin(angle) * radius + cy
+            });
+        }
+
+        ctx.save();
+        ctx.beginPath();
+        // 从最后一个点开始，这样 arcTo 能正确闭合
+        let prev = verts[verts.length - 1];
+        let curr = verts[0];
+        let next = verts[1];
+        ctx.moveTo(
+            prev.x + (curr.x - prev.x) * (cornerRadius / Math.hypot(curr.x - prev.x, curr.y - prev.y)),
+            prev.y + (curr.y - prev.y) * (cornerRadius / Math.hypot(curr.x - prev.x, curr.y - prev.y))
+        );
+
+        // 遍历每个顶点，使用 arcTo 绘制圆角
+        for (let i = 0; i < verts.length; i++) {
+            prev = verts[(i - 1 + verts.length) % verts.length];
+            curr = verts[i];
+            next = verts[(i + 1) % verts.length];
+
+            ctx.lineTo(
+                curr.x + (prev.x - curr.x) * (cornerRadius / Math.hypot(prev.x - curr.x, prev.y - curr.y)),
+                curr.y + (prev.y - curr.y) * (cornerRadius / Math.hypot(prev.x - curr.x, prev.y - curr.y))
+            );
+            ctx.arcTo(curr.x, curr.y,
+                curr.x + (next.x - curr.x) * (cornerRadius / Math.hypot(next.x - curr.x, next.y - curr.y)),
+                curr.y + (next.y - curr.y) * (cornerRadius / Math.hypot(next.x - curr.x, next.y - curr.y)),
+                cornerRadius);
+        }
+        ctx.closePath();
+
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.restore();
     }
 
     function drawDiamond(ctx, cx, cy, r, color, fill, rotation = 0) {
@@ -372,17 +462,39 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
 
     for (let i = 0; i < count; i++) {
         const ang = calAng(baseAngle + i * Math.PI / 4); // 每隔 22.5°
-        const offset = (ani1(sizeFactor) + 1.2) * s * 0.8;
+        const offset = (ani1(sizeFactor) + 2) * s * 0.75;
         const radius = s * ani1(1 - sizeFactor) * 0.4;
         const isFill = (i % 2 !== 0); // 偶數空心，奇數實心
 
+        if (isFill && useFiveStar) {
+            drawRoundedStar(
+                ctx,
+                x + offset * ang.x,
+                y + offset * ang.y,
+                radius * 1.25,
+                color,
+                baseAngle + i * Math.PI / 4,
+                radius * 0.2
+            );
+        } else {
+            drawDiamond(
+                ctx,
+                x + offset * ang.x,
+                y + offset * ang.y,
+                radius + isFill * radius * 0.15,
+                color,
+                isFill,
+                baseAngle + i * Math.PI / 4
+            );
+        }
+
         drawDiamond(
             ctx,
-            x + offset * ang.x,
-            y + offset * ang.y,
-            radius,
-            '#FCFF0A',
-            isFill,
+            x + ang.x * 0.1 * hbw,
+            y + ang.y * 0.1 * hbw,
+            (radius + !isFill * radius * 0.15) * 0.5,
+            color,
+            !isFill,
             baseAngle + i * Math.PI / 4
         );
     }
@@ -830,9 +942,9 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             //ctx.font = "bold 24px Segoe UI"; // Smaller font
             //ctx.fillStyle = "black";
             //ctx.fillText(`${_t_arrow_progress * noteData.slideTime / noteData.delay}`, 0, 50);
-            drawStar(0, 0, k, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
-            if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
-            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
+            drawStar(0, 0, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
+            if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
+            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
             currentCtx.restore();
         }
     }
