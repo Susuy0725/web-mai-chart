@@ -1102,7 +1102,20 @@ document.addEventListener('DOMContentLoaded', function () {
         const min = parseFloat(controls.timeline.min) || 0;
         const max = parseFloat(controls.timeline.max) || 1;
         const percentage = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
-        controls.timeline.style.background = `linear-gradient(to right ,${_sliderColor[0]} 0%,${_sliderColor[0]} ${percentage}%,${_sliderColor[1]} ${percentage}%, ${_sliderColor[1]} 100%)`;
+        // --- START MODIFICATION ---
+        // 獲取時間軸元素的實際渲染寬度 (像素)
+        const timelineWidth = controls.timeline.offsetWidth;
+        // 從 CSS 中獲取滑桿按鈕的寬度
+        const thumbWidth = 14;
+
+        // 調整百分比，讓填充顏色看起來置中在滑桿按鈕下方
+        // 這樣填充會延伸到滑桿按鈕的中心點
+        const adjustedPercentage = ((timelineWidth - thumbWidth) * percentage / 100 + thumbWidth / 2) / timelineWidth * 100;
+        // 確保調整後的百分比不超過 100%
+        const cappedAdjustedPercentage = Math.min(100, adjustedPercentage);
+
+        controls.timeline.style.background = `linear-gradient(to right ,${_sliderColor[0]} 7px,${_sliderColor[0]} ${cappedAdjustedPercentage}%,${_sliderColor[1]} ${cappedAdjustedPercentage}%, ${_sliderColor[1]} 100%)`;
+        // --- END MODIFICATION ---
     }
 
     function onTimelineInteractionStart() {

@@ -355,7 +355,7 @@ export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
     let currentSize = s * ((ani2(sizeFactor, 20) / 2 + 0.5) * 1.75);
     let localColor = ctx.createRadialGradient(x, y, 0, x, y, currentSize);
     localColor.addColorStop(0, '#FCFF0A00');
-    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(sizeFactor)));
+    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * (ani2(sizeFactor, 20) / 2 + 0.5)));
 
     ctx.shadowColor = "#00000000";
     ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
