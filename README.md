@@ -1,5 +1,7 @@
-# web-mai-chart
+# - The Website
 
-## *https://susuy0725.github.io/web-mai-chart/* #
+## *[Enter](https://susuy0725.github.io/web-mai-chart)* #
 
-### - How To Use
+# - Simai Wiki
+
+## *[Enter](https://w.atwiki.jp/simai/pages/1002.html)* #
