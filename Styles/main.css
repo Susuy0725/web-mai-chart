@@ -86,13 +86,14 @@ body {
     width: 50%;
     height: 40px;
     transition: width ease 0.5s, transform 0.3s, opacity 0.3s ease;
-    z-index: -10;
     box-shadow: 0 0 10px #00000080;
     transform: rotateX(0deg);
     transform-origin: 0% calc(100% + 80px);
 }
 
 .preview-control {
+    z-index: 1;
+    pointer-events: none;
     position: absolute;
     left: 0;
     bottom: 80px;
@@ -107,6 +108,7 @@ body {
 }
 
 .preview-control>div {
+    pointer-events: auto;
     background: #00000000;
     font-size: 20px;
     backdrop-filter: blur(8px);
@@ -483,7 +485,7 @@ textarea {
     /* 或其他合適的寬度 */
 }
 
-#settings-form{
+#settings-form {
     max-height: 75vh;
     overflow-y: auto;
 }
@@ -525,7 +527,7 @@ textarea {
     /* 或其他合適的寬度 */
 }
 
-#info-form{
+#info-form {
     max-height: 75vh;
     overflow-y: auto;
 }
@@ -570,4 +572,31 @@ body.layout-minimized #hideContorls .icon-maximize,
 body.layout-minimized #hideContorls .text-maximize {
     display: inline;
     /* Or block, depending on your layout preference */
+}
+
+/* 通知氣泡的樣式 */
+#notification-bubble {
+    position: fixed;
+    bottom: 20px; /* 距離底部 */
+    right: 20px; /* 距離右側 */
+    background-color: rgba(0, 0, 0, 0.75); /* 半透明黑色背景 */
+    color: white;
+    padding: 10px 15px;
+    border-radius: 8px; /* 圓角氣泡 */
+    opacity: 0; /* 預設隱藏 */
+    visibility: hidden; /* 預設隱藏 */
+    transform: translateY(20px); /* 預設在下方一點，為動畫準備 */
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out, visibility 0.3s ease-out;
+    z-index: 1000; /* 確保在其他元素之上 */
+    font-size: 14px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    max-width: 300px; /* 限制最大寬度 */
+    word-wrap: break-word; /* 自動換行 */
+}
+
+#notification-bubble.show {
+    opacity: 1; /* 顯示 */
+    visibility: visible; /* 顯示 */
+    transform: translateY(0); /* 移動到正常位置 */
 }

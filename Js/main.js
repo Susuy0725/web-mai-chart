@@ -24,6 +24,7 @@ export let settings = { // Keep export if other modules might need direct access
     'middleDisplay': 2,
     'maxSlideOnScreenCount': 500,
     'showFpsCounter': true,
+    'audioZoom': 200,
 };
 const icons = ['pause', 'play_arrow', 'skip_previous', 'replay_10', 'replay_5', 'forward_5', 'forward_10'];
 
@@ -109,6 +110,10 @@ let audioWaveform_dataArray;
 let audioWaveform_bufferLength;
 let isAudioSourceConnected = false;
 let fullAudioBuffer;
+let audioRenderDragging = false;
+let directoryHandle = null;
+let maidataFileHandle = null;
+let audioFileHandle = null;
 
 const soundFiles = {
     tap: 'judge.wav', ex: 'judge_ex.wav', break: 'judge_break.wav', break_woo: 'break.wav',
@@ -220,8 +225,33 @@ function findClosest(el, selector) {
     return null;
 }
 
-function triggerSave(data) {
-    // 1. 把目前 data 物件序列化回 maidata 格式
+// --- 新增：顯示通知氣泡的函式 ---
+let notificationTimeout; // 用於儲存計時器ID，以便取消
+
+function showNotification(message) {
+    let notification = document.getElementById('notification-bubble');
+    if (!notification) {
+        // 如果通知元素不存在，就創建它並添加到 body
+        notification = document.createElement('div');
+        notification.id = 'notification-bubble';
+        document.body.appendChild(notification);
+    }
+
+    notification.innerText = message;
+    // 顯示通知（透過 CSS 類別控制顯示/隱藏和動畫）
+    notification.classList.add('show');
+
+    // 清除任何現有的計時器，避免多個通知重疊
+    clearTimeout(notificationTimeout);
+    // 設定計時器，在指定時間後隱藏通知
+    notificationTimeout = setTimeout(() => {
+        notification.classList.remove('show');
+    }, 3000); // 3 秒後通知消失
+}
+// --- 新增結束 ---
+
+async function triggerSave(data) {
+    // 1. 序列化文字
     function serializeMaidata(dataObj) {
         const lines = [];
         for (const key in dataObj) {
@@ -232,19 +262,37 @@ function triggerSave(data) {
         return lines.join('\n');
     }
 
-    const maidataFileName = 'maidata';
     const text = serializeMaidata(data);
 
-    // 2. 產生 Blob 並觸發下載
+    console.log(text);
+
+    // 2. 如果已經有 File System Access Handlers
+    if (directoryHandle && maidataFileHandle && 'createWritable' in maidataFileHandle) {
+        try {
+            const writable = await maidataFileHandle.createWritable();
+            await writable.write(text);
+            await writable.close();
+            console.log('已儲存到：', maidataFileHandle.name);
+            showNotification(`已儲存到：${maidataFileHandle.name}`); // <-- 在成功儲存後顯示通知
+            return;
+        } catch (err) {
+            console.error("寫回檔案失敗，改下載模式：", err);
+            // fall-through to blob-download
+            showNotification('儲存失敗，將嘗試下載。'); // <-- 儲存失敗時顯示通知
+        }
+    }
+
+    // 3. Blob 下載後備方案
     const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${maidataFileName}.txt`;
+    a.download = (maidataFileHandle?.name || 'maidata');
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showNotification('檔案已下載！'); // <-- 在下載後顯示通知
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -256,6 +304,45 @@ document.addEventListener('DOMContentLoaded', function () {
     const bgm = document.getElementById("bgm");
     const dropdownList = document.querySelector(".dropdownlist");
     const allDropdowns = document.querySelectorAll('.dropdown-content');
+    const audioCanvas = document.getElementById("audioRender");
+
+    audioCanvas.addEventListener("mousedown", (e) => {
+        audioRenderDragging = true;
+    });
+
+    audioCanvas.addEventListener("mousemove", (e) => {
+        if (audioRenderDragging) {
+            handleAudioRenderPan(e.movementX);
+        }
+    });
+
+    audioCanvas.addEventListener("mouseup", () => {
+        audioRenderDragging = false;
+    });
+    audioCanvas.addEventListener("mouseleave", () => {
+        audioRenderDragging = false;
+    });
+
+    function handleAudioRenderPan(deltaX) {
+        // 畫面實際顯示的時間長度（秒），受 zoom 影響
+        const secondsPerScreen = (500 * settings.audioZoom) / maxTime;
+
+        // 每像素對應的時間（秒）
+        const secondsPerPixel = secondsPerScreen / audioCanvas.width;
+
+        // 拖曳距離換算成時間偏移
+        const timeOffset = -deltaX * secondsPerPixel;
+
+        // 調整 currentTimelineValue
+        currentTimelineValue = Math.max(0, Math.min(maxTime / 1000, currentTimelineValue + timeOffset));
+
+        // 同步更新
+        bgm.currentTime = currentTimelineValue;
+        controls.timeline.value = currentTimelineValue;
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+
+        updateTimelineVisual(currentTimelineValue);
+    }
 
     // ***** NEW FEATURE: MINIMIZE CONTROLS (with Animation) *****
     const hideControlsBtn = document.getElementById('hideContorls');
@@ -322,7 +409,7 @@ document.addEventListener('DOMContentLoaded', function () {
             event.preventDefault();
 
             // 呼叫我們的儲存函式
-            triggerSave();
+            triggerSave(data);
         }
     });
 
@@ -364,6 +451,7 @@ document.addEventListener('DOMContentLoaded', function () {
             data.artist = 'artist'
             data.title = 'Untitled';
             data.first = settings.musicDelay.toString();
+            data.des = 'No Name';
 
             settings.musicDelay = 0;
             editor.value = '';
@@ -398,74 +486,106 @@ document.addEventListener('DOMContentLoaded', function () {
                 };
                 reader.readAsText(file); // <--- 使用正確的 `file` 物件
             });
+            // 將原本 open-folder 的 branch 改成這一段：
         } else if (target.dataset.action === 'open-folder') {
-            handleFileUpload('', (files) => { // accept 參數留空，因為是選資料夾
+            // 先隱藏選單
+            allDropdowns.forEach(menu => menu.classList.add('hide'));
 
-                let maidataFile = null;
-                let audioFile = null;
-                const audioFileNames = /^track\.(mp3|ogg|wav)$/i; // 用正規表示法來比對音訊檔名
+            if ('showDirectoryPicker' in window) {
+                (async () => {
+                    try {
+                        directoryHandle = await window.showDirectoryPicker();
+                        maidataFileHandle = null;
+                        audioFileHandle = null;
 
-                // 遍歷使用者選擇資料夾中的所有檔案
-                for (const file of files) {
-                    // 尋找看起來像 maidata 的檔案 (例如 .txt)
-                    if (file.name.toLowerCase().endsWith('.txt')) {
-                        maidataFile = file;
-                    }
-                    // 尋找名為 track 的音訊檔
-                    if (audioFileNames.test(file.name)) {
-                        audioFile = file;
-                    }
-                }
-
-                // 如果找到了音訊檔，就印出訊息！
-                if (audioFile) {
-                    console.log(`偵測到音訊檔案：${audioFile.name}，將嘗試自動載入。`);
-                    // 自動載入音訊檔案的邏輯
-                    play.pauseBoth(controls.play);
-                    if (bgm.src) URL.revokeObjectURL(bgm.src);
-
-                    const reader = new FileReader();
-                    reader.onload = function (e) {
-                        audioCtx.decodeAudioData(e.target.result)
-                            .then(buffer => {
-                                fullAudioBuffer = buffer;
-                                bgm.src = URL.createObjectURL(audioFile);
-                                bgm.load();
-                                console.log("音訊檔已自動載入並解碼。");
-                            })
-                            .catch(error => console.error("自動載入音訊檔時發生解碼錯誤:", error));
-                    };
-                    reader.readAsArrayBuffer(audioFile);
-                }
-
-                // 如果找到了 maidata 檔案，就載入它
-                if (maidataFile) {
-                    const reader = new FileReader();
-                    reader.onload = function (e) {
-                        maidata = e.target.result;
-                        data = parseMaidataToJson(maidata);
-                        let getNowDiff = function (diff) {
-                            return data['inote_' + diff];
+                        // 尋找 maidata 和音訊檔案
+                        for await (const [name, handle] of directoryHandle.entries()) {
+                            if (handle.kind === 'file' && name.toLowerCase().startsWith('maidata.')) {
+                                maidataFileHandle = handle;
+                            }
+                            if (handle.kind === 'file' && name.toLowerCase().startsWith('track.')) {
+                                audioFileHandle = handle;
+                            }
+                            if (audioFileHandle && maidataFileHandle) break;
                         }
-                        settings.musicDelay = parseFloat(data.first ?? "0");
-                        editor.value = getNowDiff(settings.nowDiff);
+
+                        // --- START MODIFICATION ---
+                        // 不論是否找到新音訊，都先暫停當前播放的音樂
                         play.pauseBoth(controls.play);
-                        // 如果沒有自動載入音訊，這裡還是要暫停
-                        if (!audioFile) bgm.pause();
-                        currentTimelineValue = 0;
-                        controls.timeline.value = 0;
-                        updateTimelineVisual(0);
-                        startTime = Date.now();
-                        processChartData();
-                        console.log("Maidata 檔案已載入。");
-                    };
-                    reader.readAsText(maidataFile);
-                } else {
-                    alert("在選擇的資料夾中找不到有效的 .txt 譜面檔案。");
-                }
 
-            }, true); // 第三個參數 true 表示啟用資料夾選擇模式
+                        // 清除舊的音訊來源和緩衝區，為載入新音訊做準備
+                        if (bgm.src) { // 如果有舊的音訊來源，先釋放其 URL
+                            URL.revokeObjectURL(bgm.src);
+                        }
+                        bgm.src = ''; // 清空音訊來源
+                        fullAudioBuffer = null; // 清空緩衝區
+                        isAudioSourceConnected = false; // 重設音訊連接狀態
+                        // --- END MODIFICATION ---
 
+                        // 處理音訊載入
+                        if (audioFileHandle) {
+                            const audioFile = await audioFileHandle.getFile();
+                            const reader = new FileReader();
+                            reader.onload = function (e) {
+                                audioCtx.decodeAudioData(e.target.result)
+                                    .then(buffer => {
+                                        fullAudioBuffer = buffer;
+                                        bgm.src = URL.createObjectURL(audioFile);
+                                        bgm.load();
+                                        console.log("音訊檔已載入。");
+                                    })
+                                    .catch(error => console.error("音訊解碼錯誤:", error));
+                            };
+                            reader.readAsArrayBuffer(audioFile);
+                            console.log(`偵測到音訊檔案：${audioFileHandle.name}。`);
+                        } else {
+                            // 如果新資料夾中沒有音訊檔案
+                            console.log("新資料夾中未找到音訊檔案。");
+                        }
+
+                        // 然後處理譜面載入/創建
+                        if (maidataFileHandle) {
+                            const maidataFile = await maidataFileHandle.getFile();
+                            const reader = new FileReader();
+                            reader.onload = function (e) {
+                                maidata = e.target.result;
+                                data = parseMaidataToJson(maidata);
+                                settings.musicDelay = parseFloat(data.first ?? "0");
+                                editor.value = getNowDiff(settings.nowDiff);
+                                currentTimelineValue = 0;
+                                controls.timeline.value = 0;
+                                updateTimelineVisual(0);
+                                startTime = Date.now();
+                                processChartData();
+                                console.log("Maidata 檔案已載入。");
+                            };
+                            reader.readAsText(maidataFile);
+                        } else if (audioFileHandle) { // 只有在有音訊但沒有譜面時才創建新譜面
+                            console.log("未找到譜面檔案，將創建一個新的空譜面。");
+                            maidata = "first=0\ninote=//EASY\n";
+                            data = parseMaidataToJson(maidata);
+                            settings.musicDelay = parseFloat(data.first ?? "0");
+                            editor.value = getNowDiff(settings.nowDiff);
+                            currentTimelineValue = 0;
+                            controls.timeline.value = 0;
+                            updateTimelineVisual(0);
+                            startTime = Date.now();
+                            processChartData();
+                            alert("已載入音訊檔案，並為其創建了一個新的空譜面。");
+                        } else { // 音訊和譜面都沒找到
+                            alert("在選擇的資料夾中找不到有效的音訊或譜面檔案。");
+                        }
+
+                    } catch (err) {
+                        console.error("開啟資料夾失敗:", err);
+                        // 如果選擇資料夾失敗，也要確保音訊停止並清除
+                        play.pauseBoth(controls.play);
+                        alert("開啟資料夾失敗。");
+                    }
+                })();
+            } else {
+                alert("您的瀏覽器不支援資料夾選擇，可使用一般開檔模式。");
+            }
         } else if (target.dataset.action === 'open-audio') {
             handleFileUpload('audio/*', (files) => { // <--- 將參數名稱改為 `files`
                 const file = files[0]; // <--- 從 FileList 中取出第一個檔案
@@ -615,6 +735,8 @@ document.addEventListener('DOMContentLoaded', function () {
         'b5': document.getElementById('back5Btn'),
         'f5': document.getElementById('fast5Btn'),
         'f10': document.getElementById('fast10Btn'),
+        'zoomIn': document.getElementById('zoomIn'),
+        'zoomOut': document.getElementById('zoomOut'),
     };
 
     const noteImages = getImgs();
@@ -704,6 +826,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 result[`inote_${i}`] = "";
             }
         }
+
+        // --- 新增：確保基礎資訊有預設值 ---
+        const defaultInfo = {
+            title: 'Untitled',
+            artist: 'Unknown',
+            first: '0', // 保持為字串，因為它通常從文本解析，並在之後轉換為浮點數
+            des: 'Unknown' // 新增 designer
+        };
+
+        for (const key in defaultInfo) {
+            // 如果欄位不存在、為 null 或空白字串，則賦予預設值
+            if (result[key] === undefined || result[key] === null || (typeof result[key] === 'string' && result[key].trim() === '')) {
+                result[key] = defaultInfo[key];
+            }
+        }
+        // --- 新增結束 ---
         return result;
     }
 
@@ -975,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function onTimelineInteractionEnd(e) {
-        editor.focus();
+        if (settings.followText) editor.focus();
         bgm.volume = soundSettings.musicVol * soundSettings.music;
         currentTimelineValue = parseFloat(e.target.value);
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
@@ -1063,6 +1201,15 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    controls.zoomIn.addEventListener('click', function (e) {
+        settings.audioZoom -= 50;
+        settings.audioZoom = Math.max(settings.audioZoom, 50)
+    });
+
+    controls.zoomOut.addEventListener('click', function (e) {
+        settings.audioZoom += 50;
+        settings.audioZoom = Math.min(settings.audioZoom, 750)
+    });
 
     if (typeof masterExample !== 'undefined' && masterExample) {
         editor.value = masterExample;
@@ -1102,7 +1249,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let frameTime = 0, lastLoop = new Date(), thisLoop;
 
     function drawAudioWaveform() {
-        const zoom = 200;
+        const zoom = settings.audioZoom;
         const audioCanvas = document.getElementById("audioRender");
         if (!audioCanvas) return;
         const audioCtx2d = audioCanvas.getContext("2d");
@@ -1110,9 +1257,8 @@ document.addEventListener('DOMContentLoaded', function () {
         audioCanvas.lineJoin = settings.roundStroke ? 'round' : 'butt';
 
         audioCtx2d.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
-        audioCtx2d.beginPath();
         audioCtx2d.strokeStyle = "#00000060";
-        audioCtx2d.lineWidth = 3;
+        audioCtx2d.lineWidth = 1;
         const a = audioCanvas.width / 2;
         let sampleRate = 44100;
 
@@ -1122,12 +1268,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
             for (let i = -a; i < a; i++) {
                 const data = pcmData[(Math.floor(i + currentTimelineValue * sampleRate / zoom)) * zoom];
+                audioCtx2d.beginPath();
                 const y = (data + 1) * audioCanvas.height / 2;
                 const x = i + a;
-                if (i === 0) audioCtx2d.moveTo(x, y);
-                else audioCtx2d.lineTo(x, y);
+                audioCtx2d.moveTo(x, audioCanvas.height - y);
+                audioCtx2d.lineTo(x, y + 1);
+                audioCtx2d.stroke();
             }
-            audioCtx2d.stroke();
+
         }
 
         for (let i = 0; i < marks.length; i++) {
