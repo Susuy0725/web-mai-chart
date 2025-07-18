@@ -239,14 +239,24 @@ body {
     justify-content: space-between;
 }
 
-#timekeep {
-    width: 50%;
+#nowDiff {
+    font-family: monospace;
+    font-weight: bold;
+    width: 35%;
+    text-align: left;
+    padding-left: 10px;
+    margin-left: 10px;
+    font-size: min(2vw, 12px);
+    color: white;
+    text-shadow: 0 1px 1px black;
+    border-radius: 10px;
+    background: #00000020;
 }
 
 #nowTrackTime {
     font-family: monospace;
     font-weight: bold;
-    width: 50%;
+    width: 35%;
     text-align: right;
     padding-right: 10px;
     margin-right: 10px;
@@ -411,6 +421,7 @@ textarea {
 }
 
 .dropdownlist ul {
+    z-index: 2;
     position: absolute;
     display: grid;
     width: 200px;
@@ -449,7 +460,7 @@ textarea {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 999;
+    z-index: 499;
 }
 
 #settings-popup {
@@ -461,7 +472,7 @@ textarea {
     background-color: white;
     padding: 20px;
     border: 1px solid #ccc;
-    z-index: 1000;
+    z-index: 500;
     max-height: 80vh;
     overflow-y: hidden;
     border-radius: 5px;
@@ -503,7 +514,7 @@ textarea {
     background-color: white;
     padding: 20px;
     border: 1px solid #ccc;
-    z-index: 1000;
+    z-index: 500;
     max-height: 80vh;
     overflow-y: hidden;
     border-radius: 5px;
@@ -581,26 +592,39 @@ body.layout-minimized #hideContorls .text-maximize {
 /* 通知氣泡的樣式 */
 #notification-bubble {
     position: fixed;
-    bottom: 20px; /* 距離底部 */
-    right: 20px; /* 距離右側 */
-    background-color: rgba(0, 0, 0, 0.75); /* 半透明黑色背景 */
+    bottom: 20px;
+    /* 距離底部 */
+    right: 20px;
+    /* 距離右側 */
+    background-color: rgba(0, 0, 0, 0.75);
+    /* 半透明黑色背景 */
     color: white;
     padding: 10px 15px;
-    border-radius: 8px; /* 圓角氣泡 */
-    opacity: 0; /* 預設隱藏 */
-    visibility: hidden; /* 預設隱藏 */
-    transform: translateY(20px); /* 預設在下方一點，為動畫準備 */
+    border-radius: 8px;
+    /* 圓角氣泡 */
+    opacity: 0;
+    /* 預設隱藏 */
+    visibility: hidden;
+    /* 預設隱藏 */
+    transform: translateX(100%);
     transition: opacity 0.3s ease-out, transform 0.3s ease-out, visibility 0.3s ease-out;
-    z-index: 1000; /* 確保在其他元素之上 */
+    z-index: 1000;
+    /* 確保在其他元素之上 */
     font-size: 14px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
     text-align: center;
-    max-width: 300px; /* 限制最大寬度 */
-    word-wrap: break-word; /* 自動換行 */
+    max-width: 300px;
+    /* 限制最大寬度 */
+    word-wrap: break-word;
+    /* 自動換行 */
+    backdrop-filter: blur(2px);
 }
 
 #notification-bubble.show {
-    opacity: 1; /* 顯示 */
-    visibility: visible; /* 顯示 */
-    transform: translateY(0); /* 移動到正常位置 */
+    opacity: 1;
+    /* 顯示 */
+    visibility: visible;
+    /* 顯示 */
+    transform: translateX(0);
+    /* 移動到正常位置 */
 }

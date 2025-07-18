@@ -231,11 +231,11 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 console.warn("np is undefined in tap/star/hold for note:", note, "index:", i); // Conditional logging
                 continue;
             }
-            let currentX = hw + hbw * np.x;
-            let currentY = hh + hbw * np.y;
+            const currentX = hw + hbw * np.x;
+            const currentY = hh + hbw * np.y;
             if (note.holdTime) {
                 if (_t <= note.holdTime) drawHoldEffect(currentX, currentY, _t, color, ctx, hbw, currentSettings, noteBaseSize);
-                drawSimpleEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
+                drawHoldEndEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
             } else {
                 drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
                 drawStarEffect(currentX, currentY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true);
@@ -262,13 +262,13 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
 
-        const ani1 = function (val_t) {
-            return Math.log(99 * (val_t / currentSettings.touchSpeed) + 1) / 2;
+        const ani = function easeOutQuad(x) {
+            return 1 - Math.pow(1 - x, 3);
         }
 
         if (_t >= -1 / currentSettings.touchSpeed && _t < (note.touchTime ?? 0)) {
-            drawTouch(note.pos, 0.8, color, note.touch,
-                ani1(_t < 0 ? _t * - currentSettings.touchSpeed : 0) * 0.6,
+            drawTouch(note.pos, 0.85, color, note.touch,
+                ani(_t < 0 ? _t * - currentSettings.touchSpeed : 0),
                 (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4
                 , note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize);
         }
@@ -282,8 +282,13 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             const centerX = hw + np.x * (touchDisToMid[note.touch] || 0) * hbw;
             const centerY = hh + np.y * (touchDisToMid[note.touch] || 0) * hbw;
 
-            drawSimpleEffect(centerX, centerY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
-            drawStarEffect(centerX, centerY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize);
+            if (note.touchTime) {
+                if (_t <= note.touchTime) drawHoldEffect(centerX, centerY, _t, color, ctx, hbw, currentSettings, noteBaseSize);
+                drawHoldEndEffect(centerX, centerY, (_t - note.touchTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
+            } else {
+                drawSimpleEffect(centerX, centerY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
+                drawStarEffect(centerX, centerY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize);
+            }
         }
     }
 }
@@ -333,7 +338,7 @@ export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSetti
     ctx.fill();
 }
 
-export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
+export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
     if (!currentSettings.showEffect) return;
 
     function ani(x) {
@@ -344,8 +349,27 @@ export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
         return Math.log(99 * x + 1) / Math.log(100);
     }
 
+    sizeFactor = Math.min(Math.max(sizeFactor, 0), 1);
+    let s = noteBaseSize; // Use passed base size
+    let currentSize = s * (ani1(sizeFactor) * 1.75);
+    let localColor = ctx.createRadialGradient(x, y, 0, x, y, currentSize);
+    localColor.addColorStop(0, '#FCFF0A00');
+    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(sizeFactor)));
+
+    ctx.shadowColor = "#00000000";
+    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
+    ctx.fillStyle = localColor;
+    ctx.beginPath();
+    ctx.arc(x, y, currentSize, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.fill();
+}
+
+export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
+    if (!currentSettings.showEffect) return;
+
     function ani2(x, sp) {
-        return (Math.sin(x * sp + Math.sin(x * sp / 2)) + 1) / 2;
+        return (Math.sin(x * sp) + 1) / 2;
     }
 
     /*ctx.fillStyle = "black";
@@ -1176,10 +1200,7 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     const centerX = hw + np.x * (touchDisToMid[type] || 0) * hbw;
     const centerY = hh + np.y * (touchDisToMid[type] || 0) * hbw;
 
-    ctx.shadowBlur = s * 0.2;
-    ctx.shadowColor = `rgba(0,0,0,${opacity})`;
-    let effectiveDistance = (distance + 0.6) * currentSize; // Apply currentSize to distance scaling
-
+    let effectiveDistance = (distance + 0.5) * currentSize; // Apply currentSize to distance scaling
 
     function drawTouchElement(isFill = false) {
         const outerStrokeStyle = `rgba(255,255,255,${opacity})`;
@@ -1227,71 +1248,95 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
             _arc(centerX, centerY, currentSize * 0.15, ctx);
 
         } else { // str logic (non-hold)
-            const armLength = currentSize * (1 + distance + 0.6); // Simplified arm length
+            const zs = 1;
+            const armLength = effectiveDistance + currentSize * zs; // Simplified arm length
+
             // Top Triangle
             ctx.beginPath();
-            ctx.moveTo(centerX, centerY - effectiveDistance);
-            ctx.lineTo(centerX + currentSize, centerY - armLength);
-            ctx.lineTo(centerX - currentSize, centerY - armLength);
+            ctx.moveTo(centerX, centerY - effectiveDistance * 1.25);
+            ctx.lineTo(centerX + currentSize * zs, centerY - armLength - effectiveDistance * 0.25);
+            ctx.lineTo(centerX - currentSize * zs, centerY - armLength - effectiveDistance * 0.25);
             ctx.closePath(); ctx.stroke();
             // Left Triangle
             ctx.beginPath();
-            ctx.moveTo(centerX - effectiveDistance, centerY);
-            ctx.lineTo(centerX - armLength, centerY - currentSize);
-            ctx.lineTo(centerX - armLength, centerY + currentSize);
+            ctx.moveTo(centerX - effectiveDistance * 1.25, centerY);
+            ctx.lineTo(centerX - armLength - effectiveDistance * 0.25, centerY - currentSize * zs);
+            ctx.lineTo(centerX - armLength - effectiveDistance * 0.25, centerY + currentSize * zs);
             ctx.closePath(); ctx.stroke();
             // Bottom Triangle
             ctx.beginPath();
-            ctx.moveTo(centerX, centerY + effectiveDistance);
-            ctx.lineTo(centerX + currentSize, centerY + armLength);
-            ctx.lineTo(centerX - currentSize, centerY + armLength);
+            ctx.moveTo(centerX, centerY + effectiveDistance * 1.25);
+            ctx.lineTo(centerX + currentSize * zs, centerY + armLength + effectiveDistance * 0.25);
+            ctx.lineTo(centerX - currentSize * zs, centerY + armLength + effectiveDistance * 0.25);
             ctx.closePath(); ctx.stroke();
             // Right Triangle
             ctx.beginPath();
-            ctx.moveTo(centerX + effectiveDistance, centerY);
-            ctx.lineTo(centerX + armLength, centerY - currentSize);
-            ctx.lineTo(centerX + armLength, centerY + currentSize);
+            ctx.moveTo(centerX + effectiveDistance * 1.25, centerY);
+            ctx.lineTo(centerX + armLength + effectiveDistance * 0.25, centerY - currentSize * zs);
+            ctx.lineTo(centerX + armLength + effectiveDistance * 0.25, centerY + currentSize * zs);
             ctx.closePath(); ctx.stroke();
 
             _arc(centerX, centerY, currentSize * 0.15, ctx);
         }
     }
 
-
     function strPrg(t_progress_hold) {
         ctx.lineWidth = currentSize * 0.8;
-        let progressSegments = [t_progress_hold, t_progress_hold - 0.25, t_progress_hold - 0.5, t_progress_hold - 0.75];
-        const colors = [`rgb(250,73,4,${opacity})`, `rgb(245,238,0,${opacity})`, `rgb(17,167,105,${opacity})`, `rgb(0,141,244,${opacity})`]; // Apply opacity
-        const angles = [Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75, Math.PI * 0.25];
-        const barBaseLength = currentSize * (3 + distance + 0.6); // Simplified base length
+        const progressSegments = [
+            t_progress_hold,
+            t_progress_hold - 0.25,
+            t_progress_hold - 0.5,
+            t_progress_hold - 0.75
+        ];
+        const colors = [
+            `rgba(250,73,4,${opacity})`,
+            `rgba(245,238,0,${opacity})`,
+            `rgba(17,167,105,${opacity})`,
+            `rgba(0,141,244,${opacity})`
+        ];
+        const angles = [
+            Math.PI * 0.25,
+            Math.PI * 1.75,
+            Math.PI * 1.25,
+            Math.PI * 0.75
+        ];
+        const barBaseLength = currentSize * (3 + distance + 0.6);
 
         if (t_progress_hold >= 0) {
             for (let i = 0; i < 4; i++) {
                 let disPercent = Math.max(0, progressSegments[i]);
                 disPercent = Math.min(0.25, disPercent) / 0.25;
-                let barLength = disPercent * barBaseLength * Math.SQRT2; // Approx length of the bar segment
+                let barLength = Math.min(disPercent, 0.7) * barBaseLength * Math.SQRT2;
+                const k = effectiveDistance - currentSize * 3;
+
+                ctx.save();
+                // === Transform 核心 ===
+                ctx.translate(centerX, centerY);
+                ctx.rotate(Math.PI / 2 - angles[i]);
+                ctx.translate(k, k);
+
+                ctx.beginPath();
+                ctx.arc(0 - k / 2, 0 - k / 2, -k / 2, -Math.PI * 0.75, (Math.min(disPercent, 0.3) / 0.3) * (Math.PI / 4) - Math.PI * 0.75);
+                if (disPercent > 0.3) ctx.lineTo(barLength, 0);
+                if (disPercent > 0.7) ctx.arc(0 - k * 1.5, k * -0.5, -k / 2, -Math.PI * 0.5, ((Math.max(disPercent, 0.7) - 0.7) / 0.3) * (Math.PI / 4) - Math.PI * 0.5);
 
                 ctx.strokeStyle = colors[i];
-                ctx.beginPath();
-                // Start points for bars need to be relative to actual center, not just np
-                const startBarX = centerX + calAng(angles[i] - Math.PI * 0.75).x * (effectiveDistance + currentSize * 3); // Offset from center outwards
-                const startBarY = centerY + calAng(angles[i] - Math.PI * 0.75).y * (effectiveDistance + currentSize * 3);
-
-                ctx.moveTo(startBarX, startBarY);
-                ctx.lineTo(startBarX + calAng(angles[i]).x * barLength, startBarY + calAng(angles[i]).y * barLength);
                 ctx.stroke();
+
+                ctx.restore();
             }
         }
     }
 
     if (holdtime && holdtime > 0) {
+        ctx.shadowColor = `rgba(255,255,255)`;
+        ctx.shadowBlur = s * 0.4;
         strPrg(t_touch / holdtime);
-        drawTouchElement(false); // Draw white outline base
-        drawTouchElement(true);  // Draw colored filled parts
-    } else {
-        drawTouchElement(false); // Draw white outline
-        drawTouchElement(true);  // Draw colored center (original has two calls to str())
     }
+    ctx.shadowBlur = s * 0.2;
+    ctx.shadowColor = `rgba(0,0,0,${opacity})`;
+    drawTouchElement(false); // Draw white outline
+    drawTouchElement(true);  // Draw colored center (original has two calls to str())
 
     ctx.shadowBlur = 0;
     ctx.shadowColor = '#00000000';

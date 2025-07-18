@@ -114,6 +114,7 @@ let audioRenderDragging = false;
 let directoryHandle = null;
 let maidataFileHandle = null;
 let audioFileHandle = null;
+let lastDragX;
 
 const soundFiles = {
     tap: 'judge.wav', ex: 'judge_ex.wav', break: 'judge_break.wav', break_woo: 'break.wav',
@@ -305,6 +306,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const dropdownList = document.querySelector(".dropdownlist");
     const allDropdowns = document.querySelectorAll('.dropdown-content');
     const audioCanvas = document.getElementById("audioRender");
+    const diffDisplay = document.getElementById("nowDiff");
+    const diffName = [
+        'EASY', 'BASIC', 'ADVANCED', 'EXPERT', 'MASTER', 'RE:MASTER', 'ORIGINAL'
+    ];
 
     audioCanvas.addEventListener("mousedown", (e) => {
         audioRenderDragging = true;
@@ -319,13 +324,30 @@ document.addEventListener('DOMContentLoaded', function () {
     audioCanvas.addEventListener("mouseup", () => {
         audioRenderDragging = false;
     });
-    audioCanvas.addEventListener("mouseleave", () => {
+
+    audioCanvas.addEventListener("touchstart", (e) => {
+        audioRenderDragging = true;
+        lastDragX = e.touches[0].clientX;
+    });
+
+    // 問題
+    audioCanvas.addEventListener("touchmove", (e) => {
+        if (audioRenderDragging) {
+            e.preventDefault();
+            const touchX = e.touches[0].clientX;
+            const deltaX = touchX - lastDragX;
+            handleAudioRenderPan(deltaX);
+            lastDragX = touchX;
+        }
+    });
+
+    audioCanvas.addEventListener("touchend", () => {
         audioRenderDragging = false;
     });
 
     function handleAudioRenderPan(deltaX) {
         // 畫面實際顯示的時間長度（秒），受 zoom 影響
-        const secondsPerScreen = (500 * settings.audioZoom) / maxTime;
+        const secondsPerScreen = (0.1 * settings.audioZoom);
 
         // 每像素對應的時間（秒）
         const secondsPerPixel = secondsPerScreen / audioCanvas.width;
@@ -483,6 +505,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     updateTimelineVisual(0);
                     startTime = Date.now();
                     processChartData();
+                    diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : "");
                 };
                 reader.readAsText(file); // <--- 使用正確的 `file` 物件
             });
@@ -557,6 +580,7 @@ document.addEventListener('DOMContentLoaded', function () {
                                 updateTimelineVisual(0);
                                 startTime = Date.now();
                                 processChartData();
+                                diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : "");
                                 console.log("Maidata 檔案已載入。");
                             };
                             reader.readAsText(maidataFile);
@@ -571,20 +595,20 @@ document.addEventListener('DOMContentLoaded', function () {
                             updateTimelineVisual(0);
                             startTime = Date.now();
                             processChartData();
-                            alert("已載入音訊檔案，並為其創建了一個新的空譜面。");
+                            diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : "");
+                            showNotification("已載入音訊檔案，並為其創建了一個新的空譜面。");
                         } else { // 音訊和譜面都沒找到
-                            alert("在選擇的資料夾中找不到有效的音訊或譜面檔案。");
+                            showNotification("在選擇的資料夾中找不到有效的音訊或譜面檔案。");
                         }
-
                     } catch (err) {
                         console.error("開啟資料夾失敗:", err);
                         // 如果選擇資料夾失敗，也要確保音訊停止並清除
                         play.pauseBoth(controls.play);
-                        alert("開啟資料夾失敗。");
+                        showNotification("開啟資料夾失敗。");
                     }
                 })();
             } else {
-                alert("您的瀏覽器不支援資料夾選擇，可使用一般開檔模式。");
+                showNotification("您的瀏覽器不支援資料夾選擇，可使用一般開檔模式。");
             }
         } else if (target.dataset.action === 'open-audio') {
             handleFileUpload('audio/*', (files) => { // <--- 將參數名稱改為 `files`
@@ -617,6 +641,7 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         } else if (target.dataset.diff) {
             loadDiff(parseInt(target.dataset.diff, 10), data);
+            diffDisplay.innerText = 'Difficulty: ' + diffName[parseInt(target.dataset.diff, 10) - 1] + (data['lv_' + parseInt(target.dataset.diff, 10)] ? (", LV: " + data['lv_' + parseInt(target.dataset.diff, 10)]) : "");
             // 在 dropdownList 的 click handler 裡面：
         } else if (target.dataset.action === 'save-file') {
             triggerSave(data);
@@ -994,7 +1019,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     });
                 });
             } catch (e) {
-                alert("儲存設定時發生錯誤！請檢查輸入。");
+                showNotification("儲存設定時發生錯誤！請檢查輸入。");
                 console.error("儲存設定錯誤:", e);
                 return;
             }
