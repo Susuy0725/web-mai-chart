@@ -104,45 +104,30 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     // slide render
     if (currentSettings.showSlide) {
         let currentSlideNumbersOnScreen = 0;
-
         for (let i = notesToRender.length - 1; i >= 0; i--) {
             if (currentSlideNumbersOnScreen > currentSettings.maxSlideOnScreenCount) continue;
             const note = notesToRender[i];
-            if (!note || !note.slide || note.invalid) continue; // Simplified check
-
+            if (!note || !note.slide || note.invalid) continue;
             const _t = ((time - note.time) / 1000);
-            let color = '#5BCCFF';
-            if (note.break) {
-                color = '#FF6C0C';
-            } else if (note.isDoubleSlide) { // Assuming 'isDoubleSlide' is pre-calculated
-                color = '#FFD900';
-            }
-
+            // color 決策快取
+            let color = note.break ? '#FF6C0C' : (note.isDoubleSlide ? '#FFD900' : '#5BCCFF');
             if (_t >= -1 / currentSettings.slideSpeed && _t <= note.delay + note.slideTime) {
-                let nang = (parseInt((note.slideHead ?? '')[0]) - 1) % 8;
+                // nang/nang2 型別快取
+                let nang = (typeof note.slideHead === 'string' ? parseInt(note.slideHead[0]) : note.slideHead) - 1;
+                nang = nang % 8;
                 let nang2 = note.slideEnd;
                 if (!(note.slideEnd.length > 1)) {
-                    nang2 = (parseInt((note.slideEnd ?? '')[0]) - 1) % 8;
+                    nang2 = (typeof note.slideEnd === 'string' ? parseInt(note.slideEnd[0]) : note.slideEnd) - 1;
+                    nang2 = nang2 % 8;
                 }
-
-                const notePosition = EIGHT_POSITIONS_ANG; // Use pre-calculated positions
-                let np = notePosition[isNaN(nang) ? 0 : nang];
-                if (!np) {
-                    // console.warn("np is undefined in slide render for note:", note); // Conditional logging
-                    continue;
-                }
-                // np.x and np.y calculation seems to be relative to slide path drawing, not direct positioning here.
-                // The actual positioning is handled by drawSlidePath logic.
-
                 nang = nang < 0 ? 0 : nang;
                 if (!(note.slideEnd.length > 1)) nang2 = nang2 < 0 ? 0 : nang2;
-
                 if (_t >= 0) {
                     drawSlidePath(nang, nang2, note.slideType, color, (_t - note.delay) / note.slideTime, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, false);
                     currentSlideNumbersOnScreen++;
                 } else {
                     drawSlidePath(nang, nang2, note.slideType, color, _t * currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, true);
-                    currentSlideNumbersOnScreen++
+                    currentSlideNumbersOnScreen++;
                 }
             }
         }
@@ -151,35 +136,19 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     //tap ,star and hold render
     for (let i = notesToRender.length - 1; i >= 0; i--) {
         const note = notesToRender[i];
-        if (!note || note.starTime || note.touch || note.slide || note.invalid || !note.pos) continue; // Simplified check
-
+        if (!note || note.starTime || note.touch || note.slide || note.invalid || !note.pos) continue;
         const _t = ((time - note.time) / 1000);
-        let color = '#FF50AA';
-        if (note.star && !currentSettings.pinkStar) {
-            color = '#009FF9';
-        }
-        if (note.break) {
-            color = '#FF6C0C';
-        } else if (note.isDoubleTapHold) { // Assuming 'isDoubleTapHold' is pre-calculated
-            color = '#FFD900';
-        }
-
+        // color 決策快取
+        let color = note.break ? '#FF6C0C' : (note.isDoubleTapHold ? '#FFD900' : (note.star && !currentSettings.pinkStar ? '#009FF9' : '#FF50AA'));
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
-
         if (_t >= (currentSettings.distanceToMid - 2) / currentSettings.speed && _t < (note.holdTime ?? 0)) {
             const d = (1 - currentSettings.distanceToMid);
-            let nang = (parseInt(note.pos[0]) - 1) % 8;
+            let nang = (typeof note.pos === 'string' ? parseInt(note.pos[0]) : note.pos) - 1;
+            nang = nang % 8;
             nang = nang < 0 ? 0 : nang;
-
-            const notePosition = EIGHT_POSITIONS_ANG; // Use pre-calculated positions
-            let np = notePosition[isNaN(nang) ? 0 : nang];
-            if (!np) {
-                console.warn("np is undefined in tap/star/hold for note:", note, "index:", i); // Conditional logging
-                continue;
-            }
-
+            let np = EIGHT_POSITIONS_ANG[isNaN(nang) ? 0 : nang];
+            if (!np) continue;
             let currentX, currentY, currentSize = 1;
-
             const scaleFactor = (Math.min(_t, 0) * currentSettings.speed + 1);
             if (_t >= -d / currentSettings.speed) {
                 currentX = hw + hbw * np.x * scaleFactor;
@@ -209,7 +178,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             }
             if (note.star) {
                 drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize);
-            } else if (note.holdTime != null) { // Check for truthiness (not just existence)
+            } else if (note.holdTime != null) {
                 note.holdTime = note.holdTime == 0 ? 1E-64 : note.holdTime;
                 let holdLength = 0;
                 if (_t >= -d / currentSettings.speed) {
@@ -220,17 +189,12 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize);
             }
         }
-
         if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.holdTime ?? 0)) {
-            let nang = (parseInt(note.pos[0]) - 1) % 8;
+            let nang = (typeof note.pos === 'string' ? parseInt(note.pos[0]) : note.pos) - 1;
+            nang = nang % 8;
             nang = nang < 0 ? 0 : nang;
-
-            const notePosition = EIGHT_POSITIONS_ANG; // Use pre-calculated positions
-            let np = notePosition[isNaN(nang) ? 0 : nang];
-            if (!np) {
-                console.warn("np is undefined in tap/star/hold for note:", note, "index:", i); // Conditional logging
-                continue;
-            }
+            let np = EIGHT_POSITIONS_ANG[isNaN(nang) ? 0 : nang];
+            if (!np) continue;
             const currentX = hw + hbw * np.x;
             const currentY = hh + hbw * np.y;
             if (note.holdTime) {
@@ -240,48 +204,32 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
                 drawStarEffect(currentX, currentY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true);
             }
-
-            /*ctx.fillStyle = "black";
-            ctx.font = "24px monospace"
-            ctx.fillText(`${_t}, ${currentSettings.effectDecayTime}`, currentX, currentY);*/
         }
     }
 
     //touch render
     for (let i = notesToRender.length - 1; i >= 0; i--) {
         const note = notesToRender[i];
-        if (!note || !note.touch || note.invalid) continue; // Simplified check
-
+        if (!note || !note.touch || note.invalid) continue;
         const _t = ((time - note.time) / 1000);
-        let color = '#0089F4';
-        if (note.break) {
-            color = '#FF6C0C';
-        } else if (note.isDoubleTouch) { // Assuming 'isDoubleTouch' is pre-calculated
-            color = '#FFD900';
-        }
-
+        // color 決策快取
+        let color = note.break ? '#FF6C0C' : (note.isDoubleTouch ? '#FFD900' : '#0089F4');
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
-
-        const ani = function easeOutQuad(x) {
-            return 1 - Math.pow(1 - x, 3);
-        }
-
+        // ani 只定義一次
+        const ani = (x) => 1 - Math.pow(1 - x, 3);
         if (_t >= -1 / currentSettings.touchSpeed && _t < (note.touchTime ?? 0)) {
             drawTouch(note.pos, 0.85, color, note.touch,
                 ani(_t < 0 ? _t * - currentSettings.touchSpeed : 0),
                 (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4
                 , note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize);
         }
-
         if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.touchTime ?? 0)) {
-            const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 }; // Make const
-            const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 }; // Make const
+            const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 };
+            const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
             let ang = (note.pos - 0.5 - (touchAngleOffset[note.touch] || 0)) / 4 * Math.PI;
             let np = calAng(ang);
-
             const centerX = hw + np.x * (touchDisToMid[note.touch] || 0) * hbw;
             const centerY = hh + np.y * (touchDisToMid[note.touch] || 0) * hbw;
-
             if (note.touchTime) {
                 if (_t <= note.touchTime) drawHoldEffect(centerX, centerY, _t, color, ctx, hbw, currentSettings, noteBaseSize);
                 drawHoldEndEffect(centerX, centerY, (_t - note.touchTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
@@ -651,7 +599,7 @@ export function drawNoteDot(ctx, options) {
 
 
 export class PathRecorder {
-    static EPS = 1e-6;
+    static EPS = 1e-5;
 
     constructor() {
         // 公開 API 相關屬性
@@ -1184,12 +1132,9 @@ export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentS
 export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize) {
     opacity = Math.min(Math.max(opacity, 0), 1); // Clamp opacity
 
-    const r = parseInt(color.substring(1, 3), 16);
-    const g = parseInt(color.substring(3, 5), 16);
-    const b = parseInt(color.substring(5, 7), 16);
     let localColor = hexWithAlpha(color, opacity);
 
-    let s = noteBaseSize;
+    let s = noteBaseSize * 1.1;
     let currentSize = Math.max(sizeFactor * s, 0); // sizeFactor seems to be a base, not multiplier here. Original: size = size * s;
 
     const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 }; // Make const
@@ -1200,7 +1145,7 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     const centerX = hw + np.x * (touchDisToMid[type] || 0) * hbw;
     const centerY = hh + np.y * (touchDisToMid[type] || 0) * hbw;
 
-    let effectiveDistance = (distance + 0.5) * currentSize; // Apply currentSize to distance scaling
+    let effectiveDistance = (distance + 0.32) * currentSize; // Apply currentSize to distance scaling
 
     function drawTouchElement(isFill = false) {
         const outerStrokeStyle = `rgba(255,255,255,${opacity})`;
@@ -1300,14 +1245,14 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
             Math.PI * 1.25,
             Math.PI * 0.75
         ];
-        const barBaseLength = currentSize * (3 + distance + 0.6);
+        const barBaseLength = currentSize * (2.65 + distance + 0.32);
 
         if (t_progress_hold >= 0) {
             for (let i = 0; i < 4; i++) {
                 let disPercent = Math.max(0, progressSegments[i]);
                 disPercent = Math.min(0.25, disPercent) / 0.25;
                 let barLength = Math.min(disPercent, 0.7) * barBaseLength * Math.SQRT2;
-                const k = effectiveDistance - currentSize * 3;
+                const k = effectiveDistance - currentSize * 2.65;
 
                 ctx.save();
                 // === Transform 核心 ===
