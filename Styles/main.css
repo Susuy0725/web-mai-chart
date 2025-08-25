@@ -501,8 +501,10 @@ textarea {
 }
 
 #settings-form {
-    max-height: 75vh;
+    max-height: 70vh;
     overflow-y: auto;
+    margin-bottom: 10px;
+    box-shadow: 0px -5px 5px -5px #00000087 inset;
 }
 
 #info-popup {
@@ -543,8 +545,10 @@ textarea {
 }
 
 #info-form {
-    max-height: 75vh;
+    max-height: 70vh;
     overflow-y: auto;
+    box-shadow: 0px -5px 5px -5px #00000087 inset;
+    margin-bottom: 10px;
 }
 
 /* Add these rules for the minimize controls feature */
@@ -627,4 +631,41 @@ body.layout-minimized #hideContorls .text-maximize {
     /* 顯示 */
     transform: translateX(0);
     /* 移動到正常位置 */
+}
+
+#save-settings-btn,
+#save-info-btn {
+    background-color: #ffffff;
+    color: black;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.2s;
+    margin-right: 10px;
+}
+
+#save-settings-btn:hover,
+#save-info-btn:hover {
+    background-color: #50c254;
+    color: white;
+}
+
+#cancel-settings-btn,
+#cancel-info-btn {
+    background-color: #ffffff;
+    color: black;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.2s;
+    margin-right: 10px;
+}
+
+#cancel-settings-btn:hover,
+#cancel-info-btn:hover {
+    background-color: #b3b3b3;
 }

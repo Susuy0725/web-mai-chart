@@ -15,7 +15,8 @@
     <link rel="stylesheet" href="Styles/main.css">
 </head>
 <script>
-    let masterExample = `Ch[4:1]`;
+    let masterExample = `||1pp4pp7pp2pp5pp8pp3pp6pp1[#0.1]
+5pp8[4:1]/4qq1[9:1]`;
 </script>
 
 <body>
@@ -37,10 +38,10 @@
         <div class="menu-item" data-action="copy">複製</div>
         <div class="menu-item" data-action="paste">貼上</div>
         <div class="menu-item" data-action="selectAll">全選</div>
-        <div class="menu-item" data-action="trun-upside-down">上下反轉</div>
-        <div class="menu-item" data-action="trun-left-right">左右反轉</div>
-        <div class="menu-item" data-action="trun-right">右轉 45° (逆時針)</div>
-        <div class="menu-item" data-action="trun-left">左轉 45° (順時針)</div>
+        <div class="menu-item" data-action="trun-upside-down">↕ 上下反轉</div>
+        <div class="menu-item" data-action="trun-left-right">↔ 左右反轉</div>
+        <div class="menu-item" data-action="trun-right">↻ 右轉 45° (逆時針)</div>
+        <div class="menu-item" data-action="trun-left">↺ 左轉 45° (順時針)</div>
     </div>
     <audio id="bgm"></audio>
     <div class="controls">
@@ -81,6 +82,10 @@
             <li data-diff="5">MASTER</li>
             <li data-diff="6">RE:MASTER</li>
             <li data-diff="7">ORIGINAL</li>
+        </ul>
+        <ul class="edit-menu dropdown-content hide">
+            <li data-diff="1">復原 undo</li>
+            <li data-diff="2">重做 redo</li>
         </ul>
     </div>
 

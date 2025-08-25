@@ -1,4 +1,5 @@
-import * as render from "./render.js";
+import * as render from "../Js/render.js";
+import {showNotification} from "../Js/main.js";
 
 export function simai_decode(_data) {
     // 註解
@@ -137,14 +138,14 @@ export function simai_decode(_data) {
                     delay = delayInSeconds; // 將秒轉換為毫秒
                 } else {
                     delay = 0; // 解析失敗則延遲為 0
-                    throw new Error(`解析延遲時間失敗: ${parts[0]} (參數: ${param})`);
+                    throw new Error(`resolve delay time failed: ${parts[0]} (param: ${param})`);
                 }
                 durationStr = parts[1]; // ## 後面的部分是持續時間參數
             } else {
                 // 如果 ## 格式不符合預期，發出警告並將整個參數視為持續時間
                 delay = 0;
                 durationStr = param;
-                throw new Error(`## 格式不符合預期，將整個參數視為持續時間: ${param}`);
+                throw new Error(`"##" format unexpected: ${param}`);
             }
         }
 
@@ -165,13 +166,13 @@ export function simai_decode(_data) {
                         delay = (60 / bpmOverride);
                         duration = (60 / bpmOverride) * (beatCount / (noteDiv / 4)); // 計算持續時間 (毫秒)
                     } else {
-                        throw new Error(`解析 BPM#拍數:音符單位 格式失敗: ${durationStr} (參數: ${param})`);
+                        throw new Error(`resolve "--#--:--" format failed: ${durationStr} (param: ${param})`);
                     }
                 } else {
-                    throw new Error(`#後面的拍數:音符單位格式不符預期: ${parts[1]} (參數: ${param})`);
+                    throw new Error(`after "#", ":" format unexpected: ${parts[1]} (param: ${param})`);
                 }
             } else {
-                throw new Error(`包含 # 和 : 的持續時間格式不符預期: ${durationStr} (參數: ${param})`);
+                throw new Error(`includes "#" and ":" format unexpected: ${durationStr} (param: ${param})`);
             }
 
         } else if (durationStr.includes("#") && !durationStr.startsWith("#")) {
@@ -185,10 +186,10 @@ export function simai_decode(_data) {
                     delay = (60 / bpmOverride);
                     duration = secondsStr; // 計算持續時間 (毫秒)
                 } else {
-                    throw new Error(`解析 拍數:音符單位 格式失敗: ${durationStr} (參數: ${param})`);
+                    throw new Error(`resolve ":" format failed: ${durationStr} (param: ${param})`);
                 }
             } else {
-                throw new Error(`包含 : 的持續時間格式不符預期: ${durationStr} (參數: ${param})`);
+                throw new Error(`contains ":" format unexpected: ${durationStr} (param: ${param})`);
             }
         } else if (durationStr.includes(":")) {
             // 格式: 拍數:音符單位 (例如 8:3) - 使用目前的 BPM 計算
@@ -199,10 +200,10 @@ export function simai_decode(_data) {
                 if (!isNaN(noteDiv) && !isNaN(beatCount) && noteDiv !== 0) {
                     duration = (60 / currentBpm) * (beatCount / (noteDiv / 4)); // 計算持續時間 (毫秒)
                 } else {
-                    throw new Error(`解析 拍數:音符單位 格式失敗: ${durationStr} (參數: ${param})`);
+                    throw new Error(`resolve ":" format failed: ${durationStr} (param: ${param})`);
                 }
             } else {
-                throw new Error(`包含 : 的持續時間格式不符預期: ${durationStr} (參數: ${param})`);
+                throw new Error(`contains ":" format unexpected: ${durationStr} (param: ${param})`);
             }
         } else if (durationStr.startsWith("#")) {
             // 格式: #秒數 (例如 #2) - 新增的格式
@@ -211,16 +212,12 @@ export function simai_decode(_data) {
             if (!isNaN(durationInSeconds)) {
                 duration = durationInSeconds; // 將秒轉換為毫秒
             } else {
-                throw new Error(`解析 #秒數 格式失敗: ${durationStr} (參數: ${param})`);
+                throw new Error(`resolve #seconds format failed: ${durationStr} (param: ${param})`);
             }
-        } else if (!isNaN(parseFloat(durationStr)) && isFinite(durationStr)) {
-            // 格式: 直接秒數 (例如 1.5) - 作為最終數字格式的檢查
-            const durationInSeconds = parseFloat(durationStr);
-            duration = durationInSeconds; // 將持續時間轉換為毫秒
         } else {
             // 未知的持續時間格式
             duration = -1; // 確保持續時間為 NaN
-            throw new Error(`未知的持續時間格式: ${durationStr} (參數: ${param})`);
+            throw new Error(`unknown time constant format: ${durationStr} (param: ${param})`);
         }
 
         const effectiveBpm = bpmOverride !== undefined ? bpmOverride : currentBpm;
@@ -268,6 +265,7 @@ export function simai_decode(_data) {
                 } catch (error) {
                     console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
                     tempNote[i].invalid = true;
+                    throw new Error(error.message);
                 }
             }
 
@@ -333,9 +331,10 @@ export function simai_decode(_data) {
                             } catch (error) {
                                 console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
                                 tempNote[i].invalid = true;
+                                throw new Error(error.message);
                             }
                         } else {
-                            throw new Error("找不到時間：[]");
+                            throw new Error("can't find \'[ ]\' or resolve failed");
                         }
                     }
 
@@ -499,7 +498,7 @@ export function simai_decode(_data) {
                     delete newNote.duration;
 
                     if (isNaN(newNote.pos) && newNote.pos) {
-                        throw new Error("slide pos is not number");
+                        throw new Error("slide position isn't a number");
                     }
 
                     // 把 newNote 推到 qqq 裡
@@ -536,12 +535,13 @@ export function simai_decode(_data) {
             }
 
             if (isNaN(tempNote[i].pos) && tempNote[i].pos) {
-                throw new Error("pos is not number");
+                throw new Error("position isn't a number");
             }
         } catch (error) {
             console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
+            showNotification(`音符 "${tempNote[i]?.pos}" 解析錯誤：${error.message}`);
             tempNote[i].invalid = true;
-            continue;
+            throw new Error(error.message);
         }
     }
     tempNote.sort(function (a, b) {

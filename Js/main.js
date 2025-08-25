@@ -142,6 +142,8 @@ async function loadAllSounds(list) {
 }
 
 function playSound(buffers, name, { volume = 0.1 } = {}) {
+    // Play immediately or at a scheduled AudioContext time using `when`.
+    // If caller wants to schedule, pass { when: audioCtx.currentTime + offset }
     if (audioCtx.state === 'suspended') { audioCtx.resume(); }
     const buffer = buffers[name];
     if (!buffer) return;
@@ -151,8 +153,48 @@ function playSound(buffers, name, { volume = 0.1 } = {}) {
     const gainNode = audioCtx.createGain();
     gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
     source.connect(gainNode).connect(audioCtx.destination);
-    source.start(0);
+    // support optional scheduling via `when` in the options object
+    const when = (arguments[2] && arguments[2].when) ? arguments[2].when : audioCtx.currentTime;
+    try {
+        source.start(when);
+    } catch (e) {
+        // fallback to immediate start
+        try { source.start(); } catch (e2) { /* ignore */ }
+    }
 }
+
+// --- 新增：Sound queue 與處理器（將播放從 RAF 解耦） ---
+let soundQueue = [];
+let soundQueueInterval = null;
+
+function queueSound(name, volume = 0.1) {
+    if (!sfxReady || !soundBuffers[name]) return;
+    if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+    // schedule slightly in the future to avoid glitches
+    const when = audioCtx.currentTime + 0.02;
+    soundQueue.push({ name, volume, when });
+}
+
+function processSoundQueue() {
+    if (!soundQueue || soundQueue.length === 0) return;
+    const now = audioCtx.currentTime;
+    // play any sounds due within a small lookahead window
+    const lookahead = 0.05; // seconds
+    while (soundQueue.length > 0 && soundQueue[0].when <= now + lookahead) {
+        const ev = soundQueue.shift();
+        playSound(soundBuffers, ev.name, { volume: ev.volume, when: ev.when });
+    }
+}
+
+// start interval processor
+if (!soundQueueInterval) {
+    soundQueueInterval = setInterval(processSoundQueue, 25);
+    // ensure cleanup on page unload
+    window.addEventListener('unload', () => {
+        if (soundQueueInterval) clearInterval(soundQueueInterval);
+    });
+}
+// --- 新增結束 ---
 
 loadAllSounds(soundFiles).then(buffers => {
     soundBuffers = buffers;
@@ -165,41 +207,42 @@ loadAllSounds(soundFiles).then(buffers => {
 
 
 function _playEffect(note, hold = false) {
+    // queue sounds instead of playing immediately to decouple from RAF
     if (!sfxReady || play.pause) return;
     if (soundSettings.answer && soundBuffers.answer && !note.slide) {
-        playSound(soundBuffers, 'answer', { volume: soundSettings.answerVol });
+        queueSound('answer', soundSettings.answerVol);
     }
     if (soundSettings.sfxs) {
         if (note.ex && soundBuffers.ex && !hold) {
-            playSound(soundBuffers, 'ex', { volume: soundSettings.judgeExVol });
+            queueSound('ex', soundSettings.judgeExVol);
         }
         if (hold) {
             if (note.touchTime && note.hanabi) {
-                if (soundBuffers.hanabi) playSound(soundBuffers, 'hanabi', { volume: soundSettings.hanabiVol });
+                if (soundBuffers.hanabi) queueSound('hanabi', soundSettings.hanabiVol);
             }
             if (note.break) {
                 if (note.slide) {
-                    if (soundBuffers.breakSlideEnd) playSound(soundBuffers, 'breakSlideEnd', { volume: soundSettings.breakSlideVol });
+                    if (soundBuffers.breakSlideEnd) queueSound('breakSlideEnd', soundSettings.breakSlideVol);
                 }
             }
         } else {
             if (note.break) {
                 if (note.slide) {
-                    if (soundBuffers.breakSlide) playSound(soundBuffers, 'breakSlide', { volume: soundSettings.breakSlideVol });
+                    if (soundBuffers.breakSlide) queueSound('breakSlide', soundSettings.breakSlideVol);
                 } else {
-                    if (soundBuffers.break_woo) playSound(soundBuffers, 'break_woo', { volume: soundSettings.breakVol });
-                    if (soundBuffers.break) playSound(soundBuffers, 'break', { volume: soundSettings.breakJudgeVol });
+                    if (soundBuffers.break_woo) queueSound('break_woo', soundSettings.breakVol);
+                    if (soundBuffers.break) queueSound('break', soundSettings.breakJudgeVol);
                 }
             } else {
                 if (note.slide) {
-                    if (soundBuffers.slide) playSound(soundBuffers, 'slide', { volume: soundSettings.slideVol });
+                    if (soundBuffers.slide) queueSound('slide', soundSettings.slideVol);
                 } else if (note.touch) {
-                    if (soundBuffers.touch) playSound(soundBuffers, 'touch', { volume: soundSettings.touchVol });
+                    if (soundBuffers.touch) queueSound('touch', soundSettings.touchVol);
                     if (!note.touchTime && note.hanabi) {
-                        if (soundBuffers.hanabi) playSound(soundBuffers, 'hanabi', { volume: soundSettings.hanabiVol });
+                        if (soundBuffers.hanabi) queueSound('hanabi', soundSettings.hanabiVol);
                     }
                 } else if (soundBuffers.tap) {
-                    playSound(soundBuffers, 'tap', { volume: soundSettings.judgeVol });
+                    queueSound('tap', soundSettings.judgeVol);
                 }
             }
         }
@@ -227,9 +270,9 @@ function findClosest(el, selector) {
 }
 
 // --- 新增：顯示通知氣泡的函式 ---
-let notificationTimeout; // 用於儲存計時器ID，以便取消
+export let notificationTimeout; // 用於儲存計時器ID，以便取消
 
-function showNotification(message) {
+export function showNotification(message) {
     let notification = document.getElementById('notification-bubble');
     if (!notification) {
         // 如果通知元素不存在，就創建它並添加到 body
@@ -608,13 +651,113 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
                 })();
             } else {
-                showNotification("您的瀏覽器不支援資料夾選擇，可使用一般開檔模式。");
+                // 回退方案：iOS Safari 等不支援 showDirectoryPicker 時，使用多選檔案輸入
+                // 讓使用者一次選取可能包含音訊與 maidata 的檔案
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.multiple = true;
+                fileInput.accept = 'audio/*,text/*';
+                fileInput.style.display = 'none';
+                document.body.appendChild(fileInput);
+
+                fileInput.addEventListener('change', async (ev) => {
+                    const files = Array.from(ev.target.files || []);
+                    if (files.length === 0) {
+                        showNotification('未選取任何檔案');
+                        fileInput.remove();
+                        return;
+                    }
+
+                    // 暫停並清除舊的音訊來源
+                    play.pauseBoth(controls.play);
+                    if (bgm.src) URL.revokeObjectURL(bgm.src);
+                    bgm.src = '';
+                    fullAudioBuffer = null;
+                    isAudioSourceConnected = false;
+
+                    // 嘗試在所選檔案中尋找 maidata 與 audio
+                    let foundMaidata = null;
+                    let foundAudio = null;
+
+                    for (const f of files) {
+                        const name = (f.name || '').toLowerCase();
+                        if (!foundMaidata && (name.startsWith('maidata') || name.endsWith('.txt') || name.includes('maidata.'))) {
+                            foundMaidata = f;
+                        }
+                        if (!foundAudio && (f.type && f.type.startsWith('audio/') || name.startsWith('track.') || name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg'))) {
+                            foundAudio = f;
+                        }
+                        if (foundMaidata && foundAudio) break;
+                    }
+
+                    // 處理音訊檔
+                    if (foundAudio) {
+                        const audioFile = foundAudio;
+                        const reader = new FileReader();
+                        reader.onload = function (e2) {
+                            audioCtx.decodeAudioData(e2.target.result)
+                                .then(buffer => {
+                                    fullAudioBuffer = buffer;
+                                    const objectURL = URL.createObjectURL(audioFile);
+                                    bgm.src = objectURL;
+                                    bgm.load();
+                                    console.log("回退模式：音訊檔已載入");
+                                })
+                                .catch(error => console.error("解碼音訊資料時發生錯誤:", error));
+                        };
+                        reader.onerror = function (err) {
+                            console.error('讀取音訊檔失敗:', err);
+                        };
+                        reader.readAsArrayBuffer(audioFile);
+                    }
+
+                    // 處理 maidata
+                    if (foundMaidata) {
+                        const maidataFile = foundMaidata;
+                        const reader2 = new FileReader();
+                        reader2.onload = function (e3) {
+                            maidata = e3.target.result;
+                            data = parseMaidataToJson(maidata);
+                            settings.musicDelay = parseFloat(data.first ?? "0");
+                            editor.value = getNowDiff(settings.nowDiff);
+                            currentTimelineValue = 0;
+                            controls.timeline.value = 0;
+                            updateTimelineVisual(0);
+                            startTime = Date.now();
+                            processChartData();
+                            diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : "");
+                            console.log("回退模式：Maidata 檔案已載入");
+                        };
+                        reader2.readAsText(maidataFile);
+                    } else if (foundAudio && !foundMaidata) {
+                        // 有音訊但沒有譜面，建立空的 maidata
+                        maidata = "first=0\ninote=//EASY\n";
+                        data = parseMaidataToJson(maidata);
+                        settings.musicDelay = parseFloat(data.first ?? "0");
+                        editor.value = getNowDiff(settings.nowDiff);
+                        currentTimelineValue = 0;
+                        controls.timeline.value = 0;
+                        updateTimelineVisual(0);
+                        startTime = Date.now();
+                        processChartData();
+                        diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : "");
+                        showNotification("已載入音訊檔案，並為其創建了一個新的空譜面（回退模式）");
+                    } else {
+                        showNotification('未在所選檔案中找到音訊或譜面檔。請手動選取');
+                    }
+
+                    fileInput.remove();
+                });
+
+                // 觸發選檔（必須在使用者互動觸發中呼叫，這個分支本身在點擊事件中）
+                fileInput.click();
+                // 不再顯示原本的提示，改用實際回退流程
             }
         } else if (target.dataset.action === 'open-audio') {
             handleFileUpload('audio/*', (files) => { // <--- 將參數名稱改為 `files`
                 const file = files[0]; // <--- 從 FileList 中取出第一個檔案
                 if (!file) { // 檢查是否真的有檔案被選取
-                    console.warn("沒有選擇檔案。");
+                    console.warn("沒有選擇檔案");
                     return;
                 }
                 play.pauseBoth(controls.play);
@@ -895,6 +1038,12 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('cancel-info-btn').addEventListener('click', () => {
         document.getElementById('settings-overlay').classList.add('hide');
         document.getElementById('info-popup').classList.add('hide');
+    });
+
+    document.getElementById('settings-overlay').addEventListener('click', () => {
+        document.getElementById('settings-overlay').classList.add('hide');
+        document.getElementById('info-popup').classList.add('hide');
+        document.getElementById('settings-popup').classList.add("hide");
     });
 
     function generateSettingsForm() {

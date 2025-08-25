@@ -762,6 +762,11 @@ export class PathRecorder {
         const totalLength = this._totalLength;
 
         // 處理邊界情況
+        // 若沒有任何線段（例如只有一個點或空 path），直接回傳最後已知位置
+        if (!segments || segments.length === 0) {
+            return { x: this._lastX, y: this._lastY, angle: 0 };
+        }
+
         if (targetLength <= 0) {
             const firstSeg = segments[0];
             return { x: firstSeg.p1.x, y: firstSeg.p1.y, angle: firstSeg.ang };
@@ -784,7 +789,9 @@ export class PathRecorder {
             }
         }
 
-        const seg = segments[segIndex];
+    // 如果沒找到（理論上不會發生，保險處理），取最後一段
+    if (segIndex === -1) segIndex = segments.length - 1;
+    const seg = segments[segIndex];
         const prevAccLen = segIndex > 0 ? segments[segIndex - 1].accLen : 0;
         const lenInSeg = targetLength - prevAccLen;
         const t = seg.len < PathRecorder.EPS ? 0 : lenInSeg / seg.len;
@@ -808,6 +815,13 @@ export class PathRecorder {
 
         const total = this.getTotalLength(); // 這會觸發一次快取更新
         const samples = [];
+
+
+        // 若總長度為 0，回傳最後已知位置（避免呼叫 getPointAtLength 導致錯誤）
+        if (total <= PathRecorder.EPS) {
+            samples.push({ x: this._fmt(this._lastX), y: this._fmt(this._lastY), angle: 0, length: this._fmt(0) });
+            return samples;
+        }
 
         for (let t = 0; t < total; t += resolution) {
             const pt = this.getPointAtLength(t);
@@ -909,11 +923,11 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             const p = pathObject.getPointAtLength(_t_arrow * totalLen);
             currentCtx.save();
             currentCtx.translate(p.x, p.y);
-            currentCtx.rotate(p.angle - Math.PI * 0.225);
+            currentCtx.rotate(p.angle - Math.PI * 49 / 40);
 
             //ctx.font = "bold 24px Segoe UI"; // Smaller font
             //ctx.fillStyle = "black";
-            //ctx.fillText(`${_t_arrow_progress * noteData.slideTime / noteData.delay}`, 0, 50);
+            //ctx.fillText(`${slidePosDiff(startNp, endNp)}`, 0, 50);
             drawStar(0, 0, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
             if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
             if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
@@ -1042,7 +1056,9 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
         case 'q': {
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.lineTo(np[0].x + calAng(Math.PI * (startNp / 4 + 1)).x * hbw * 0.9, np[0].y + calAng(Math.PI * (startNp / 4 + 1)).y * hbw * 0.9);
-            pathRec.arc(hw, hh, Math.sin(Math.PI / 8) * hbw, Math.PI * (startNp / 4), Math.PI * (8 * ((endNp - startNp + 5) % 8 == 0) + (endNp + 13) % 8) / 4);
+            pathRec.arc(hw, hh, Math.sin(Math.PI / 8) * hbw,
+                Math.PI * (startNp / 4),
+                Math.PI * (8 * (slidePosDiff(startNp, endNp) == 5) + (endNp + 13) % 8) / 4);
             pathRec.lineTo(np[1].x + calAng(Math.PI * (endNp / 4 + 1.25)).x * hbw * 0.9, np[1].y + calAng(Math.PI * (endNp / 4 + 1.25)).y * hbw * 0.9);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
@@ -1050,7 +1066,9 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
         case 'p': {
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.lineTo(np[0].x + calAng(Math.PI * (startNp / 4 + 1.25)).x * hbw * 0.9, np[0].y + calAng(Math.PI * (startNp / 4 + 1.25)).y * hbw * 0.9);
-            pathRec.arc(hw, hh, Math.sin(Math.PI / 8) * hbw, Math.PI * (8 * ((startNp - endNp + 5) % 8 == 0) + (startNp + 13) % 8) / 4, Math.PI * (endNp) / 4, true);
+            pathRec.arc(hw, hh, Math.sin(Math.PI / 8) * hbw,
+                Math.PI * (8 * (slidePosDiff(startNp, endNp) == 3) + (startNp + 13) % 8) / 4,
+                Math.PI * (endNp) / 4, true);
             pathRec.lineTo(np[1].x + calAng(Math.PI * (endNp / 4 + 1)).x * hbw * 0.9, np[1].y + calAng(Math.PI * (endNp / 4 + 1)).y * hbw * 0.9);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
@@ -1058,15 +1076,19 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
         case 'qq': {
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.arc(
-                hw + calAng(Math.PI * (startNp / 4 - 0.25)).x * hbw / 2,
-                hh + calAng(Math.PI * (startNp / 4 - 0.25)).y * hbw / 2 + hbw / 16,
-                hbw / 2.25,
+                hw + calAng(Math.PI * (startNp / 4 - 0.25)).x * (hbw / 2 - hbw / 40),
+                hh + calAng(Math.PI * (startNp / 4 - 0.25)).y * (hbw / 2 - hbw / 40),
+                hbw / 2.3,
                 Math.PI * ((startNp + 9) % 8 - 0.25) / 4,
                 Math.PI * (
-                    1 * ((startNp - endNp + 7) % 8 == 0) +
-                    8 * ((startNp - endNp + 4) % 8 == 0) +
-                    0.5 * (0.5 - ((endNp - startNp + 8) % 8 > 1)) +
-                    (endNp + 5) % 8) / 4,
+                    1 * (slidePosDiff(startNp, endNp) == 0) +
+                    1 * (slidePosDiff(startNp, endNp) == 7) +
+                    0.75 * (slidePosDiff(startNp, endNp) == 6) +
+                    0.5 * (slidePosDiff(startNp, endNp) == 5) +
+                    8 * (slidePosDiff(startNp, endNp) == 3) +
+                    1 * (slidePosDiff(startNp, endNp) == 2) +
+                    1.5 * (slidePosDiff(startNp, endNp) == 1) +
+                    (endNp + 4.5) % 8) / 4,
                 false);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
@@ -1074,17 +1096,19 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
         case 'pp': {
             pathRec.moveTo(np[0].x, np[0].y);
             pathRec.arc(
-                hw + calAng(Math.PI * (startNp / 4 - 1.5)).x * hbw / 2,
-                hh + calAng(Math.PI * (startNp / 4 - 1.5)).y * hbw / 2 + hbw / 16,
-                hbw / 2.25,
-                Math.PI * (
-                    8 * ((startNp - endNp + 4) % 8 == 0)
-                    + (startNp + 13) % 8 - 0.25) / 4,
-                Math.PI * (0 - (
-                    1 * ((startNp - endNp + 8) % 8 == 0) +
-                    0.5 * (0.5 - ((endNp - startNp + 7) % 8 > 1)) -
-                    0.51 * ((startNp - endNp + 4) % 8 == 0)
-                ) + (endNp + 8) % 8) / 4,
+                hw + calAng(Math.PI * (startNp / 4 - 1.5)).x * (hbw / 2 - hbw / 40),
+                hh + calAng(Math.PI * (startNp / 4 - 1.5)).y * (hbw / 2 - hbw / 40),
+                hbw / 2.3,
+                Math.PI * ((((startNp + 4.5) % 8) / 4) % 2),
+                Math.PI * ((endNp + 8) % 8 - (
+                    1 * (slidePosDiff(startNp, endNp) == 0) +
+                    1 * (slidePosDiff(startNp, endNp) == 7) +
+                    0.25 * (slidePosDiff(startNp, endNp) == 6) +
+                    7.5 * (slidePosDiff(startNp, endNp) == 5) +
+                    7.5 * (slidePosDiff(startNp, endNp) == 4) +
+                    7.5 * (slidePosDiff(startNp, endNp) == 3) +
+                    0.5 * (slidePosDiff(startNp, endNp) == 1)
+                )) / 4,
                 true);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
@@ -1096,6 +1120,7 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
     return pathRec;
 }
 
+function slidePosDiff(startNp, endNp) { return (startNp - endNp + 8) % 8; }
 
 export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentSettings, calAng, noteBaseSize) {
     ang = ang - 0.125 * Math.PI;
