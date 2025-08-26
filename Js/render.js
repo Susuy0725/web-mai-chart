@@ -142,20 +142,29 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             ctx.letterSpacing = "0px";
             break;
         case 2:
-            ctx.fillStyle = "#FF569B";
+            const trueScore = Math.round(Math.max(play.score, 0));
+            ctx.fillStyle = "#498BFF";
+            if (trueScore > 800000){
+                ctx.fillStyle = "#FF6353";
+            }
+            if(trueScore > 1000000){
+                ctx.fillStyle = "#FFD559";
+            }
             ctx.strokeStyle = "white";
             ctx.lineWidth = Math.floor(hbw * 0.015);
             ctx.textAlign = "left";
             ctx.letterSpacing = "0px";
             ctx.font = "bold " + Math.floor(hbw * 0.13) + "px combo"
-            const trueScore = Math.round(Math.max(play.score, 0));
             ctx.strokeText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.1, hh + hbw * 0.06);
             ctx.fillText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.font = "bold " + Math.floor(hbw * 0.1) + "px combo"
+            ctx.strokeText(`%`, hw + hbw * 0.3, hh + hbw * 0.06);
+            ctx.fillText(`%`, hw + hbw * 0.3, hh + hbw * 0.06);
             ctx.textAlign = "right";
-            ctx.letterSpacing = "0px";
-            ctx.font = "bold " + Math.floor(hbw * 0.16) + "px combo"
-            ctx.strokeText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.1, hh + hbw * 0.06);
-            ctx.fillText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.letterSpacing = Math.floor(hbw * 0.01) + "px";
+            ctx.font = "bold " + Math.floor(hbw * 0.18) + "px combo"
+            ctx.strokeText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.075, hh + hbw * 0.06);
+            ctx.fillText(`${Math.floor(trueScore / 10000)}`, hw - hbw * 0.075, hh + hbw * 0.06);
             break;
         default:
             break;
@@ -181,7 +190,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
     // slide render
     if (currentSettings.showSlide) {
-    const __t_slide_start = perfEnabled ? performance.now() : 0;
+        const __t_slide_start = perfEnabled ? performance.now() : 0;
         let currentSlideNumbersOnScreen = 0;
         // fill buffer once (reverse order preserved)
         const sbuf = noteBuffers.slides;
@@ -378,9 +387,9 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             `繪製時間: ${draw_ms.toFixed(2)} ms`,
             `算繪時間: ${(__perf.slides || 0).toFixed(2)} ms`,
             `系統: ${system_ms.toFixed(2)} ms`,
-            `繪製細項: slides ${(__perf.slides||0).toFixed(2)} ms`,
-            `tap/hold: ${(__perf.taps||0).toFixed(2)} ms`,
-            `touch: ${(__perf.touches||0).toFixed(2)} ms`
+            `繪製細項: slides ${(__perf.slides || 0).toFixed(2)} ms`,
+            `tap/hold: ${(__perf.taps || 0).toFixed(2)} ms`,
+            `touch: ${(__perf.touches || 0).toFixed(2)} ms`
         ];
         for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], 16, 26 + i * 14);
         ctx.restore();
@@ -1062,7 +1071,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         }
 
         let b = 0;
-        for (let i = 0; i < fin; i++) {
+        for (let i = 0; i < fin - 1; i++) {
             const lenAlong = (i + 0.5) * spacing;
             // 只有當在剩餘進度區段，才繪製
             if (lenAlong / totalLen >= _t_arrow) {

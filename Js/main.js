@@ -458,10 +458,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // 無論是最大化還是最小化，都更新按鈕外觀
             const currentlyMinimized = document.body.classList.contains('layout-minimized');
-            hideControlsBtn.querySelector('.icon-minimize').style.display = currentlyMinimized ? 'none' : 'inline';
-            hideControlsBtn.querySelector('.text-minimize').style.display = currentlyMinimized ? 'none' : 'inline';
-            hideControlsBtn.querySelector('.icon-maximize').style.display = currentlyMinimized ? 'inline' : 'none';
-            hideControlsBtn.querySelector('.text-maximize').style.display = currentlyMinimized ? 'inline' : 'none';
+            hideControlsBtn.querySelector('.icon-minimize').style.display = currentlyMinimized ? 'none' : 'flex';
+            hideControlsBtn.querySelector('.text-minimize').style.display = currentlyMinimized ? 'none' : 'flex';
+            hideControlsBtn.querySelector('.icon-maximize').style.display = currentlyMinimized ? 'flex' : 'none';
+            hideControlsBtn.querySelector('.text-maximize').style.display = currentlyMinimized ? 'flex' : 'none';
 
             // 重新計算畫布大小
             setTimeout(() => _updCanvasRes(), 350);
@@ -481,6 +481,24 @@ document.addEventListener('DOMContentLoaded', function () {
             // 呼叫我們的儲存函式
             triggerSave(data);
         }
+
+        // Undo / Redo shortcuts: Ctrl/Cmd+Z, Ctrl/Cmd+Y, Cmd+Shift+Z
+        if (isCtrlOrCmd && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
+            // Prevent default so browser UI doesn't interfere
+            event.preventDefault();
+            try {
+                if (event.key.toLowerCase() === 'y' || (event.key.toLowerCase() === 'z' && event.shiftKey)) {
+                    // redo
+                    document.execCommand('redo');
+                } else {
+                    // undo
+                    document.execCommand('undo');
+                }
+            } catch (e) {
+                // execCommand may not be supported everywhere; ignore errors
+                console.warn('undo/redo command failed', e);
+            }
+        }
     });
 
     // --- Modular Dropdown Menu Logic ---
@@ -489,7 +507,6 @@ document.addEventListener('DOMContentLoaded', function () {
             event.stopPropagation();
             const targetSelector = button.dataset.target;
             const targetMenu = document.querySelector(targetSelector);
-
             if (!targetMenu) return;
 
             // Hide other menus
@@ -793,6 +810,10 @@ document.addEventListener('DOMContentLoaded', function () {
             // 在 dropdownList 的 click handler 裡面：
         } else if (target.dataset.action === 'save-file') {
             triggerSave(data);
+        } else if (target.dataset.action === 'undo') {
+            try { document.execCommand('undo'); } catch (e) { console.warn('undo failed', e); }
+        } else if (target.dataset.action === 'redo') {
+            try { document.execCommand('redo'); } catch (e) { console.warn('redo failed', e); }
         }
     });
 
@@ -864,16 +885,76 @@ document.addEventListener('DOMContentLoaded', function () {
             case "trun-left-right": {
                 let result = '';
                 let inParen = 0, inBrace = 0, inBrack = 0;
+                // mapping for D/E tokens (1..8)
+                const deMap = { 1: 1, 2: 8, 3: 7, 4: 6, 5: 5, 6: 4, 7: 3, 8: 2 };
                 for (let i = 0; i < selected.length; i++) {
                     const ch = selected[i];
                     if (ch === '(') inParen++; if (ch === ')') inParen--;
                     if (ch === '{') inBrace++; if (ch === '}') inBrace--;
                     if (ch === '[') inBrack++; if (ch === ']') inBrack--;
-                    if (inParen === 0 && inBrack === 0 && inBrace === 0 && /\d/.test(ch)) {
-                        result += (9 - parseInt(ch)).toString();
-                    } else {
-                        result += ch;
+
+                    // only transform when not inside any brackets
+                    if (inParen === 0 && inBrack === 0 && inBrace === 0) {
+                        const up = ch.toUpperCase();
+                        // Handle C / C1 (leave unchanged)
+                        if (up === 'C') {
+                            const next = selected[i + 1];
+                            if (next === '1') {
+                                result += ch + next; // preserve original case of letter
+                                i++; // consume digit
+                                continue;
+                            } else {
+                                result += ch;
+                                continue;
+                            }
+                        }
+
+                        // Handle D/E tokens with special mapping
+                        if (up === 'D' || up === 'E') {
+                            const next = selected[i + 1];
+                            if (next && /\d/.test(next)) {
+                                const d = parseInt(next, 10);
+                                if (d >= 1 && d <= 8) {
+                                    const mapped = deMap[d];
+                                    result += ch + mapped.toString();
+                                    i++; // consume digit
+                                    continue;
+                                }
+                            }
+                            // fallback: just append the letter if no valid digit
+                            result += ch;
+                            continue;
+                        }
+
+                        // Default behavior for standalone digits (keep original numeric flip)
+                        if (/\d/.test(ch)) {
+                            result += (9 - parseInt(ch, 10)).toString();
+                            continue;
+                        }
+
+                        if (/>/.test(ch)) {
+                            result += '<';
+                            continue;
+                        }
+
+                        if (/</.test(ch)) {
+                            result += '>';
+                            continue;
+                        }
+
+                        if (/\p/.test(ch)) {
+                            result += 'q';
+                            continue;
+                        }
+
+                        if (/\q/.test(ch)) {
+                            result += 'p';
+                            continue;
+                        }
                     }
+
+                    // by default, copy character unchanged
+                    result += ch;
                 }
                 editor.setRangeText(result, start, end, "end");
                 break;
