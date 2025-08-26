@@ -23,8 +23,9 @@ export let settings = { // Keep export if other modules might need direct access
     'noNoteArc': false,
     'middleDisplay': 2,
     'maxSlideOnScreenCount': 500,
-    'showFpsCounter': true,
+    'showFpsCounter': false,
     'audioZoom': 200,
+    'showPerfBreakdown': false,
 };
 const icons = ['pause', 'play_arrow', 'skip_previous', 'replay_10', 'replay_5', 'forward_5', 'forward_10'];
 
@@ -93,6 +94,10 @@ const settingsConfig = {
         { target: soundSettings, key: 'breakVol', label: 'Break 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'slideVol', label: 'Slide 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'hanabiVol', label: '煙火音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
+    ],
+    other: [
+        { target: settings, key: 'showFpsCounter', label: '顯示 FPS', type: 'boolean' },
+        { target: settings, key: 'showPerfBreakdown', label: '啟用性能監控', type: 'boolean' }
     ]
 };
 
@@ -1094,6 +1099,10 @@ document.addEventListener('DOMContentLoaded', function () {
         h3Sound.textContent = '音效設定';
         form.appendChild(h3Sound);
         settingsConfig.sound.forEach(config => createField(config, 'sound'));
+        const h3Other = document.createElement('h3');
+        h3Other.textContent = '其他設定';
+        form.appendChild(h3Other);
+        settingsConfig.other.forEach(config => createField(config, 'other'));
     }
 
     function generateInfoForm() {
@@ -1147,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function handleSettingsClose(save) {
         if (save) {
             try {
-                ['game', 'sound'].forEach(groupKey => {
+                ['game', 'sound', 'other'].forEach(groupKey => {
                     settingsConfig[groupKey].forEach(config => {
                         const input = document.getElementById(`setting-${groupKey}-${config.key}`);
                         if (!input) return;
@@ -1185,6 +1194,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 bgm.playbackRate = 1;
             }
             startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+            // Clear render caches because settings may affect geometry (noteSize, lineWidthFactor, etc.)
+            try { render.clearRenderCaches(); } catch (e) { /* ignore if render not ready */ }
         }
     }
 
@@ -1430,6 +1441,8 @@ document.addEventListener('DOMContentLoaded', function () {
             audioCanvas.width = ctx.canvas.width;
             audioCanvas.height = 100;
         }
+        // Clear renderer caches because hbw (and other size-dependent geometry) changed
+        try { render.clearRenderCaches(); } catch (e) { /* ignore if render not ready */ }
     }
 
     let filterStrength = 20;

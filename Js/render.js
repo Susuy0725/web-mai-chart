@@ -11,8 +11,86 @@ for (let j = 0; j < 8; j++) {
     EIGHT_POSITIONS_ANG.push({ 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 });
 }
 
+// Caches to avoid reconstructing heavy objects every frame
+const pathCache = new Map(); // key: `${type}_${start}_${end}_${hbw}` -> PathRecorder
+const arrowShapeCache = new Map(); // key: `${arrowSize}_${wSlide}` -> Path2D
+
+// 建立一個快取來儲存不同大小的星星路徑，避免重複計算
+const starCache = new Map();
+
+// 回傳指定大小的星形 Path2D（以座標原點為中心），並快取以供重複使用
+function getStarPath(r) {
+    // 使用整數 key 減少快取碎片
+    const key = Math.round(r * 100) / 100; // two-decimal precision
+    let p = starCache.get(key);
+    if (p) return p;
+    p = new Path2D();
+    const points = 5;
+    const rot = -Math.PI / 2; // 讓第一個尖朝上
+    const step = Math.PI / points; // 36°
+    for (let i = 0; i < points * 2; i++) {
+        const radius = (i % 2 === 0) ? r : r * 0.5;
+        const angle = rot + i * step;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        if (i === 0) p.moveTo(x, y);
+        else p.lineTo(x, y);
+    }
+    p.closePath();
+    starCache.set(key, p);
+    return p;
+}
+
+// 建立一個快取來儲存菱形（diamond）單位路徑，避免在每次效果時重建路徑
+const diamondShapeCache = new Map();
+
+// 回傳一個單位大小的菱形 Path2D（以 r=1 為單位），並快取以供重複使用
+function getDiamondPath() {
+    const key = 'unit';
+    let p = diamondShapeCache.get(key);
+    if (p) return p;
+    p = new Path2D();
+    p.moveTo(0, -1);
+    p.quadraticCurveTo(0.25, -0.25, 1, 0);
+    p.quadraticCurveTo(0.25, 0.25, 0, 1);
+    p.quadraticCurveTo(-0.25, 0.25, -1, 0);
+    p.quadraticCurveTo(-0.25, -0.25, 0, -1);
+    p.closePath();
+    diamondShapeCache.set(key, p);
+    return p;
+}
+
+// 建立一個快取來儲存單位圓形，供 tap 使用
+const circleCache = new Map();
+
+function getUnitCirclePath() {
+    const key = 'unit_circle';
+    let p = circleCache.get(key);
+    if (p) return p;
+    p = new Path2D();
+    p.arc(0, 0, 1, 0, Math.PI * 2);
+    p.closePath();
+    circleCache.set(key, p);
+    return p;
+}
+
 export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes, play, fps) {
     const calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } }; // Keep if dynamic angles needed elsewhere
+
+    // Optional performance breakdown (very low overhead when disabled)
+    const perfEnabled = !!(currentSettings && currentSettings.showPerfBreakdown);
+    let __perf = null;
+    if (perfEnabled) {
+        __perf = {
+            t0: performance.now(),
+            images: 0,
+            slides: 0,
+            taps: 0,
+            touches: 0,
+            effects: 0,
+            other: 0
+        };
+    }
 
     ctx.resetTransform();
     const w = ctx.canvas.width,
@@ -103,41 +181,59 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 
     // slide render
     if (currentSettings.showSlide) {
+    const __t_slide_start = perfEnabled ? performance.now() : 0;
         let currentSlideNumbersOnScreen = 0;
+        // fill buffer once (reverse order preserved)
+        const sbuf = noteBuffers.slides;
+        sbuf.length = 0;
         for (let i = notesToRender.length - 1; i >= 0; i--) {
-            if (currentSlideNumbersOnScreen > currentSettings.maxSlideOnScreenCount) continue;
             const note = notesToRender[i];
             if (!note || !note.slide || note.invalid) continue;
             const _t = ((time - note.time) / 1000);
+            if (!(_t >= -1 / currentSettings.slideSpeed && _t <= note.delay + note.slideTime)) continue;
+            sbuf.push({ note, t: _t });
+            if (sbuf.length >= currentSettings.maxSlideOnScreenCount) break;
+        }
+        for (let i = 0; i < sbuf.length; i++) {
+            const { note, t: _t } = sbuf[i];
             // color 決策快取
             let color = note.break ? '#FF6C0C' : (note.isDoubleSlide ? '#FFD900' : '#5BCCFF');
-            if (_t >= -1 / currentSettings.slideSpeed && _t <= note.delay + note.slideTime) {
-                // nang/nang2 型別快取
-                let nang = (typeof note.slideHead === 'string' ? parseInt(note.slideHead[0]) : note.slideHead) - 1;
-                nang = nang % 8;
-                let nang2 = note.slideEnd;
-                if (!(note.slideEnd.length > 1)) {
-                    nang2 = (typeof note.slideEnd === 'string' ? parseInt(note.slideEnd[0]) : note.slideEnd) - 1;
-                    nang2 = nang2 % 8;
-                }
-                nang = nang < 0 ? 0 : nang;
-                if (!(note.slideEnd.length > 1)) nang2 = nang2 < 0 ? 0 : nang2;
-                if (_t >= 0) {
-                    drawSlidePath(nang, nang2, note.slideType, color, (_t - note.delay) / note.slideTime, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, false);
-                    currentSlideNumbersOnScreen++;
-                } else {
-                    drawSlidePath(nang, nang2, note.slideType, color, _t * currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, true);
-                    currentSlideNumbersOnScreen++;
-                }
+            let nang = (typeof note.slideHead === 'string' ? parseInt(note.slideHead[0]) : note.slideHead) - 1;
+            nang = nang % 8;
+            let nang2 = note.slideEnd;
+            if (!(note.slideEnd.length > 1)) {
+                nang2 = (typeof note.slideEnd === 'string' ? parseInt(note.slideEnd[0]) : note.slideEnd) - 1;
+                nang2 = nang2 % 8;
             }
+            nang = nang < 0 ? 0 : nang;
+            if (!(note.slideEnd.length > 1)) nang2 = nang2 < 0 ? 0 : nang2;
+            if (_t >= 0) {
+                drawSlidePath(nang, nang2, note.slideType, color, (_t - note.delay) / note.slideTime, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, false);
+                currentSlideNumbersOnScreen++;
+            } else {
+                drawSlidePath(nang, nang2, note.slideType, color, _t * currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, true);
+                currentSlideNumbersOnScreen++;
+            }
+        }
+        if (perfEnabled) {
+            __perf.slides = performance.now() - __t_slide_start;
         }
     }
 
-    //tap ,star and hold render
+    //tap ,star and hold render (buffered)
+    const __t_tap_start = perfEnabled ? performance.now() : 0;
+    const tbuf = noteBuffers.taps;
+    tbuf.length = 0;
     for (let i = notesToRender.length - 1; i >= 0; i--) {
         const note = notesToRender[i];
         if (!note || note.starTime || note.touch || note.slide || note.invalid || !note.pos) continue;
         const _t = ((time - note.time) / 1000);
+        // only push notes that are within the active window for rendering or effect
+        if (!(_t >= (currentSettings.distanceToMid - 2) / currentSettings.speed && (_t < (note.holdTime ?? 0) || _t <= currentSettings.effectDecayTime + (note.holdTime ?? 0)))) continue;
+        tbuf.push({ note, t: _t });
+    }
+    for (let i = 0; i < tbuf.length; i++) {
+        const { note, t: _t } = tbuf[i];
         // color 決策快取
         let color = note.break ? '#FF6C0C' : (note.isDoubleTapHold ? '#FFD900' : (note.star && !currentSettings.pinkStar ? '#009FF9' : '#FF50AA'));
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
@@ -184,7 +280,14 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 if (_t >= -d / currentSettings.speed) {
                     holdLength = (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * currentSettings.speed, (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / currentSettings.speed)) / (d / currentSettings.speed))) * hbw;
                 }
-                drawHold(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, holdLength, ctx, hbw, currentSettings, calAng, noteBaseSize);
+                drawHold(currentX, currentY, currentSize, color, note.ex ?? false, nang / -4 * Math.PI, holdLength, ctx, hbw, currentSettings, calAng, noteBaseSize);
+                if (holdLength > 0) drawNoteDot(ctx, {
+                    x: currentX - holdLength * calAng((nang / -4 + 0.875) * Math.PI).x,
+                    y: currentY + holdLength * calAng((nang / -4 + 0.875) * Math.PI).y,
+                    size: currentSize * hbw * 0.0075,
+                    color: color,
+                    transparency: 1,
+                });
             } else {
                 drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize);
             }
@@ -206,26 +309,37 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             }
         }
     }
+    if (perfEnabled) {
+        __perf.taps = performance.now() - __t_tap_start;
+    }
 
     //touch render
+    //touch render (buffered)
+    const __t_touch_start = perfEnabled ? performance.now() : 0;
+    const tbuf2 = noteBuffers.touches;
+    tbuf2.length = 0;
     for (let i = notesToRender.length - 1; i >= 0; i--) {
         const note = notesToRender[i];
         if (!note || !note.touch || note.invalid) continue;
         const _t = ((time - note.time) / 1000);
-        // color 決策快取
+        // only collect relevant ones
+        if (!(_t >= -1 / currentSettings.touchSpeed && _t < (note.touchTime ?? 0)) && !(_t >= 0 && _t <= currentSettings.effectDecayTime + (note.touchTime ?? 0))) continue;
+        tbuf2.push({ note, t: _t });
+    }
+    const aniTouch = (x) => 1 - Math.pow(1 - x, 3);
+    const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 };
+    const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
+    for (let i = 0; i < tbuf2.length; i++) {
+        const { note, t: _t } = tbuf2[i];
         let color = note.break ? '#FF6C0C' : (note.isDoubleTouch ? '#FFD900' : '#0089F4');
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
-        // ani 只定義一次
-        const ani = (x) => 1 - Math.pow(1 - x, 3);
         if (_t >= -1 / currentSettings.touchSpeed && _t < (note.touchTime ?? 0)) {
             drawTouch(note.pos, 0.85, color, note.touch,
-                ani(_t < 0 ? _t * - currentSettings.touchSpeed : 0),
-                (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4
-                , note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize);
+                aniTouch(_t < 0 ? _t * - currentSettings.touchSpeed : 0),
+                (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4,
+                note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize);
         }
         if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.touchTime ?? 0)) {
-            const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 };
-            const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
             let ang = (note.pos - 0.5 - (touchAngleOffset[note.touch] || 0)) / 4 * Math.PI;
             let np = calAng(ang);
             const centerX = hw + np.x * (touchDisToMid[note.touch] || 0) * hbw;
@@ -239,24 +353,66 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             }
         }
     }
+    if (perfEnabled) {
+        __perf.touches = performance.now() - __t_touch_start;
+    }
+
+    // draw perf summary if enabled
+    if (perfEnabled) {
+        __perf.other = performance.now();
+        const totalElapsed = __perf.other - __perf.t0;
+        // compute breakdown segments (ms)
+        const draw_ms = (typeof __perf.slides === 'number' ? __perf.slides : 0) + (typeof __perf.taps === 'number' ? __perf.taps : 0) + (typeof __perf.touches === 'number' ? __perf.touches : 0);
+        const system_ms = Math.max(0, totalElapsed - draw_ms);
+
+        // Render small stats panel
+        ctx.save();
+        ctx.resetTransform();
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(8, 8, 260, 110);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'left';
+        ctx.font = '12px monospace';
+        const lines = [
+            `總耗時: ${totalElapsed.toFixed(2)} ms`,
+            `繪製時間: ${draw_ms.toFixed(2)} ms`,
+            `算繪時間: ${(__perf.slides || 0).toFixed(2)} ms`,
+            `系統: ${system_ms.toFixed(2)} ms`,
+            `繪製細項: slides ${(__perf.slides||0).toFixed(2)} ms`,
+            `tap/hold: ${(__perf.taps||0).toFixed(2)} ms`,
+            `touch: ${(__perf.touches||0).toFixed(2)} ms`
+        ];
+        for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], 16, 26 + i * 14);
+        ctx.restore();
+    }
 }
 
 
 export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, noteBaseSize) {
     let s = noteBaseSize; // Use passed base size
     let currentSize = Math.max(sizeFactor * s, 0);
+    const unit = getUnitCirclePath();
 
     ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
     ctx.shadowColor = (ex ? color : '#000000');
-    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(currentSize, currentSize);
+    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor / currentSize; // scale-compensated
     ctx.strokeStyle = 'white';
-    _arc(x, y, currentSize, ctx);
+    ctx.stroke(unit);
+    ctx.restore();
+
     ctx.shadowBlur = 0;
     ctx.shadowColor = '#00000000';
-    ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(currentSize, currentSize);
+    ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor / currentSize; // scale-compensated
     ctx.strokeStyle = color;
     ctx.fillStyle = '#00000000';
-    _arc(x, y, currentSize, ctx);
+    ctx.stroke(unit);
+    ctx.restore();
 }
 
 export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
@@ -316,25 +472,49 @@ export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSett
 export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
     if (!currentSettings.showEffect) return;
 
-    function ani2(x, sp) {
-        return (Math.sin(x * sp) + 1) / 2;
+    function ani1(x) {
+        return Math.log(99 * x + 1) / Math.log(100);
     }
 
+    function ani2(x) {
+        return Math.log(9 * x + 1) / Math.log(10);
+    }
     /*ctx.fillStyle = "black";
     ctx.font = "24px monospace"
     ctx.fillText(`${sizeFactor}, ${Math.sin(sizeFactor + Math.sin(sizeFactor / 2))}`, x + 100, y);*/
     let s = noteBaseSize; // Use passed base size
-    let currentSize = s * ((ani2(sizeFactor, 20) / 2 + 0.5) * 1.75);
-    let localColor = ctx.createRadialGradient(x, y, 0, x, y, currentSize);
+    let currentSize = s * 1.75;
+    let localColor = ctx.createRadialGradient(x, y, 0, x, y, currentSize * ani1((sizeFactor * 4) % 1));
     localColor.addColorStop(0, '#FCFF0A00');
-    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * (ani2(sizeFactor, 20) / 2 + 0.5)));
+    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 5 * (1 - ani1((sizeFactor * 4) % 1))));
+
+    let halo = ctx.createRadialGradient(x, y, 0, x, y, currentSize * ani1((sizeFactor * 4) % 1) * 1.5);
+    halo.addColorStop(0, '#FCFF0A00');
+    halo.addColorStop(0.2, '#FCFF0A00');
+    halo.addColorStop(0.5, hexWithAlpha('#FCFF0A', 3 * (1 - ani2((sizeFactor * 4) % 1))));
+    halo.addColorStop(0.7, hexWithAlpha('#FCFF0A', 3 * (1 - ani2((sizeFactor * 4) % 1))));
+    halo.addColorStop(1, '#FCFF0A00');
+
+    let halo1 = ctx.createRadialGradient(x, y, 0, x, y, currentSize * ani1((sizeFactor * 4 + 0.5) % 1) * 1.5);
+    halo1.addColorStop(0, '#FCFF0A00');
+    halo1.addColorStop(0.2, '#FCFF0A00');
+    halo1.addColorStop(0.5, hexWithAlpha('#FCFF0A', 3 * (1 - ani2((sizeFactor * 4 + 0.5) % 1))));
+    halo1.addColorStop(0.7, hexWithAlpha('#FCFF0A', 3 * (1 - ani2((sizeFactor * 4 + 0.5) % 1))));
+    halo1.addColorStop(1, '#FCFF0A00');
 
     ctx.shadowColor = "#00000000";
-    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
     ctx.fillStyle = localColor;
     ctx.beginPath();
-    ctx.arc(x, y, currentSize, 0, 2 * Math.PI);
+    ctx.arc(x, y, currentSize * ani1((sizeFactor * 4) % 1), 0, 2 * Math.PI);
     ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(x, y, currentSize * 1.5, 0, 2 * Math.PI);
+    ctx.closePath();
+    ctx.fillStyle = halo;
+    ctx.fill();
+    ctx.fillStyle = halo1;
     ctx.fill();
 }
 
@@ -398,7 +578,7 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
         ctx.restore();
     }
 
-    function drawDiamond(ctx, cx, cy, r, color, fill, rotation = 0) {
+    /*function drawDiamond(ctx, cx, cy, r, color, fill, rotation = 0) {
         ctx.save();
 
         // 將座標原點移動到中心
@@ -425,6 +605,23 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
         else ctx.stroke();
 
         ctx.restore();
+    }*/
+
+    // 使用快取的單位菱形路徑進行繪製，以減少垃圾回收與重複 Path2D 建立
+    function drawDiamondUsingCache(ctx, cx, cy, r, color, fill, rotation = 0) {
+        const diamond = getDiamondPath();
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rotation);
+        // 縮放單位路徑到所需大小：使用 ctx.scale 可讓 Path2D 重複利用
+        ctx.scale(r, r);
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+        // 因為我們縮放了坐標系，實際需要的線寬在單位空間中為 (r*0.2)/r == 0.2
+        if (!fill) ctx.lineWidth = 0.2;
+        if (fill) ctx.fill(diamond);
+        else ctx.stroke(diamond);
+        ctx.restore();
     }
 
     sizeFactor = Math.min(Math.max(sizeFactor, 0), 1);
@@ -441,15 +638,15 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
         if (isFill && useFiveStar) {
             drawRoundedStar(
                 ctx,
-                x + offset * ang.x,
-                y + offset * ang.y,
-                radius * 1.25,
+                x + offset * 1.1 * ang.x,
+                y + offset * 1.1 * ang.y,
+                radius * 1.5,
                 color,
                 baseAngle + i * Math.PI / 4,
                 radius * 0.2
             );
         } else {
-            drawDiamond(
+            drawDiamondUsingCache(
                 ctx,
                 x + offset * ang.x,
                 y + offset * ang.y,
@@ -460,53 +657,28 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
             );
         }
 
-        drawDiamond(
-            ctx,
-            x + ang.x * 0.1 * hbw,
-            y + ang.y * 0.1 * hbw,
-            (radius + !isFill * radius * 0.15) * 0.5,
-            color,
-            !isFill,
-            baseAngle + i * Math.PI / 4
-        );
-    }
-}
-
-// 建立一個快取來儲存不同大小的星星路徑，避免重複計算
-const starCache = new Map();
-
-function getStarPath(scale) {
-    if (starCache.has(scale)) {
-        return starCache.get(scale);
-    }
-
-    const path = new Path2D();
-    const R = scale;       // 外圈半徑
-    const r = scale * 0.5; // 內圈半徑
-
-    const angle = -90; // 從頂部開始
-
-    for (let i = 0; i < 5; i++) {
-        // 外角
-        const x = Math.cos((angle + i * 72) * Math.PI / 180) * R;
-        const y = Math.sin((angle + i * 72) * Math.PI / 180) * R;
-
-        if (i === 0) {
-            path.moveTo(x, y);
+        if (!isFill) {
+            drawRoundedStar(
+                ctx,
+                x + ang.x * 0.1 * hbw,
+                y + ang.y * 0.1 * hbw,
+                (radius + !isFill * radius * 0.15) * 0.75,
+                color,
+                baseAngle + i * Math.PI / 4,
+                radius * 0.15
+            );
         } else {
-            path.lineTo(x, y);
+            drawDiamondUsingCache(
+                ctx,
+                x + ang.x * 0.1 * hbw,
+                y + ang.y * 0.1 * hbw,
+                (radius + !isFill * radius * 0.15) * 0.5,
+                color,
+                !isFill,
+                baseAngle + i * Math.PI / 4
+            );
         }
-
-        // 內角
-        const innerX = Math.cos((angle + i * 72 + 36) * Math.PI / 180) * r;
-        const innerY = Math.sin((angle + i * 72 + 36) * Math.PI / 180) * r;
-
-        path.lineTo(innerX, innerY);
     }
-
-    path.closePath();
-    starCache.set(scale, path);
-    return path;
 }
 
 // 移除了未使用的參數 (hbw, currentSettings, calAng)
@@ -789,9 +961,9 @@ export class PathRecorder {
             }
         }
 
-    // 如果沒找到（理論上不會發生，保險處理），取最後一段
-    if (segIndex === -1) segIndex = segments.length - 1;
-    const seg = segments[segIndex];
+        // 如果沒找到（理論上不會發生，保險處理），取最後一段
+        if (segIndex === -1) segIndex = segments.length - 1;
+        const seg = segments[segIndex];
         const prevAccLen = segIndex > 0 ? segments[segIndex - 1].accLen : 0;
         const lenInSeg = targetLength - prevAccLen;
         const t = seg.len < PathRecorder.EPS ? 0 : lenInSeg / seg.len;
@@ -874,15 +1046,20 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         // 計算可畫箭頭數量（視情況可用 Math.floor 以確保整數次數）
         const fin = Math.floor(totalLen / spacing + 1 * wSlide);
 
-        const arrow = new Path2D();
-        // 這邊照原本比例，改寫一個以 (0,0) 為基準的 arrow shape
-        arrow.moveTo(arrowSize * 0.55, 0);
-        arrow.lineTo(arrowSize * 0.35, arrowSize * -0.4);
-        arrow.lineTo(0, arrowSize * -0.4);
-        arrow.lineTo(arrowSize * 0.2, 0);
-        arrow.lineTo(0, arrowSize * 0.4);
-        arrow.lineTo(arrowSize * 0.35, arrowSize * 0.4);
-        arrow.closePath();
+        // reuse arrow shape if available to avoid allocation
+        const arrowKey = `${arrowSize.toFixed(2)}_${wSlide ? 1 : 0}`;
+        let arrow = arrowShapeCache.get(arrowKey);
+        if (!arrow) {
+            arrow = new Path2D();
+            arrow.moveTo(arrowSize * 0.55, 0);
+            arrow.lineTo(arrowSize * 0.35, arrowSize * -0.4);
+            arrow.lineTo(0, arrowSize * -0.4);
+            arrow.lineTo(arrowSize * 0.2, 0);
+            arrow.lineTo(0, arrowSize * 0.4);
+            arrow.lineTo(arrowSize * 0.35, arrowSize * 0.4);
+            arrow.closePath();
+            arrowShapeCache.set(arrowKey, arrow);
+        }
 
         let b = 0;
         for (let i = 0; i < fin; i++) {
@@ -950,7 +1127,12 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 
     // Path generation (assuming render.path returns a PathRecorder instance)
     // The PathRecorder instance should be generated by noteData if possible during decode.
-    const a = noteData.pathObject || path(type, startNp, endNp, hw, hh, hbw, calAng); // Use pre-calculated path if available
+    const cacheKey = `${type}_${startNp}_${endNp}_${Math.round(hbw)}`;
+    let a = noteData.pathObject || pathCache.get(cacheKey);
+    if (!a) {
+        a = path(type, startNp, endNp, hw, hh, hbw, calAng);
+        pathCache.set(cacheKey, a);
+    }
     // Draw the path itself (the line of the slide)
     //ctx.stroke(a.ctxPath); // Stroke the Path2D object
 
@@ -1108,7 +1290,7 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
                     7.5 * (slidePosDiff(startNp, endNp) == 4) +
                     7.5 * (slidePosDiff(startNp, endNp) == 3) +
                     0.5 * (slidePosDiff(startNp, endNp) == 1)
-                )) / 4,
+                ) - 7.5 * (startNp == 4 && endNp == 7)) / 4,
                 true);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
@@ -1126,32 +1308,73 @@ export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentS
     ang = ang - 0.125 * Math.PI;
     let s = noteBaseSize;
     let currentSize = Math.max(sizeFactor * s, 0);
+    // Use cached Path2D for hold shapes to reduce allocations
+    const holdShapeCache = drawHold.holdShapeCache || (drawHold.holdShapeCache = new Map());
 
-    // Consider creating a Path2D for the hold shape if performance is critical
-    const createHoldPath = () => {
-        const p = new Path2D();
-        p.moveTo(x - currentSize * calAng(ang).x, y + currentSize * calAng(ang).y);
-        p.lineTo(x - currentSize * calAng(ang + Math.PI / 3).x, y + currentSize * calAng(ang + Math.PI / 3).y);
-        p.lineTo(x - currentSize * calAng(ang + 2 * Math.PI / 3).x + l * calAng(ang).x, y + currentSize * calAng(ang + 2 * Math.PI / 3).y - l * calAng(ang).y);
-        p.lineTo(x - currentSize * calAng(ang + Math.PI).x + l * calAng(ang).x, y + currentSize * calAng(ang + Math.PI).y - l * calAng(ang).y);
-        p.lineTo(x - currentSize * calAng(ang + 4 * Math.PI / 3).x + l * calAng(ang).x, y + currentSize * calAng(ang + 4 * Math.PI / 3).y - l * calAng(ang).y);
-        p.lineTo(x - currentSize * calAng(ang + 5 * Math.PI / 3).x, y + currentSize * calAng(ang + 5 * Math.PI / 3).y);
+    function getHoldPath(size, length) {
+        const sizeKey = Math.round(size * 100) / 100;
+        const lenKey = Math.round(length * 100) / 100;
+        const key = `${sizeKey}_${lenKey}`;
+        let p = holdShapeCache.get(key);
+        if (p) return p;
+
+        // Build path in local coordinates centered at origin and oriented for ang = 0.
+        p = new Path2D();
+        const calAngLocal = (a) => ({ x: Math.sin(a), y: -Math.cos(a) });
+        const offsets = [0, Math.PI / 3, 2 * Math.PI / 3, Math.PI, 4 * Math.PI / 3, 5 * Math.PI / 3];
+        // length displacement in local space is along calAngLocal(0)
+        const lenDisp = calAngLocal(0);
+
+        // Point 0
+        const p0 = { x: -size * calAngLocal(offsets[0]).x, y: size * calAngLocal(offsets[0]).y };
+        p.moveTo(p0.x, p0.y);
+
+        // Point 1
+        const p1 = { x: -size * calAngLocal(offsets[1]).x, y: size * calAngLocal(offsets[1]).y };
+        p.lineTo(p1.x, p1.y);
+
+        // Point 2 (with length displacement)
+        const p2 = { x: -size * calAngLocal(offsets[2]).x + length * lenDisp.x, y: size * calAngLocal(offsets[2]).y - length * lenDisp.y };
+        p.lineTo(p2.x, p2.y);
+
+        // Point 3
+        const p3 = { x: -size * calAngLocal(offsets[3]).x + length * lenDisp.x, y: size * calAngLocal(offsets[3]).y - length * lenDisp.y };
+        p.lineTo(p3.x, p3.y);
+
+        // Point 4
+        const p4 = { x: -size * calAngLocal(offsets[4]).x + length * lenDisp.x, y: size * calAngLocal(offsets[4]).y - length * lenDisp.y };
+        p.lineTo(p4.x, p4.y);
+
+        // Point 5
+        const p5 = { x: -size * calAngLocal(offsets[5]).x, y: size * calAngLocal(offsets[5]).y };
+        p.lineTo(p5.x, p5.y);
+
         p.closePath();
+        holdShapeCache.set(key, p);
         return p;
-    };
-    const holdPath = createHoldPath();
+    }
+
+    const holdPath = getHoldPath(currentSize, l);
 
     ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
-    ctx.shadowColor = (ex ? color : '#000000')
+    ctx.shadowColor = (ex ? color : '#000000');
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-ang);
     ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = 'white';
     ctx.stroke(holdPath);
+    ctx.restore();
 
     ctx.shadowBlur = 0;
     ctx.shadowColor = '#00000000';
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-ang);
     ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = color;
     ctx.stroke(holdPath);
+    ctx.restore();
 }
 
 export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize) {
@@ -1334,3 +1557,16 @@ export function _arc(x, y, r = 0, currentCtx) {
     currentCtx.arc(x, y, r, 0, 2 * Math.PI);
     currentCtx.stroke();
 }
+
+// Expose cache management so host can clear on resize/settings change
+export function clearRenderCaches() {
+    pathCache.clear();
+    arrowShapeCache.clear();
+}
+
+// Reusable per-frame note buffers to avoid allocating arrays each frame
+const noteBuffers = {
+    slides: [],
+    taps: [],
+    touches: []
+};

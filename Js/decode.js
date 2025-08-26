@@ -541,7 +541,7 @@ export function simai_decode(_data) {
             console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
             showNotification(`音符 "${tempNote[i]?.pos}" 解析錯誤：${error.message}`);
             tempNote[i].invalid = true;
-            throw new Error(error.message);
+            //throw new Error(error.message);
         }
     }
     tempNote.sort(function (a, b) {
