@@ -1369,6 +1369,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     // 儲存或變更設定後，更新 CSS 變數
     try { updateBgDarknessCss(); } catch (e) {}
+    // 嘗試將設定存回 localStorage
+    try {
+        if (window.localStore && typeof window.localStore.saveSettings === 'function') {
+            window.localStore.saveSettings(settings);
+        }
+    } catch (e) { console.warn('Failed to save settings to localStorage', e); }
     }
 
     document.getElementById('save-settings-btn').addEventListener('click', () => handleSettingsClose(true));
