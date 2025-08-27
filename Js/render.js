@@ -2,6 +2,8 @@
 // RENDER GAME FUNNCTION - All drawing logic goes here
 // ====================================================================================
 
+import { settings } from "./main";
+
 // import { settings } from "./main.js"; // Assuming settings is passed as currentSettings
 
 // Pre-calculate angular positions if they are static
@@ -74,6 +76,33 @@ function getUnitCirclePath() {
     return p;
 }
 
+// 新增：調整亮度（乘法因子）
+// hex: 支援 "#RGB", "#RRGGBB"（若有 alpha 或多餘長度會忽略 alpha 部分）
+// factor: 乘數（0 = 全黑，1 = 原色，>1 = 變亮）
+// 回傳 "#RRGGBB"
+export function adjustBrightness(hex, factor) {
+    if (typeof hex !== 'string') return hex;
+    factor = Number(factor);
+    if (!isFinite(factor)) factor = 1;
+
+    // 去掉開頭的 '#'
+    let h = hex.replace(/^#/, '').toLowerCase();
+
+    // 支援短格式 #abc -> aabbcc
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+
+    // 若包含 alpha 或過長，取前 6 碼作為 RGB
+    if (h.length >= 8) h = h.slice(0, 6);
+    if (h.length !== 6) return hex; // 非法輸入則回傳原值
+
+    const r = Math.min(255, Math.max(0, Math.round(parseInt(h.slice(0, 2), 16) * factor)));
+    const g = Math.min(255, Math.max(0, Math.round(parseInt(h.slice(2, 4), 16) * factor)));
+    const b = Math.min(255, Math.max(0, Math.round(parseInt(h.slice(4, 6), 16) * factor)));
+
+    const out = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+    return out;
+}
+
 export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes, play, fps) {
     const calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } }; // Keep if dynamic angles needed elsewhere
 
@@ -98,7 +127,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         hw = w / 2,
         hh = h / 2;
 
-    const factor = 0.95; // 缩小
+    const factor = 0.90; // 缩小
     ctx.resetTransform();
     ctx.clearRect(0, 0, w, h);
     // 平移到中心，缩放，再平移回：
@@ -143,12 +172,12 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             break;
         case 2:
             const trueScore = Math.round(Math.max(play.score, 0));
-            ctx.fillStyle = "#498BFF";
+            ctx.fillStyle = adjustBrightness("#498BFF", 1 - settings.backgroundDarkness);
             if (trueScore > 800000){
-                ctx.fillStyle = "#FF6353";
+                ctx.fillStyle = adjustBrightness("#FF6353", 1 - settings.backgroundDarkness);
             }
             if(trueScore > 1000000){
-                ctx.fillStyle = "#FFD559";
+                ctx.fillStyle = adjustBrightness("#FFD559", 1 - settings.backgroundDarkness);
             }
             ctx.strokeStyle = "white";
             ctx.lineWidth = Math.floor(hbw * 0.015);

@@ -26,7 +26,24 @@ export let settings = { // Keep export if other modules might need direct access
     'showFpsCounter': false,
     'audioZoom': 200,
     'showPerfBreakdown': false,
+    'backgroundDarkness': 0.5,
 };
+
+// 把 settings.backgroundDarkness 同步到 CSS :root 的 --bg-dark
+function updateBgDarknessCss() {
+    try {
+        let v = parseFloat(settings.backgroundDarkness);
+        if (!isFinite(v)) v = 0;
+        v = Math.max(0, Math.min(1, v));
+        // 使用 rgba 黑色，加上透明度
+        const cssVal = `rgba(0,0,0,${v})`;
+        if (typeof document !== 'undefined' && document.documentElement && document.documentElement.style) {
+            document.documentElement.style.setProperty('--bg-dark', cssVal);
+        }
+    } catch (e) {
+        // ignore
+    }
+}
 const icons = ['pause', 'play_arrow', 'skip_previous', 'replay_10', 'replay_5', 'forward_5', 'forward_10'];
 
 export let play = {
@@ -64,6 +81,7 @@ const settingsConfig = {
     game: [
         { target: settings, key: 'musicDelay', label: '譜面偏移 (音樂延遲)', type: 'number', step: 0.01, min: -20, max: 20 },
         { target: play, key: 'playbackSpeed', label: '回放速度', type: 'number', step: 0.01, min: 0.01, max: 4 },
+        { target: settings, key: 'backgroundDarkness', label: '背景暗度', type: 'number', step: 0.05, min: 0, max: 1 },
         { target: settings, key: 'followText', label: '文本跟隨', type: 'boolean' },
         { target: settings, key: 'speed', label: 'Tap/Hold 速度倍率', type: 'number', step: 0.1 },
         { target: settings, key: 'pinkStar', label: '粉紅色星星', type: 'boolean' },
@@ -345,12 +363,16 @@ async function triggerSave(data) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    // 初始時同步 CSS 變數
+    try { updateBgDarknessCss(); } catch (e) {}
     const renderCanvas = document.getElementById("render");
     const ctx = renderCanvas.getContext("2d");
     const customMenu = document.getElementById("customMenu");
     const editor = document.getElementById("editor");
     const timeDisplay = document.getElementById("nowTrackTime");
     const bgm = document.getElementById("bgm");
+    const bgVideo = document.getElementById('backgroundVideo');
+    let bgVideoWasPlaying = false;
     const dropdownList = document.querySelector(".dropdownlist");
     const allDropdowns = document.querySelectorAll('.dropdown-content');
     const audioCanvas = document.getElementById("audioRender");
@@ -406,8 +428,11 @@ document.addEventListener('DOMContentLoaded', function () {
         // 調整 currentTimelineValue
         currentTimelineValue = Math.max(0, Math.min(maxTime / 1000, currentTimelineValue + timeOffset));
 
-        // 同步更新
+        // 同步更新音訊與視訊位置
         bgm.currentTime = currentTimelineValue;
+        if (bgVideo && bgVideo.src) {
+            try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
+        }
         controls.timeline.value = currentTimelineValue;
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
 
@@ -544,6 +569,20 @@ document.addEventListener('DOMContentLoaded', function () {
             editor.value = '';
             play.pauseBoth(controls.play);
             bgm.pause();
+            // 清除背景視訊（若有的話）
+            try {
+                if (bgVideo) {
+                    if (bgVideo.src) {
+                        try { URL.revokeObjectURL(bgVideo.src); } catch (e) { }
+                    }
+                    try { bgVideo.pause(); } catch (e) { }
+                    bgVideo.src = '';
+                    // reload to reset media element state
+                    try { bgVideo.load(); } catch (e) { }
+                    // 隱藏背景視訊（視覺上回復為沒有背景）
+                    try { bgVideo.style.display = 'none'; } catch (e) { }
+                }
+            } catch (e) { console.error('清除背景視訊時發生錯誤', e); }
             currentTimelineValue = 0;
             controls.timeline.value = 0;
             updateTimelineVisual(0);
@@ -585,6 +624,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         directoryHandle = await window.showDirectoryPicker();
                         maidataFileHandle = null;
                         audioFileHandle = null;
+                        let pvFileHandle = null;
 
                         // 尋找 maidata 和音訊檔案
                         for await (const [name, handle] of directoryHandle.entries()) {
@@ -594,7 +634,12 @@ document.addEventListener('DOMContentLoaded', function () {
                             if (handle.kind === 'file' && name.toLowerCase().startsWith('track.')) {
                                 audioFileHandle = handle;
                             }
-                            if (audioFileHandle && maidataFileHandle) break;
+                            // 偵測 pv.*（例如 pv.mp4）
+                            if (handle.kind === 'file' && name.toLowerCase().startsWith('pv.')) {
+                                pvFileHandle = handle;
+                            }
+                            // 只有在 audio, maidata 與 pv 都找到時，才跳出迴圈
+                            if (audioFileHandle && maidataFileHandle && pvFileHandle) break;
                         }
 
                         // --- START MODIFICATION ---
@@ -629,6 +674,25 @@ document.addEventListener('DOMContentLoaded', function () {
                         } else {
                             // 如果新資料夾中沒有音訊檔案
                             console.log("新資料夾中未找到音訊檔案。");
+                        }
+
+                        // 處理 pv 視訊檔（優先於其他影像行為）
+                        try {
+                            const bgVideoEl = document.getElementById('backgroundVideo');
+                            if (pvFileHandle) {
+                                const pvFile = await pvFileHandle.getFile();
+                                // 釋放舊的 URL
+                                if (bgVideoEl && bgVideoEl.src) {
+                                    try { URL.revokeObjectURL(bgVideoEl.src); } catch (e) { }
+                                }
+                                if (bgVideoEl) {
+                                    const pvUrl = URL.createObjectURL(pvFile);
+                                    bgVideoEl.src = pvUrl;
+                                    bgVideoEl.load();
+                                }
+                            }
+                        } catch (e) {
+                            console.error('載入 PV 檔案時發生錯誤:', e);
                         }
 
                         // 然後處理譜面載入/創建
@@ -700,6 +764,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     // 嘗試在所選檔案中尋找 maidata 與 audio
                     let foundMaidata = null;
                     let foundAudio = null;
+                    let foundPV = null;
 
                     for (const f of files) {
                         const name = (f.name || '').toLowerCase();
@@ -709,7 +774,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (!foundAudio && (f.type && f.type.startsWith('audio/') || name.startsWith('track.') || name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg'))) {
                             foundAudio = f;
                         }
-                        if (foundMaidata && foundAudio) break;
+                        // 檢查 pv.* 檔案
+                        if (!foundPV && name.startsWith('pv.')) {
+                            foundPV = f;
+                        }
+                        // 只有在 maidata, audio 與 pv 都找到時才跳出，避免漏掉 PV
+                        if (foundMaidata && foundAudio && foundPV) break;
                     }
 
                     // 處理音訊檔
@@ -768,6 +838,22 @@ document.addEventListener('DOMContentLoaded', function () {
                         showNotification('未在所選檔案中找到音訊或譜面檔。請手動選取');
                     }
 
+                    // 如果找到 PV 檔案，載入至 #backgroundVideo
+                    try {
+                        const bgVideoEl = document.getElementById('backgroundVideo');
+                        if (foundPV && bgVideoEl) {
+                            if (bgVideoEl.src) try { URL.revokeObjectURL(bgVideoEl.src); } catch (e) { }
+                            const pvUrl = URL.createObjectURL(foundPV);
+                            bgVideoEl.src = pvUrl;
+                            bgVideoEl.load();
+                            bgVideoEl.play().catch(e => { try { bgVideoEl.muted = true; bgVideoEl.play().catch(()=>{}); } catch(e){} });
+                            bgVideoEl.style.display = '';
+                            console.log('回退模式：已載入 PV 檔案。');
+                        }
+                    } catch (e) {
+                        console.error('回退模式：載入 PV 檔案時發生錯誤', e);
+                    }
+
                     fileInput.remove();
                 });
 
@@ -808,6 +894,7 @@ document.addEventListener('DOMContentLoaded', function () {
             loadDiff(parseInt(target.dataset.diff, 10), data);
             diffDisplay.innerText = 'Difficulty: ' + diffName[parseInt(target.dataset.diff, 10) - 1] + (data['lv_' + parseInt(target.dataset.diff, 10)] ? (", LV: " + data['lv_' + parseInt(target.dataset.diff, 10)]) : "");
             // 在 dropdownList 的 click handler 裡面：
+            try { bgVideo.pause(); } catch (e) { }
         } else if (target.dataset.action === 'save-file') {
             triggerSave(data);
         } else if (target.dataset.action === 'undo') {
@@ -1270,14 +1357,18 @@ document.addEventListener('DOMContentLoaded', function () {
             bgm.volume = soundSettings.musicVol * soundSettings.music;
             if (isFinite(play.playbackSpeed) && play.playbackSpeed > 0) {
                 bgm.playbackRate = play.playbackSpeed;
+                if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = play.playbackSpeed; } catch (e) { }
             } else {
                 play.playbackSpeed = 1;
                 bgm.playbackRate = 1;
+                if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = 1; } catch (e) { }
             }
             startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
             // Clear render caches because settings may affect geometry (noteSize, lineWidthFactor, etc.)
             try { render.clearRenderCaches(); } catch (e) { /* ignore if render not ready */ }
         }
+    // 儲存或變更設定後，更新 CSS 變數
+    try { updateBgDarknessCss(); } catch (e) {}
     }
 
     document.getElementById('save-settings-btn').addEventListener('click', () => handleSettingsClose(true));
@@ -1389,6 +1480,15 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!play.btnPause) {
             bgm.pause();
         }
+        // 在使用者開始拖曳時間軸時，暫停背景影片並記錄之前是否為播放中
+        try {
+            if (bgVideo && bgVideo.src) {
+                try { bgVideoWasPlaying = !bgVideo.paused; } catch (e) { bgVideoWasPlaying = false; }
+                try { bgVideo.pause(); } catch (e) { }
+            } else {
+                bgVideoWasPlaying = false;
+            }
+        } catch (e) { bgVideoWasPlaying = false; }
     }
 
     function onTimelineInteractionEnd(e) {
@@ -1402,9 +1502,19 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!play.pause) {
             bgm.currentTime = currentTimelineValue;
             bgm.play().catch(e => console.error("BGM play error:", e));
+            if (bgVideo && bgVideo.src) {
+                try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
+                // 只有在使用者拖曳前影片是播放中的情況下，才恢復播放
+                if (bgVideoWasPlaying) {
+                    bgVideo.play().catch(()=>{});
+                }
+            }
         } else {
             bgm.currentTime = currentTimelineValue;
+            if (bgVideo && bgVideo.src) try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
         }
+        // 重置狀態旗標
+        bgVideoWasPlaying = false;
     }
 
     controls.timeline.addEventListener("touchstart", onTimelineInteractionStart, { passive: true });
@@ -1424,6 +1534,9 @@ document.addEventListener('DOMContentLoaded', function () {
             editor.setSelectionRange(a, a);
         }
         updateTimelineVisual(currentTimelineValue);
+        if (bgVideo && bgVideo.src) {
+            try { bgVideo.currentTime = currentTimelineValue; bgVideo.pause(); } catch (e) { }
+        }
     });
 
     controls.play.addEventListener('click', function (e) {
@@ -1438,8 +1551,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!play.pause) {
             bgm.currentTime = currentTimelineValue;
             bgm.play().catch(e => null);
+            if (bgVideo && bgVideo.src) {
+                try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
+                bgVideo.play().catch(()=>{});
+            }
         } else {
             bgm.pause();
+            if (bgVideo && bgVideo.src) try { bgVideo.pause(); } catch (e) { }
         }
     });
 
@@ -1448,6 +1566,7 @@ document.addEventListener('DOMContentLoaded', function () {
         currentTimelineValue = 0;
         startTime = Date.now();
         bgm.pause();
+    if (bgVideo && bgVideo.src) try { bgVideo.pause(); bgVideo.currentTime = 0; } catch (e) { }
         controls.timeline.value = 0;
         updateTimelineVisual(0);
     });
@@ -1459,6 +1578,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
         bgm.playbackRate = play.playbackSpeed;
         bgm.currentTime = currentTimelineValue;
+        if (bgVideo && bgVideo.src) {
+            try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
+            bgVideo.playbackRate = play.playbackSpeed;
+            if (!play.btnPause) {
+                bgVideo.play().catch(()=>{});
+            } else {
+                try { bgVideo.pause(); } catch (e) { }
+            }
+        }
         if (!play.btnPause) { // Keep playing if it was playing
             bgm.play().catch(e => console.error("BGM play error:", e));
         }
