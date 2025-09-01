@@ -16,6 +16,8 @@ for (let j = 0; j < 8; j++) {
 // Caches to avoid reconstructing heavy objects every frame
 const pathCache = new Map(); // key: `${type}_${start}_${end}_${hbw}` -> PathRecorder
 const arrowShapeCache = new Map(); // key: `${arrowSize}_${wSlide}` -> Path2D
+// Offscreen canvas cache for arrow sprites: key `${arrowSize}_${wSlide}_${color}` -> HTMLCanvasElement
+const arrowCanvasCache = new Map();
 
 // 建立一個快取來儲存不同大小的星星路徑，避免重複計算
 const starCache = new Map();
@@ -319,7 +321,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                     holdLength = (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * currentSettings.speed, (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / currentSettings.speed)) / (d / currentSettings.speed))) * hbw;
                 }
                 drawHold(currentX, currentY, currentSize, color, note.ex ?? false, nang / -4 * Math.PI, holdLength, ctx, hbw, currentSettings, calAng, noteBaseSize);
-                if (holdLength > 0) drawNoteDot(ctx, {
+                if (holdLength > 0 && _t > note.holdTime * (1 - d)) drawNoteDot(ctx, {
                     x: currentX - holdLength * calAng((nang / -4 + 0.875) * Math.PI).x,
                     y: currentY + holdLength * calAng((nang / -4 + 0.875) * Math.PI).y,
                     size: currentSize * hbw * 0.0075,
@@ -791,7 +793,7 @@ export function drawNoteDot(ctx, options) {
         color = "#FF0000",
         transparency = 1,
     } = options;
-
+    if(size <= 0 || isNaN(size)) return;
     const localColor = ctx.createRadialGradient(x, y, 0, x, y, size * 5);
     localColor.addColorStop(0, hexWithAlpha(color, transparency));
     localColor.addColorStop(1, hexWithAlpha(color, 0));
@@ -825,11 +827,15 @@ export class PathRecorder {
         this._segments = [];
         this._totalLength = 0;
         this._isCacheDirty = true; // 快取是否需要更新的標記
+    // 小量級快取：針對重複呼叫 getPointAtLength 的長度位置做 memo
+    this._pointCache = new Map(); // key: rounded length -> {x,y,angle}
     }
 
     // 將快取標記為髒，以便下次重新計算
     _invalidateCache() {
         this._isCacheDirty = true;
+    // 清除點快取，確保下次查詢會使用更新後的 segments
+    if (this._pointCache) this._pointCache.clear();
     }
 
     // 格式化數字以避免浮點數誤差
@@ -971,6 +977,12 @@ export class PathRecorder {
         const segments = this._segments;
         const totalLength = this._totalLength;
 
+        // 使用簡單的捨入快取以避免對相近長度做重複的二分搜尋
+        // 取整到 0.5 單位（可視需求調整精度）
+        const cacheKey = Math.round(targetLength * 2) / 2;
+        if (this._pointCache && this._pointCache.has(cacheKey)) {
+            return this._pointCache.get(cacheKey);
+        }
         // 處理邊界情況
         // 若沒有任何線段（例如只有一個點或空 path），直接回傳最後已知位置
         if (!segments || segments.length === 0) {
@@ -1011,6 +1023,10 @@ export class PathRecorder {
             y: seg.p1.y + (seg.p2.y - seg.p1.y) * t,
             angle: seg.ang,
         };
+
+    if (this._pointCache) this._pointCache.set(cacheKey, result);
+
+    return result;
     }
 
     /**
@@ -1099,22 +1115,23 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             arrowShapeCache.set(arrowKey, arrow);
         }
 
-        let b = 0;
-        for (let i = 0; i < fin - 1; i++) {
-            const lenAlong = (i + 0.5) * spacing;
+        // 計算從哪個 index 開始繪製，以避免大量不必要的迴圈
+        const approxStartIndex = Math.max(0, Math.floor((_t_arrow * totalLen) / spacing) - 1);
+        let b = (fin - 1) * bIncrementPer;
+        for (let i = fin - 1; i >= approxStartIndex; i -= 1 + wSlide * 0.25) {
+            const lenAlong = (i + 0.5) * spacing * (1 - wSlide * 0.035);
             // 只有當在剩餘進度區段，才繪製
             if (lenAlong / totalLen >= _t_arrow) {
                 // 取得路徑上該長度位置點與角度
                 const p = pathObject.getPointAtLength(lenAlong);
                 const x = p.x, y = p.y, angle = p.angle;
 
-                // 手動 translate + rotate
+                // 使用 save/restore 來避免 transform 污染
+                currentCtx.save();
                 currentCtx.translate(x, y);
                 currentCtx.rotate(angle);
                 if (wSlide) {
-                    // 開始畫箭頭，相對於 (0,0) 畫法和原本近似
                     currentCtx.beginPath();
-                    // Tip
                     currentCtx.moveTo(arrowSize * 0.55, 0);
                     currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * -0.4 - b);
                     currentCtx.lineTo(0 - b / 2 + wSlide * arrowSize * 0.05, arrowSize * -0.4 - b + wSlide * arrowSize * 0.12);
@@ -1126,11 +1143,9 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
                 } else {
                     currentCtx.fill(arrow);
                 }
-                // 手動還原：先 rotate 回去，再 translate 回去
-                currentCtx.rotate(-angle);
-                currentCtx.translate(-x, -y);
+                currentCtx.restore();
             }
-            b += bIncrementPer;
+            b -= bIncrementPer * 1.2;
         }
         if (!fading) {
             const k = (noteData.chain && !noteData.firstOne) ? (_t_arrow_progress > 0) + 0 : Math.min(_t_arrow_progress * noteData.slideTime / noteData.delay + 1, 1);
@@ -1165,14 +1180,22 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 
     // Path generation (assuming render.path returns a PathRecorder instance)
     // The PathRecorder instance should be generated by noteData if possible during decode.
-    const cacheKey = `${type}_${startNp}_${endNp}_${Math.round(hbw)}`;
+    const cacheKey = `${type}_${startNp}_${endNp}_${Math.round(hbw)}_${Math.round(hw)}_${Math.round(hh)}`;
     let a = noteData.pathObject || pathCache.get(cacheKey);
     if (!a) {
         a = path(type, startNp, endNp, hw, hh, hbw, calAng);
         pathCache.set(cacheKey, a);
     }
-    // Draw the path itself (the line of the slide)
-    //ctx.stroke(a.ctxPath); // Stroke the Path2D object
+    // Draw the path itself (the line of the slide) to preserve original visual
+    /*try {
+        ctx.save();
+        ctx.lineWidth = s * 0.15 * currentSettings.lineWidthFactor;
+        ctx.strokeStyle = ctx.strokeStyle || localColor;
+        ctx.stroke(a.ctxPath);
+        ctx.restore();
+    } catch (e) {
+        // fallback: ignore if stroke fails on older browsers
+    }*/
 
     // Draw arrows on the path
     // Ensure `a` is a PathRecorder with mathematical getPointAtLength and getTotalLength

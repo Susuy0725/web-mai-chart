@@ -226,6 +226,7 @@ body {
     bottom: 0;
     height: 80px;
     width: 50%;
+    background: #ffffff40;
     transform: rotateX(0deg);
     transform-origin: 0% 100%;
     transition: transform 0.3s, opacity 0.3s ease;

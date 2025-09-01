@@ -1,5 +1,134 @@
 import * as render from "../Js/render.js";
-import {showNotification} from "../Js/main.js";
+import { showNotification } from "./main.js";
+
+// Exported helper: parse parameter strings to delay/duration in seconds and effective bpm
+export function parseParameter(param, currentBpm) {
+    // Standardize: return values in seconds (not milliseconds)
+    let delay = 60 / currentBpm / 1000; // default delay in seconds (one beat)
+    let durationStr = param;
+    let duration = 0; // duration in seconds
+
+    // 1. 支援 delay##duration 格式 (delay in seconds)
+    if (param.includes("##")) {
+        const parts = param.split("##");
+        if (parts.length === 2) {
+            const delayInSeconds = parseFloat(parts[0]);
+            durationStr = parts[1];
+            if (!isNaN(delayInSeconds)) {
+                delay = delayInSeconds / 1000;
+                if (durationStr.includes(":")) {
+                    const parts = durationStr.split(":");
+                    if (parts.length === 2) {
+                        const noteDiv = parseFloat(parts[0]);
+                        const beatCount = parseFloat(parts[1]);
+                        if (!isNaN(noteDiv) && !isNaN(beatCount) && noteDiv !== 0) {
+                            duration = (60 / currentBpm) * (beatCount / (noteDiv / 4)) / 1000;
+                            return {
+                                delay: delay, // seconds
+                                duration: duration, // seconds
+                                bpm: currentBpm,
+                            };
+                        } else {
+                            throw new Error(`resolve ":" format failed: ${durationStr} (param: ${param})`);
+                        }
+                    } else {
+                        throw new Error(`contains ":" format unexpected: ${durationStr} (param: ${param})`);
+                    }
+                } else {
+                    return {
+                        delay: delay, // seconds
+                        duration: parseFloat(durationStr) / 1000, // seconds
+                        bpm: currentBpm,
+                    };
+                }
+            } else {
+                throw new Error(`resolve delay time failed: ${parts[0]} (param: ${param})`);
+            }
+        } else {
+            throw new Error(`"##" format unexpected: ${param}`);
+        }
+    }
+
+    let bpmOverride = undefined;
+
+    // 2. 支援多種 duration 格式，結果都以秒為單位
+    if (durationStr.includes("#") && durationStr.includes(":")) {
+        // 格式: BPM#noteDiv:beatCount  e.g. 160#8:3
+        const parts = durationStr.split("#");
+        if (parts.length === 2) {
+            const bpmOverrideVal = parseFloat(parts[0]);
+            const beatsParts = parts[1].split(":");
+            if (beatsParts.length === 2) {
+                const noteDiv = parseFloat(beatsParts[0]);
+                const beatCount = parseFloat(beatsParts[1]);
+                if (!isNaN(bpmOverrideVal) && !isNaN(beatCount) && !isNaN(noteDiv) && noteDiv !== 0) {
+                    bpmOverride = bpmOverrideVal;
+                    delay = 60 / bpmOverride / 1000;
+                    duration = (60 / bpmOverride) * (beatCount / (noteDiv / 4)) / 1000;
+                } else {
+                    throw new Error(`resolve "BPM#noteDiv:beatCount" format failed: ${durationStr} (param: ${param})`);
+                }
+            } else {
+                throw new Error(`after "#", ":" format unexpected: ${parts[1]} (param: ${param})`);
+            }
+        } else {
+            throw new Error(`includes "#" and ":" format unexpected: ${durationStr} (param: ${param})`);
+        }
+
+    } else if (durationStr.includes("#") && !durationStr.startsWith("#")) {
+        // 格式: BPM#seconds  (explicit seconds with BPM override), e.g. 180#2.5
+        const parts = durationStr.split("#");
+        if (parts.length === 2) {
+            const bpmOverrideVal = parseFloat(parts[0]);
+            const secondsVal = parseFloat(parts[1]);
+            if (!isNaN(bpmOverrideVal) && !isNaN(secondsVal)) {
+                bpmOverride = bpmOverrideVal;
+                delay = 60 / bpmOverride / 1000;
+                duration = secondsVal / 1000; // seconds
+            } else {
+                throw new Error(`resolve "BPM#seconds" format failed: ${durationStr} (param: ${param})`);
+            }
+        } else {
+            throw new Error(`contains "#" format unexpected: ${durationStr} (param: ${param})`);
+        }
+
+    } else if (durationStr.includes(":")) {
+        // 格式: noteDiv:beatCount e.g. 8:3 (use currentBpm)
+        const parts = durationStr.split(":");
+        if (parts.length === 2) {
+            const noteDiv = parseFloat(parts[0]);
+            const beatCount = parseFloat(parts[1]);
+            if (!isNaN(noteDiv) && !isNaN(beatCount) && noteDiv !== 0) {
+                duration = (60 / currentBpm) * (beatCount / (noteDiv / 4)) / 1000;
+            } else {
+                throw new Error(`resolve ":" format failed: ${durationStr} (param: ${param})`);
+            }
+        } else {
+            throw new Error(`contains ":" format unexpected: ${durationStr} (param: ${param})`);
+        }
+
+    } else if (durationStr.startsWith("#")) {
+        // 格式: #seconds e.g. #2.5
+        const secondsStr = durationStr.substring(1);
+        const durationInSeconds = parseFloat(secondsStr);
+        if (!isNaN(durationInSeconds)) {
+            duration = durationInSeconds;
+        } else {
+            throw new Error(`resolve #seconds format failed: ${durationStr} (param: ${param})`);
+        }
+
+    } else {
+        throw new Error(`unknown time constant format: ${durationStr} (param: ${param})`);
+    }
+
+    const effectiveBpm = bpmOverride !== undefined ? bpmOverride : currentBpm;
+
+    return {
+        delay: delay, // seconds
+        duration: duration, // seconds
+        bpm: effectiveBpm,
+    };
+}
 
 export function simai_decode(_data) {
     // 註解
@@ -122,113 +251,6 @@ export function simai_decode(_data) {
     }
 
     // ──────────────────────────────
-    // 輔助函式：解析 [參數] 部分，支援多種格式
-    function parseParameter(param, currentBpm) { // 確保函式是 export 的
-        let delay = 1; // 延遲時間，初始化為 1000 毫秒
-        let durationStr = param; // 用於解析持續時間的部分
-        let duration = 0; // 持續時間，初始化為 0 毫秒
-        delay = (60 / currentBpm);
-
-        // 1. 檢查是否包含延遲 (## 分隔)
-        if (param.includes("##")) {
-            const parts = param.split("##");
-            if (parts.length === 2) {
-                const delayInSeconds = parseFloat(parts[0]);
-                if (!isNaN(delayInSeconds)) {
-                    delay = delayInSeconds; // 將秒轉換為毫秒
-                } else {
-                    delay = 0; // 解析失敗則延遲為 0
-                    throw new Error(`resolve delay time failed: ${parts[0]} (param: ${param})`);
-                }
-                durationStr = parts[1]; // ## 後面的部分是持續時間參數
-            } else {
-                // 如果 ## 格式不符合預期，發出警告並將整個參數視為持續時間
-                delay = 0;
-                durationStr = param;
-                throw new Error(`"##" format unexpected: ${param}`);
-            }
-        }
-
-        let bpmOverride = undefined; // 記錄是否有指定的 BPM
-
-        // 2. 解析持續時間參數 (durationStr) - 判斷順序很重要！
-        if (durationStr.includes("#") && durationStr.includes(":")) {
-            // 格式: BPM#拍數:音符單位 (例如 160#8:3) - 最優先檢查
-            const parts = durationStr.split("#");
-            if (parts.length === 2) {
-                const bpmOverrideVal = parseFloat(parts[0]);
-                const beatsParts = parts[1].split(":");
-                if (beatsParts.length === 2) {
-                    const noteDiv = parseFloat(beatsParts[0]);
-                    const beatCount = parseFloat(beatsParts[1]);
-                    if (!isNaN(bpmOverrideVal) && !isNaN(beatCount) && !isNaN(noteDiv) && noteDiv !== 0) {
-                        bpmOverride = bpmOverrideVal;
-                        delay = (60 / bpmOverride);
-                        duration = (60 / bpmOverride) * (beatCount / (noteDiv / 4)); // 計算持續時間 (毫秒)
-                    } else {
-                        throw new Error(`resolve "--#--:--" format failed: ${durationStr} (param: ${param})`);
-                    }
-                } else {
-                    throw new Error(`after "#", ":" format unexpected: ${parts[1]} (param: ${param})`);
-                }
-            } else {
-                throw new Error(`includes "#" and ":" format unexpected: ${durationStr} (param: ${param})`);
-            }
-
-        } else if (durationStr.includes("#") && !durationStr.startsWith("#")) {
-            // 格式: 拍數:音符單位 (例如 180#3) - 使用目前的 BPM 計算
-            const parts = durationStr.split("#");
-            if (parts.length === 2) {
-                const bpmOverrideVal = parseFloat(parts[0]);
-                const secondsStr = parseFloat(parts[1]);
-                if (!isNaN(bpmOverrideVal) && !isNaN(secondsStr)) {
-                    bpmOverride = bpmOverrideVal;
-                    delay = (60 / bpmOverride);
-                    duration = secondsStr; // 計算持續時間 (毫秒)
-                } else {
-                    throw new Error(`resolve ":" format failed: ${durationStr} (param: ${param})`);
-                }
-            } else {
-                throw new Error(`contains ":" format unexpected: ${durationStr} (param: ${param})`);
-            }
-        } else if (durationStr.includes(":")) {
-            // 格式: 拍數:音符單位 (例如 8:3) - 使用目前的 BPM 計算
-            const parts = durationStr.split(":");
-            if (parts.length === 2) {
-                const noteDiv = parseFloat(parts[0]);
-                const beatCount = parseFloat(parts[1]);
-                if (!isNaN(noteDiv) && !isNaN(beatCount) && noteDiv !== 0) {
-                    duration = (60 / currentBpm) * (beatCount / (noteDiv / 4)); // 計算持續時間 (毫秒)
-                } else {
-                    throw new Error(`resolve ":" format failed: ${durationStr} (param: ${param})`);
-                }
-            } else {
-                throw new Error(`contains ":" format unexpected: ${durationStr} (param: ${param})`);
-            }
-        } else if (durationStr.startsWith("#")) {
-            // 格式: #秒數 (例如 #2) - 新增的格式
-            const secondsStr = durationStr.substring(1); // 移除開頭的 '#'
-            const durationInSeconds = parseFloat(secondsStr);
-            if (!isNaN(durationInSeconds)) {
-                duration = durationInSeconds; // 將秒轉換為毫秒
-            } else {
-                throw new Error(`resolve #seconds format failed: ${durationStr} (param: ${param})`);
-            }
-        } else {
-            // 未知的持續時間格式
-            duration = -1; // 確保持續時間為 NaN
-            throw new Error(`unknown time constant format: ${durationStr} (param: ${param})`);
-        }
-
-        const effectiveBpm = bpmOverride !== undefined ? bpmOverride : currentBpm;
-
-        return {
-            delay: delay, // 延遲時間，單位為毫秒
-            duration: duration, // 持續時間，單位為毫秒
-            bpm: effectiveBpm, // 計算時使用的 BPM (如果指定) 或目前的 BPM
-        };
-    }
-    // ──────────────────────────────
 
     for (let i = 0; i < tempNote.length; i++) {
         try {
@@ -261,7 +283,8 @@ export function simai_decode(_data) {
             if (holdMatch) {
                 try {
                     const result = parseParameter(holdMatch[1], data.bpm);
-                    tempNote[i].holdTime = result.duration;
+                    // parseParameter returns seconds; convert to milliseconds for existing callers
+                    tempNote[i].holdTime = result.duration * 1000;
                 } catch (error) {
                     console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
                     tempNote[i].invalid = true;
@@ -325,7 +348,13 @@ export function simai_decode(_data) {
                                 sp.data[j] = [slideMatch[0], g];
                                 g = g.match(/\[([ -~]+?)\]/);
                                 if (g) {
-                                    sp.slideInfo[j] = parseParameter(g[1], data.bpm);
+                                    // convert parser outputs to ms to match existing consumers
+                                    const parsed = parseParameter(g[1], data.bpm);
+                                    sp.slideInfo[j] = {
+                                        ...parsed,
+                                        delay: parsed.delay * 1000,
+                                        duration: parsed.duration * 1000,
+                                    };
                                     sp.data[j][1] = sp.data[j][1].slice(0, sp.data[j][1].indexOf("[")) + sp.data[j][1].slice(sp.data[j][1].indexOf("]") + 1);
                                 }
                             } catch (error) {

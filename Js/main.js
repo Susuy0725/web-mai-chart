@@ -1,12 +1,13 @@
-import { simai_decode } from "../Js/decode.js"; // Assuming this path is correct
-import * as render from "../Js/render.js";
+import { simai_decode } from "./decode.js";
+import * as render from "./render.js";
+import { loadZipFromUrl } from "./zipLoader.js";
 
 export let settings = { // Keep export if other modules might need direct access
     'musicDelay': 0,
     'distanceToMid': 0.3,
     'roundStroke': true,
     'noteSize': 0.09,
-    'speed': 2,
+    'speed': 2.75,
     'pinkStar': false,
     'touchSpeed': 2,
     'slideSpeed': 2,
@@ -22,7 +23,7 @@ export let settings = { // Keep export if other modules might need direct access
     'lineWidthFactor': 0.8,
     'noNoteArc': false,
     'middleDisplay': 2,
-    'maxSlideOnScreenCount': 500,
+    'maxSlideOnScreenCount': 200,
     'showFpsCounter': false,
     'audioZoom': 200,
     'showPerfBreakdown': false,
@@ -372,6 +373,103 @@ document.addEventListener('DOMContentLoaded', function () {
     const timeDisplay = document.getElementById("nowTrackTime");
     const bgm = document.getElementById("bgm");
     const bgVideo = document.getElementById('backgroundVideo');
+    // If URL contains ?zip=<url>, fetch and unpack zip and load as folder
+    (async function handleZipParam() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const zipUrl = params.get('zip')?.replace(/"/g, "");
+            if (!zipUrl) return;
+            showNotification('發現 zip 參數，嘗試下載並解壓...');
+            const z = await loadZipFromUrl(zipUrl);
+            const pseudoFiles = [];
+            for (const f of z.files) {
+                if (f.text != null) {
+                    const blob = new Blob([f.text], { type: 'text/plain' });
+                    const file = new File([blob], f.name, { type: 'text/plain' });
+                    pseudoFiles.push(file);
+                } else if (f.arrayBuffer) {
+                    const blob = new Blob([f.arrayBuffer]);
+                    const file = new File([blob], f.name);
+                    pseudoFiles.push(file);
+                }
+            }
+            if (pseudoFiles.length === 0) {
+                showNotification('zip 內沒有可用檔案');
+                return;
+            }
+            // Reuse the same logic as file-input fallback: process pseudoFiles array
+            // Pause and reset audio
+            play.pauseBoth(controls.play);
+            if (bgm.src) try { URL.revokeObjectURL(bgm.src); } catch (e) { }
+            bgm.src = '';
+            fullAudioBuffer = null;
+            isAudioSourceConnected = false;
+
+            // find maidata/audio/pv
+            let foundMaidata = null, foundAudio = null, foundPV = null;
+            for (const f of pseudoFiles) {
+                const name = (f.name || '').toLowerCase();
+                if (!foundMaidata && (name.startsWith('maidata') || name.endsWith('.txt') || name.includes('maidata.'))) foundMaidata = f;
+                if (!foundAudio && ((f.type && f.type.startsWith('audio/')) || name.startsWith('track.') || name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg'))) foundAudio = f;
+                if (!foundPV && name.startsWith('pv.')) foundPV = f;
+            }
+
+            if (foundAudio) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    audioCtx.decodeAudioData(e.target.result)
+                        .then(buffer => {
+                            fullAudioBuffer = buffer;
+                            bgm.src = URL.createObjectURL(foundAudio);
+                            bgm.load();
+                        })
+                        .catch(err => console.error('audio decode err', err));
+                };
+                reader.readAsArrayBuffer(foundAudio);
+            }
+
+            try {
+                const bgVideoEl = document.getElementById('backgroundVideo');
+                if (foundPV && bgVideoEl) {
+                    if (bgVideoEl.src) try { URL.revokeObjectURL(bgVideoEl.src); } catch (e) { }
+                    bgVideoEl.src = URL.createObjectURL(foundPV);
+                    bgVideoEl.load();
+                }
+            } catch (e) { console.error('pv load error', e); }
+
+            if (foundMaidata) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    maidata = e.target.result;
+                    data = parseMaidataToJson(maidata);
+                    settings.musicDelay = parseFloat(data.first ?? "0");
+                    editor.value = getNowDiff(settings.nowDiff);
+                    currentTimelineValue = 0;
+                    controls.timeline.value = 0;
+                    updateTimelineVisual(0);
+                    startTime = Date.now();
+                    processChartData();
+                };
+                reader.readAsText(foundMaidata);
+            } else if (foundAudio) {
+                maidata = "first=0\ninote=//EASY\n";
+                data = parseMaidataToJson(maidata);
+                settings.musicDelay = parseFloat(data.first ?? "0");
+                editor.value = getNowDiff(settings.nowDiff);
+                currentTimelineValue = 0;
+                controls.timeline.value = 0;
+                updateTimelineVisual(0);
+                startTime = Date.now();
+                processChartData();
+                showNotification('已載入音訊並建立空譜面');
+            } else {
+                showNotification('Zip 內未找到 maidata 或音訊檔');
+            }
+        } catch (e) {
+            console.error('zip param handling error', e);
+            showNotification('處理 zip 參數失敗');
+        }
+    })();
     let bgVideoWasPlaying = false;
     const dropdownList = document.querySelector(".dropdownlist");
     const allDropdowns = document.querySelectorAll('.dropdown-content');
@@ -1379,6 +1477,62 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.getElementById('save-settings-btn').addEventListener('click', () => handleSettingsClose(true));
     document.getElementById('cancel-settings-btn').addEventListener('click', () => handleSettingsClose(false));
+
+    // Reset settings to initial defaults
+    function resetSettingsToDefault() {
+        // Recreate default settings object (mirror initial declaration)
+        const defaultSettings = {
+            'musicDelay': 0,
+            'distanceToMid': 0.3,
+            'roundStroke': true,
+            'noteSize': 0.09,
+            'speed': 2,
+            'pinkStar': false,
+            'touchSpeed': 2,
+            'slideSpeed': 2,
+            'holdEndNoSound': false,
+            'showSlide': true,
+            'nextNoteHighlight': false,
+            'followText': true,
+            'nowDiff': 5,
+            'showEffect': true,
+            'effectDecayTime': 0.3,
+            'noSensor': false,
+            'disableSensorWhenPlaying': true,
+            'lineWidthFactor': 0.8,
+            'noNoteArc': false,
+            'middleDisplay': 2,
+            'maxSlideOnScreenCount': 200,
+            'showFpsCounter': false,
+            'audioZoom': 200,
+            'showPerfBreakdown': false,
+            'backgroundDarkness': 0.5,
+        };
+
+        // Overwrite existing settings keys with defaults
+        Object.keys(defaultSettings).forEach(k => {
+            settings[k] = defaultSettings[k];
+        });
+
+        // Update UI form if visible
+        try { generateSettingsForm(); } catch (e) { /* ignore */ }
+
+        // Persist to localStorage if available
+        try {
+            if (window.localStore && typeof window.localStore.saveSettings === 'function') {
+                window.localStore.saveSettings(settings);
+            }
+        } catch (e) { console.warn('Failed to save settings after reset', e); }
+
+        // Update CSS variables and render
+        try { updateBgDarknessCss(); } catch (e) { }
+        try { render.clearRenderCaches(); } catch (e) { }
+
+        showNotification('已重置設定為預設值');
+    }
+
+    const resetBtn = document.getElementById('reset-settings-btn');
+    if (resetBtn) resetBtn.addEventListener('click', resetSettingsToDefault);
 
     _updCanvasRes();
     controls.play.textContent = icons[0 + play.btnPause];
