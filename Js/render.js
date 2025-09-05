@@ -2,7 +2,7 @@
 // RENDER GAME FUNNCTION - All drawing logic goes here
 // ====================================================================================
 
-import { settings } from "./main.js";
+import { settings, noteImages } from "./main.js";
 
 // import { settings } from "./main.js"; // Assuming settings is passed as currentSettings
 
@@ -175,10 +175,10 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         case 2:
             const trueScore = Math.round(Math.max(play.score, 0));
             ctx.fillStyle = adjustBrightness("#498BFF", 1 - settings.backgroundDarkness);
-            if (trueScore > 800000){
+            if (trueScore > 800000) {
                 ctx.fillStyle = adjustBrightness("#FF6353", 1 - settings.backgroundDarkness);
             }
-            if(trueScore > 1000000){
+            if (trueScore > 1000000) {
                 ctx.fillStyle = adjustBrightness("#FFD559", 1 - settings.backgroundDarkness);
             }
             ctx.strokeStyle = "white";
@@ -431,28 +431,42 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
 export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, noteBaseSize) {
     let s = noteBaseSize; // Use passed base size
     let currentSize = Math.max(sizeFactor * s, 0);
-    const unit = getUnitCirclePath();
+    if (currentSettings.useImgSkin) {
+        // Draw using image skin
+        console.log("what", noteImages.tap);
+        if (!noteImages.tap) return; // Image not loaded yet
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(currentSize, currentSize);
+        ctx.drawImage(noteImages.tap,
+            0, 0, 512, 512,
+            x - currentSize, y - currentSize,
+            currentSize * 2, currentSize * 2);
+        ctx.restore();
+    } else {
+        const unit = getUnitCirclePath();
 
-    ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
-    ctx.shadowColor = (ex ? color : '#000000');
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(currentSize, currentSize);
-    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor / currentSize; // scale-compensated
-    ctx.strokeStyle = 'white';
-    ctx.stroke(unit);
-    ctx.restore();
+        ctx.save();
+        ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
+        ctx.shadowColor = (ex ? color : '#000000');
+        ctx.translate(x, y);
+        ctx.scale(currentSize, currentSize);
+        ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor / currentSize; // scale-compensated
+        ctx.strokeStyle = 'white';
+        ctx.stroke(unit);
+        //ctx.restore();
 
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = '#00000000';
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(currentSize, currentSize);
-    ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor / currentSize; // scale-compensated
-    ctx.strokeStyle = color;
-    ctx.fillStyle = '#00000000';
-    ctx.stroke(unit);
-    ctx.restore();
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = '#00000000';
+        //ctx.save();
+        //ctx.translate(x, y);
+        //ctx.scale(currentSize, currentSize);
+        ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor / currentSize; // scale-compensated
+        ctx.strokeStyle = color;
+        ctx.fillStyle = '#00000000';
+        ctx.stroke(unit);
+        ctx.restore();
+    }
 }
 
 export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
@@ -793,7 +807,7 @@ export function drawNoteDot(ctx, options) {
         color = "#FF0000",
         transparency = 1,
     } = options;
-    if(size <= 0 || isNaN(size)) return;
+    if (size <= 0 || isNaN(size)) return;
     const localColor = ctx.createRadialGradient(x, y, 0, x, y, size * 5);
     localColor.addColorStop(0, hexWithAlpha(color, transparency));
     localColor.addColorStop(1, hexWithAlpha(color, 0));
@@ -827,15 +841,15 @@ export class PathRecorder {
         this._segments = [];
         this._totalLength = 0;
         this._isCacheDirty = true; // 快取是否需要更新的標記
-    // 小量級快取：針對重複呼叫 getPointAtLength 的長度位置做 memo
-    this._pointCache = new Map(); // key: rounded length -> {x,y,angle}
+        // 小量級快取：針對重複呼叫 getPointAtLength 的長度位置做 memo
+        this._pointCache = new Map(); // key: rounded length -> {x,y,angle}
     }
 
     // 將快取標記為髒，以便下次重新計算
     _invalidateCache() {
         this._isCacheDirty = true;
-    // 清除點快取，確保下次查詢會使用更新後的 segments
-    if (this._pointCache) this._pointCache.clear();
+        // 清除點快取，確保下次查詢會使用更新後的 segments
+        if (this._pointCache) this._pointCache.clear();
     }
 
     // 格式化數字以避免浮點數誤差
@@ -1024,9 +1038,9 @@ export class PathRecorder {
             angle: seg.ang,
         };
 
-    if (this._pointCache) this._pointCache.set(cacheKey, result);
+        if (this._pointCache) this._pointCache.set(cacheKey, result);
 
-    return result;
+        return result;
     }
 
     /**

@@ -28,6 +28,7 @@ export let settings = { // Keep export if other modules might need direct access
     'audioZoom': 200,
     'showPerfBreakdown': false,
     'backgroundDarkness': 0.5,
+    'useImgSkin': false,
 };
 
 // 把 settings.backgroundDarkness 同步到 CSS :root 的 --bg-dark
@@ -126,6 +127,9 @@ let startTime = 0;
 let maxTime = 1000;
 let sfxReady = false, inSettings = false;
 let currentTimelineValue = 0;
+
+// Export a mutable object that will be populated asynchronously.
+export const noteImages = {};
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -365,7 +369,7 @@ async function triggerSave(data) {
 
 document.addEventListener('DOMContentLoaded', function () {
     // 初始時同步 CSS 變數
-    try { updateBgDarknessCss(); } catch (e) {}
+    try { updateBgDarknessCss(); } catch (e) { }
     const renderCanvas = document.getElementById("render");
     const ctx = renderCanvas.getContext("2d");
     const customMenu = document.getElementById("customMenu");
@@ -944,7 +948,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             const pvUrl = URL.createObjectURL(foundPV);
                             bgVideoEl.src = pvUrl;
                             bgVideoEl.load();
-                            bgVideoEl.play().catch(e => { try { bgVideoEl.muted = true; bgVideoEl.play().catch(()=>{}); } catch(e){} });
+                            bgVideoEl.play().catch(e => { try { bgVideoEl.muted = true; bgVideoEl.play().catch(() => { }); } catch (e) { } });
                             bgVideoEl.style.display = '';
                             console.log('回退模式：已載入 PV 檔案。');
                         }
@@ -1052,6 +1056,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const end = editor.selectionEnd;
         const selected = editor.value.substring(start, end);
 
+
+
         switch (action) {
             case "copy":
                 await navigator.clipboard.writeText(selected);
@@ -1113,7 +1119,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         // Default behavior for standalone digits (keep original numeric flip)
                         if (/\d/.test(ch)) {
-                            result += (9 - parseInt(ch, 10)).toString();
+                            result += ((9 - parseInt(ch, 10)) % 8).toString();
                             continue;
                         }
 
@@ -1135,6 +1141,237 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (/\q/.test(ch)) {
                             result += 'p';
                             continue;
+                        }
+                    }
+
+                    // by default, copy character unchanged
+                    result += ch;
+                }
+                editor.setRangeText(result, start, end, "end");
+                break;
+            }
+            case "trun-upside-down": {
+                let result = '';
+                let inParen = 0, inBrace = 0, inBrack = 0;
+                // mapping for D/E tokens (1..8)
+                const deMap = { 1: 5, 2: 4, 3: 3, 4: 2, 5: 1, 6: 8, 7: 7, 8: 6 };
+
+                for (let i = 0; i < selected.length; i++) {
+                    const ch = selected[i];
+                    if (ch === '(') inParen++; if (ch === ')') inParen--;
+                    if (ch === '{') inBrace++; if (ch === '}') inBrace--;
+                    if (ch === '[') inBrack++; if (ch === ']') inBrack--;
+
+                    // only transform when not inside any brackets
+                    if (inParen === 0 && inBrack === 0 && inBrace === 0) {
+                        const up = ch.toUpperCase();
+                        // Handle C / C1 (leave unchanged)
+                        if (up === 'C') {
+                            const next = selected[i + 1];
+                            if (next === '1') {
+                                result += ch + next; // preserve original case of letter
+                                i++; // consume digit
+                                continue;
+                            } else {
+                                result += ch;
+                                continue;
+                            }
+                        }
+
+                        // Handle D/E tokens with special mapping
+                        if (up === 'D' || up === 'E') {
+                            const next = selected[i + 1];
+                            if (next && /\d/.test(next)) {
+                                const d = parseInt(next, 10);
+                                if (d >= 1 && d <= 8) {
+                                    const mapped = deMap[d];
+                                    result += ch + mapped.toString();
+                                    i++; // consume digit
+                                    continue;
+                                }
+                            }
+                            // fallback: just append the letter if no valid digit
+                            result += ch;
+                            continue;
+                        }
+
+                        // Default behavior for standalone digits (keep original numeric flip)
+                        if (/\d/.test(ch)) {
+                            // 1 - 4
+                            // 2 - 3
+                            // 3 - 2
+                            result += ((12 - parseInt(ch, 10)) % 8 + 1).toString();
+                            continue;
+                        }
+
+                        if (/\p/.test(ch)) {
+                            result += 'q';
+                            continue;
+                        }
+
+                        if (/\q/.test(ch)) {
+                            result += 'p';
+                            continue;
+                        }
+                    }
+
+                    // by default, copy character unchanged
+                    result += ch;
+                }
+                editor.setRangeText(result, start, end, "end");
+                break;
+            }
+            case "trun-right": {
+                let result = '';
+                let inParen = 0, inBrace = 0, inBrack = 0;
+
+                for (let i = 0; i < selected.length; i++) {
+                    const ch = selected[i];
+                    if (ch === '(') inParen++; if (ch === ')') inParen--;
+                    if (ch === '{') inBrace++; if (ch === '}') inBrace--;
+                    if (ch === '[') inBrack++; if (ch === ']') inBrack--;
+
+                    // only transform when not inside any brackets
+                    if (inParen === 0 && inBrack === 0 && inBrace === 0) {
+                        const up = ch.toUpperCase();
+                        // Handle C / C1 (leave unchanged)
+                        if (up === 'C') {
+                            const next = selected[i + 1];
+                            if (next === '1') {
+                                result += ch + next; // preserve original case of letter
+                                i++; // consume digit
+                                continue;
+                            } else {
+                                result += ch;
+                                continue;
+                            }
+                        }
+
+                        // Default behavior for standalone digits (keep original numeric flip)
+                        if (/\d/.test(ch)) {
+                            result += (parseInt(ch, 10) % 8 + 1).toString();
+                            continue;
+                        }
+                    }
+
+                    // by default, copy character unchanged
+                    result += ch;
+                }
+                editor.setRangeText(result, start, end, "end");
+                break;
+            }
+            case "trun-left": {
+                let result = '';
+                let inParen = 0, inBrace = 0, inBrack = 0;
+
+                for (let i = 0; i < selected.length; i++) {
+                    const ch = selected[i];
+                    if (ch === '(') inParen++; if (ch === ')') inParen--;
+                    if (ch === '{') inBrace++; if (ch === '}') inBrace--;
+                    if (ch === '[') inBrack++; if (ch === ']') inBrack--;
+
+                    // only transform when not inside any brackets
+                    if (inParen === 0 && inBrack === 0 && inBrace === 0) {
+                        const up = ch.toUpperCase();
+                        // Handle C / C1 (leave unchanged)
+                        if (up === 'C') {
+                            const next = selected[i + 1];
+                            if (next === '1') {
+                                result += ch + next; // preserve original case of letter
+                                i++; // consume digit
+                                continue;
+                            } else {
+                                result += ch;
+                                continue;
+                            }
+                        }
+
+                        // Default behavior for standalone digits (keep original numeric flip)
+                        if (/\d/.test(ch)) {
+                            result += ((parseInt(ch, 10) + 6) % 8 + 1).toString();
+                            continue;
+                        }
+                    }
+
+                    // by default, copy character unchanged
+                    result += ch;
+                }
+                editor.setRangeText(result, start, end, "end");
+                break;
+            }
+            case "ad-rm-bk": {
+                let result = '';
+                let inParen = 0, inBrace = 0, inBrack = 0;
+
+                for (let i = 0; i < selected.length; i++) {
+                    const ch = selected[i];
+                    if (ch === '(') inParen++; if (ch === ')') inParen--;
+                    if (ch === '{') inBrace++; if (ch === '}') inBrace--;
+                    if (ch === '[') inBrack++; if (ch === ']') inBrack--;
+
+                    // only transform when not inside any brackets
+                    if (inParen === 0 && inBrack === 0 && inBrace === 0) {
+                        const up = ch.toUpperCase();
+                        if (up === 'A' || up === 'B' || up === 'C' || up === 'D' || up === 'E') {
+                            const next = selected[i + 1];
+                            result += ch + next; // preserve original case of letter
+                            i++; // consume digit
+                            continue;
+                        }
+
+                        // Default behavior for standalone digits (keep original numeric flip)
+                        if (/\d/.test(ch)) {
+                            const next = selected[i + 1];
+                            if (/b/.test(next)) {
+                                result += ch;
+                                i++;
+                                continue;
+                            } else {
+                                result += ch + "b" + next;
+                                i++;
+                                continue;
+                            }
+                        }
+                    }
+
+                    // by default, copy character unchanged
+                    result += ch;
+                }
+                editor.setRangeText(result, start, end, "end");
+                break;
+            }
+            case "ad-rm-ex": {
+                let result = '';
+                let inParen = 0, inBrace = 0, inBrack = 0;
+
+                for (let i = 0; i < selected.length; i++) {
+                    const ch = selected[i];
+                    if (ch === '(') inParen++; if (ch === ')') inParen--;
+                    if (ch === '{') inBrace++; if (ch === '}') inBrace--;
+                    if (ch === '[') inBrack++; if (ch === ']') inBrack--;
+
+                    // only transform when not inside any brackets
+                    if (inParen === 0 && inBrack === 0 && inBrace === 0) {
+                        const up = ch.toUpperCase();
+                        if (up === 'A' || up === 'B' || up === 'C' || up === 'D' || up === 'E') {
+                            const next = selected[i + 1];
+                            result += ch + next; // preserve original case of letter
+                            i++; // consume digit
+                            continue;
+                        }
+
+                        // Default behavior for standalone digits (keep original numeric flip)
+                        if (/\d/.test(ch)) {
+                            const next = selected[i + 1];
+                            if (/b/.test(next)) {
+                                result += ch;
+                                i++;
+                                continue;
+                            } else {
+                                result += ch + "x" + next;
+                                i++;
+                                continue;
+                            }
                         }
                     }
 
@@ -1177,8 +1414,6 @@ document.addEventListener('DOMContentLoaded', function () {
         'zoomIn': document.getElementById('zoomIn'),
         'zoomOut': document.getElementById('zoomOut'),
     };
-
-    const noteImages = getImgs();
 
     function handleFileUpload(accept, callback, isDirectory = false) {
         allDropdowns.forEach(menu => menu.classList.add('hide'));
@@ -1465,14 +1700,14 @@ document.addEventListener('DOMContentLoaded', function () {
             // Clear render caches because settings may affect geometry (noteSize, lineWidthFactor, etc.)
             try { render.clearRenderCaches(); } catch (e) { /* ignore if render not ready */ }
         }
-    // 儲存或變更設定後，更新 CSS 變數
-    try { updateBgDarknessCss(); } catch (e) {}
-    // 嘗試將設定存回 localStorage
-    try {
-        if (window.localStore && typeof window.localStore.saveSettings === 'function') {
-            window.localStore.saveSettings(settings);
-        }
-    } catch (e) { console.warn('Failed to save settings to localStorage', e); }
+        // 儲存或變更設定後，更新 CSS 變數
+        try { updateBgDarknessCss(); } catch (e) { }
+        // 嘗試將設定存回 localStorage
+        try {
+            if (window.localStore && typeof window.localStore.saveSettings === 'function') {
+                window.localStore.saveSettings(settings);
+            }
+        } catch (e) { console.warn('Failed to save settings to localStorage', e); }
     }
 
     document.getElementById('save-settings-btn').addEventListener('click', () => handleSettingsClose(true));
@@ -1666,7 +1901,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
                 // 只有在使用者拖曳前影片是播放中的情況下，才恢復播放
                 if (bgVideoWasPlaying) {
-                    bgVideo.play().catch(()=>{});
+                    bgVideo.play().catch(() => { });
                 }
             }
         } else {
@@ -1713,7 +1948,7 @@ document.addEventListener('DOMContentLoaded', function () {
             bgm.play().catch(e => null);
             if (bgVideo && bgVideo.src) {
                 try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
-                bgVideo.play().catch(()=>{});
+                bgVideo.play().catch(() => { });
             }
         } else {
             bgm.pause();
@@ -1726,7 +1961,7 @@ document.addEventListener('DOMContentLoaded', function () {
         currentTimelineValue = 0;
         startTime = Date.now();
         bgm.pause();
-    if (bgVideo && bgVideo.src) try { bgVideo.pause(); bgVideo.currentTime = 0; } catch (e) { }
+        if (bgVideo && bgVideo.src) try { bgVideo.pause(); bgVideo.currentTime = 0; } catch (e) { }
         controls.timeline.value = 0;
         updateTimelineVisual(0);
     });
@@ -1742,7 +1977,7 @@ document.addEventListener('DOMContentLoaded', function () {
             try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
             bgVideo.playbackRate = play.playbackSpeed;
             if (!play.btnPause) {
-                bgVideo.play().catch(()=>{});
+                bgVideo.play().catch(() => { });
             } else {
                 try { bgVideo.pause(); } catch (e) { }
             }
@@ -2141,17 +2376,60 @@ document.addEventListener('DOMContentLoaded', function () {
     update();
 });
 
-function getImgs() {
-    const Images = {};
+async function getImgs() {
+    // Populate the exported `noteImages` object using fetch so we can control
+    // loading and attach `.sprite` properties expected by render.
+    const images = noteImages; // fill this shared object
     try {
-        Images.outline = document.getElementById("outline");
-        Images.sensor = document.getElementById("sensor");
-        Images.sensorText = document.getElementById("sensor_text");
-        if (!Images.outline || !Images.sensor || !Images.sensorText) {
-            console.warn("Outline or Sensor image not found in DOM.");
+        // Map DOM ids to keys used by render
+        const domMap = {
+            outline: 'outline',
+            sensor: 'sensor',
+            sensor_text: 'sensorText',
+            break: 'break',
+            each: 'each',
+            touch: 'touch',
+            touch_each: 'touch_each',
+            tap_ex: 'tap_ex',
+            star: 'star',
+            star_break: 'star_break',
+            star_each: 'star_each'
+        };
+        Object.entries(domMap).forEach(([domId, key]) => {
+            const el = document.getElementById(domId);
+            if (el) images[key] = el;
+        });
+
+        if (!images.outline || !images.sensor || !images.sensorText) {
+            console.warn('Outline or Sensor image not found in DOM.');
         }
+
+        // Fetch and create Image elements for skins that render expects as sprites
+        const toFetch = ['tap', 'hold'];
+        await Promise.all(toFetch.map(async (name) => {
+            try {
+                const resp = await fetch(`./Skin/${name}.png`);
+                if (!resp.ok) throw new Error(`Failed to fetch Skin/${name}.png (${resp.status})`);
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                const p = new Promise((res, rej) => {
+                    img.onload = () => { res(); };
+                    img.onerror = (e) => { rej(new Error('Image load error for ' + name, e)); };
+                });
+                img.src = url;
+                await p;
+                images[name] = img;
+            } catch (e) {
+                console.error('Failed to load skin image', name, e);
+            }
+        }));
     } catch (e) {
-        console.error("Error getting images:", e);
+        console.error('Error getting images:', e);
     }
-    return Images;
+    console.log('Loaded images:', images);
+    return images;
 }
+
+// Start loading in background; populate `noteImages` when ready.
+getImgs().catch(err => console.error('getImgs failed:', err));
