@@ -209,7 +209,6 @@ export function simai_decode(_data) {
         // 累加時間：此處公式依 slice 與 bpm 計算，4000 為單位比例，可依需求調整
         timeSum += (1 / slice) * (60 / bpm) * 4000;
     }
-    console.log(marks);
 
     for (let i = 0; i < tempNote.length; i++) {
         let data = tempNote[i];
@@ -244,13 +243,15 @@ export function simai_decode(_data) {
                 for (let j = 0; j < data.length; j++) {
                     if (data[j] === "") continue;
                     if (j == 0) { tempNote[i] = { pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, index: tempNote[i].index, property: tempNote[i].property }; continue; }
-                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, head: data[0][0], index: tempNote[i].index, property: tempNote[i].property });
+                    tempNote.push({ pos: data[j], time: tempNote[i].time, bpm: tempNote[i].bpm, head: data[0][0], firstIndex: i, index: tempNote[i].index, property: tempNote[i].property });
                 }
             }
         }
     }
 
-    // ──────────────────────────────
+    // ─────────────────────────────────────────────────────────
+    // 進階 note 解析（處理 hold、slide、break、touch、各種 flags）
+    // ─────────────────────────────────────────────────────────
 
     for (let i = 0; i < tempNote.length; i++) {
         try {
@@ -530,14 +531,14 @@ export function simai_decode(_data) {
                         throw new Error("slide position isn't a number");
                     }
 
-                    // 把 newNote 推到 qqq 裡
+                    // 把 newNote 推到 tempData 裡
                     tempData.push(newNote);
 
                     // 同步更新 sp.slideInfo[j] 回質算好的 base（如果需要後續再用）
                     //sp.slideInfo[j] = base;
                 }
 
-                // --- 4. 一次性把 qqq 全部插入 tempNote，就不用一筆筆 splice 了 ---
+                // --- 4. 一次性把 tempData 全部插入 tempNote，就不用一筆筆 splice 了 ---
                 if (tempData.length > 0) {
                     // i 是原本外面那個迴圈的索引
                     // 把「從 i+1 開始」一次插入所有 newNote
@@ -602,13 +603,9 @@ export function simai_decode(_data) {
     });
 
     let combo = (tapCounts + holdCounts + slideCounts + touchCounts + breakCounts);
-    console.log(tempNote);
-    console.log(`tap: ${tapCounts}`);
-    console.log(`hold: ${holdCounts}`);
-    console.log(`slide: ${slideCounts}`);
-    console.log(`touch: ${touchCounts}`);
-    console.log(`break: ${breakCounts}`);
-    console.log(`combo: ${combo}`);
+    console.log("Marks Data:", marks);
+    console.log("Notes Data:", tempNote);
+    console.log(`tap  : ${tapCounts}\nhold : ${holdCounts}\nslide: ${slideCounts}\ntouch: ${touchCounts}\nbreak: ${breakCounts}\ncombo: ${combo}`);
     return {
         notes: tempNote, data: {
             tapCounts,

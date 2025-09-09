@@ -14,8 +14,9 @@
     src: url('../Fonts/Inter.ttf') format('truetype');
 }
 
-:root{
+:root {
     --bg-dark: #00000000;
+    --main-color: rgb(68, 78, 93);
 }
 
 * {
@@ -129,22 +130,25 @@ body {
     position: absolute;
     height: 30px;
     width: 100%;
-    background: rgb(68, 78, 93);
+    background: var(--main-color);
     align-items: center;
     z-index: 1;
     transform: rotateX(0deg);
     transform-origin: 0% 0%;
+    overflow-x: auto;
     transition: transform 0.3s, opacity 0.3s ease;
 }
 
 .actions div {
     display: flex;
-    margin-left: 4px;
-    height: 24px;
-    width: 70px;
-    background: #ffffff20;
-    border-radius: 4px;
-    transition: background 100ms;
+    margin-right: 2px;
+    padding: 0 6px;
+    height: 100%;
+    width: auto;
+    min-width: 60px;
+    background: #ffffff00;
+    border-radius: 0px;
+    transition: background 60ms, border-radius 500ms ease;
     color: white;
     text-align: center;
     font-size: 14px;
@@ -154,11 +158,20 @@ body {
 }
 
 .actions div:hover {
-    background: #00000083;
+    background: #00000040;
+}
+
+.actions div span {
+    font-size: 13px;
+    user-select: none;
+    font-weight: bold;
+    text-shadow: 0 1px 2px #00000070;
+    /* 不要換行 */
+    white-space: nowrap;
 }
 
 .actions div:active {
-    background: #00000020;
+    background: #00000080;
 }
 
 #hideContorls {
@@ -418,7 +431,7 @@ textarea {
     position: absolute;
     top: 30px;
     font-size: 16px;
-    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+    font-family:  'Gill Sans MT', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 .dropdownlist ul {
@@ -429,8 +442,8 @@ textarea {
     box-sizing: border-box;
     padding: 2px;
     margin: 0;
-    background: #232323cc;
-    border-radius: 0 0 10px 10px;
+    background: #222;
+    border-radius: 0px 0px 10px 0px;
     box-shadow: 0 0 4px #0000005e;
     backdrop-filter: blur(4px);
     grid-template-rows: min-content 1fr;
@@ -445,12 +458,13 @@ textarea {
     padding: 5px;
     margin: 3px;
     border-radius: 5px;
+    font-size: 14px;
     text-shadow: 0 1px 2px black;
     transition: all 100ms;
 }
 
 .dropdownlist ul li:hover {
-    background: #4d505a;
+    background: #ffffff20;
     /*text-shadow: 0 0 3px white;*/
 }
 
@@ -679,8 +693,8 @@ body.layout-minimized #hideContorls .text-maximize {
     /* 移動到正常位置 */
 }
 
-#save-settings-btn,
-#save-info-btn {
+#settings-popup button,
+#info-popup button {
     background-color: #ffffff;
     color: black;
     border: none;
@@ -698,21 +712,10 @@ body.layout-minimized #hideContorls .text-maximize {
     color: white;
 }
 
-#cancel-settings-btn,
-#cancel-info-btn {
-    background-color: #ffffff;
-    color: black;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    transition: background-color 0.2s;
-    margin-right: 10px;
-}
-
 #cancel-settings-btn:hover,
-#cancel-info-btn:hover {
+#cancel-info-btn:hover,
+#reset-settings-btn:hover,
+#clear-cache-btn:hover {
     background-color: #b3b3b3;
 }
 
@@ -735,7 +738,7 @@ body.layout-minimized #backgroundVideo {
     top: 0%;
     height: 100%;
     /* 同樣以 cover 顯示，滿版裁切 */
-    object-fit: cover;
+    object-fit: contain;
     object-position: center center;
 }
 
@@ -745,7 +748,7 @@ body.layout-minimized #backgroundVideo {
     left: 0;
     width: 50%;
     height: calc(100% - 30px);
-    transition: width ease 0.5s,background ease 0.5s;
+    transition: width ease 0.5s, background ease 0.5s;
     z-index: -11;
     background: radial-gradient(circle at center,
             var(--bg-dark) calc(25vw - 1px),
@@ -769,6 +772,7 @@ body.layout-minimized #bgMask {
 }
 
 @media (max-aspect-ratio: 1/1) {
+
     /* 當 vw < vh，也就是畫面偏「高」時 */
     .none {
         background: red;
@@ -776,6 +780,7 @@ body.layout-minimized #bgMask {
 }
 
 @media (min-aspect-ratio: 1/1) {
+
     /* 當 vw >= vh，也就是畫面偏「寬」時 */
     body.layout-minimized #bgMask {
         background: radial-gradient(circle at center,

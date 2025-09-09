@@ -174,12 +174,13 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             break;
         case 2:
             const trueScore = Math.round(Math.max(play.score, 0));
-            ctx.fillStyle = adjustBrightness("#498BFF", 1 - settings.backgroundDarkness);
+            // use gamma correction for more natural progression
+            ctx.fillStyle = adjustBrightness("#498BFF", (1 - settings.backgroundDarkness) ** 0.5);
             if (trueScore > 800000) {
-                ctx.fillStyle = adjustBrightness("#FF6353", 1 - settings.backgroundDarkness);
+                ctx.fillStyle = adjustBrightness("#FF6353", (1 - settings.backgroundDarkness) ** 0.5);
             }
             if (trueScore > 1000000) {
-                ctx.fillStyle = adjustBrightness("#FFD559", 1 - settings.backgroundDarkness);
+                ctx.fillStyle = adjustBrightness("#FFD559", (1 - settings.backgroundDarkness) ** 0.5);
             }
             ctx.strokeStyle = "white";
             ctx.lineWidth = Math.floor(hbw * 0.015);
@@ -237,7 +238,12 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         for (let i = 0; i < sbuf.length; i++) {
             const { note, t: _t } = sbuf[i];
             // color 決策快取
-            let color = note.break ? '#FF6C0C' : (note.isDoubleSlide ? '#FFD900' : '#5BCCFF');
+            const breakColor = ctx.createLinearGradient(0, 0, 0, 1);
+            breakColor.addColorStop(0, '#FF6C0C');
+            breakColor.addColorStop(0.49, '#FF6C0C');
+            breakColor.addColorStop(0.5, '#FFD900');
+            breakColor.addColorStop(1, '#FFD900');
+            let color = note.break ? breakColor : (note.isDoubleSlide ? '#FFD900' : '#5BCCFF');
             let nang = (typeof note.slideHead === 'string' ? parseInt(note.slideHead[0]) : note.slideHead) - 1;
             nang = nang % 8;
             let nang2 = note.slideEnd;
@@ -303,33 +309,34 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                     width: Math.max(scaleFactor, (1 - d)) * hbw * 0.015,
                     strokeStyle: color,
                     transparency: currentSize * 0.55,
-                });
+                }, note);
                 drawNoteDot(ctx, {
                     x: currentX,
                     y: currentY,
                     size: currentSize * hbw * 0.0075,
                     color: color,
                     transparency: currentSize,
-                });
+                }, note);
             }
             if (note.star) {
-                drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize);
+                if (note.doubleSlide) drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang + 1.2) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note);
+                drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note);
             } else if (note.holdTime != null) {
                 note.holdTime = note.holdTime == 0 ? 1E-64 : note.holdTime;
                 let holdLength = 0;
                 if (_t >= -d / currentSettings.speed) {
                     holdLength = (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * currentSettings.speed, (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / currentSettings.speed)) / (d / currentSettings.speed))) * hbw;
                 }
-                drawHold(currentX, currentY, currentSize, color, note.ex ?? false, nang / -4 * Math.PI, holdLength, ctx, hbw, currentSettings, calAng, noteBaseSize);
+                drawHold(currentX, currentY, currentSize, color, note.ex ?? false, nang / -4 * Math.PI, holdLength, ctx, hbw, currentSettings, calAng, noteBaseSize, note);
                 if (holdLength > 0 && _t > note.holdTime * (1 - d)) drawNoteDot(ctx, {
                     x: currentX - holdLength * calAng((nang / -4 + 0.875) * Math.PI).x,
                     y: currentY + holdLength * calAng((nang / -4 + 0.875) * Math.PI).y,
                     size: currentSize * hbw * 0.0075,
                     color: color,
                     transparency: 1,
-                });
+                }, note);
             } else {
-                drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize);
+                drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize, note);
             }
         }
         if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.holdTime ?? 0)) {
@@ -341,11 +348,11 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             const currentX = hw + hbw * np.x;
             const currentY = hh + hbw * np.y;
             if (note.holdTime) {
-                if (_t <= note.holdTime) drawHoldEffect(currentX, currentY, _t, color, ctx, hbw, currentSettings, noteBaseSize);
-                drawHoldEndEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
+                if (_t <= note.holdTime) drawHoldEffect(currentX, currentY, _t, color, ctx, hbw, currentSettings, noteBaseSize, note);
+                drawHoldEndEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
             } else {
-                drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
-                drawStarEffect(currentX, currentY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true);
+                drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
+                drawStarEffect(currentX, currentY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true, note);
             }
         }
     }
@@ -371,13 +378,13 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
     for (let i = 0; i < tbuf2.length; i++) {
         const { note, t: _t } = tbuf2[i];
-        let color = note.break ? '#FF6C0C' : (note.isDoubleTouch ? '#FFD900' : '#0089F4');
+        let color = note.isDoubleTouch ? '#FFD900' : '#0089F4';
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
         if (_t >= -1 / currentSettings.touchSpeed && _t < (note.touchTime ?? 0)) {
             drawTouch(note.pos, 0.85, color, note.touch,
                 aniTouch(_t < 0 ? _t * - currentSettings.touchSpeed : 0),
                 (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4,
-                note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize);
+                note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note);
         }
         if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.touchTime ?? 0)) {
             let ang = (note.pos - 0.5 - (touchAngleOffset[note.touch] || 0)) / 4 * Math.PI;
@@ -385,11 +392,11 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             const centerX = hw + np.x * (touchDisToMid[note.touch] || 0) * hbw;
             const centerY = hh + np.y * (touchDisToMid[note.touch] || 0) * hbw;
             if (note.touchTime) {
-                if (_t <= note.touchTime) drawHoldEffect(centerX, centerY, _t, color, ctx, hbw, currentSettings, noteBaseSize);
-                drawHoldEndEffect(centerX, centerY, (_t - note.touchTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
+                if (_t <= note.touchTime) drawHoldEffect(centerX, centerY, _t, color, ctx, hbw, currentSettings, noteBaseSize, note);
+                drawHoldEndEffect(centerX, centerY, (_t - note.touchTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
             } else {
-                drawSimpleEffect(centerX, centerY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize);
-                drawStarEffect(centerX, centerY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize);
+                drawSimpleEffect(centerX, centerY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
+                drawStarEffect(centerX, centerY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, false, note);
             }
         }
     }
@@ -412,41 +419,49 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         ctx.fillRect(8, 8, 260, 110);
         ctx.fillStyle = 'white';
         ctx.textAlign = 'left';
-        ctx.font = '12px monospace';
+        ctx.textBaseline = 'top';
+        ctx.letterSpacing = "0px";
+        ctx.lineWidth = 2;
+        ctx.font = '18px monospace';
         const lines = [
+            `FPS: ${Math.floor(fps)}`,
             `總耗時: ${totalElapsed.toFixed(2)} ms`,
             `繪製時間: ${draw_ms.toFixed(2)} ms`,
             `算繪時間: ${(__perf.slides || 0).toFixed(2)} ms`,
             `系統: ${system_ms.toFixed(2)} ms`,
             `繪製細項: slides ${(__perf.slides || 0).toFixed(2)} ms`,
             `tap/hold: ${(__perf.taps || 0).toFixed(2)} ms`,
-            `touch: ${(__perf.touches || 0).toFixed(2)} ms`
+            `touch: ${(__perf.touches || 0).toFixed(2)} ms`,
+            `最大耗時: ${Math.max(__perf.slides || 0, __perf.taps || 0, __perf.touches || 0).toFixed(2)} ms`,
+            `繪製物件數: ${tbuf.length + tbuf2.length + (currentSettings.showSlide ? currentSettings.maxSlideOnScreenCount : 0)}`
         ];
-        for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], 16, 26 + i * 14);
+        for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], 16, 26 + i * 20);
         ctx.restore();
     }
 }
 
 
-export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, noteBaseSize) {
+export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, noteBaseSize, note = undefined) {
     let s = noteBaseSize; // Use passed base size
     let currentSize = Math.max(sizeFactor * s, 0);
+
+    if (currentSize < 1E-5) return; // 避免繪製過小的tap
+
+    ctx.save();
+
     if (currentSettings.useImgSkin) {
         // Draw using image skin
-        console.log("what", noteImages.tap);
-        if (!noteImages.tap) return; // Image not loaded yet
-        ctx.save();
+        if (!(noteImages.tap && noteImages.break && noteImages.each)) return; // Image not loaded yet
         ctx.translate(x, y);
+        ctx.rotate(getNoteAng(parseInt(note.pos)) + Math.PI / 4);
         ctx.scale(currentSize, currentSize);
-        ctx.drawImage(noteImages.tap,
-            0, 0, 512, 512,
-            x - currentSize, y - currentSize,
-            currentSize * 2, currentSize * 2);
-        ctx.restore();
+        ctx.drawImage((note.break ? noteImages.break : (note.isDoubleTapHold ? noteImages.each : noteImages.tap)),
+            -1.5, -1.5,
+            3, 3);
+
     } else {
         const unit = getUnitCirclePath();
 
-        ctx.save();
         ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
         ctx.shadowColor = (ex ? color : '#000000');
         ctx.translate(x, y);
@@ -465,11 +480,11 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
         ctx.strokeStyle = color;
         ctx.fillStyle = '#00000000';
         ctx.stroke(unit);
-        ctx.restore();
     }
+    ctx.restore();
 }
 
-export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
+export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize, note = undefined) {
     if (!currentSettings.showEffect) return;
 
     function ani(x) {
@@ -496,7 +511,7 @@ export function drawSimpleEffect(x, y, sizeFactor, color, ctx, hbw, currentSetti
     ctx.fill();
 }
 
-export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
+export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize, note = undefined) {
     if (!currentSettings.showEffect) return;
 
     function ani(x) {
@@ -523,7 +538,7 @@ export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSett
     ctx.fill();
 }
 
-export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize) {
+export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize, note = undefined) {
     if (!currentSettings.showEffect) return;
 
     function ani1(x) {
@@ -572,7 +587,7 @@ export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
     ctx.fill();
 }
 
-export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize, useFiveStar = false) {
+export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize, useFiveStar = false, note = undefined) {
     if (!currentSettings.showEffect) return;
 
     color = "#EDCE10";
@@ -736,44 +751,60 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
 }
 
 // 移除了未使用的參數 (hbw, currentSettings, calAng)
-export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSettings, calAng, noteBaseSize, alpha = 1) {
+export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSettings, calAng, noteBaseSize, alpha = 1, note = undefined) {
     // 角度調整可以保留，這屬於視覺效果的一部分
     const currentSize = Math.max(sizeFactor * noteBaseSize, 0);
 
-    if (currentSize === 0) return; // 大小為 0 就不用畫了
+    if (currentSize < 1E-5) return; // 避免繪製過小的星星
 
     ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate((ang * 0.192 + 0.125) * Math.PI);
 
-    const starShape = getStarPath(currentSize);
+    if (currentSettings.useImgSkin) {
+        // Draw using image skin
+        if (!(noteImages.star && noteImages.star_break && noteImages.star_ex)) return; // Image not loaded yet
+        ctx.translate(x, y);
+        ctx.rotate((ang * 0.192 + 0.125) * Math.PI);
+        ctx.scale(currentSize, currentSize);
+        ctx.drawImage((note.break ? noteImages.star_break : (note.isDoubleTapHold ? noteImages.star_each : noteImages.star)),
+            -1.5, -1.5,
+            3, 3);
+        if (ex) {
+            ctx.drawImage(noteImages.star_ex,
+                -1.5, -1.5,
+                3, 3);
+        }
+    } else {
+        ctx.translate(x, y);
+        ctx.rotate((ang * 0.192 + 0.125) * Math.PI);
 
-    // --- 顏色與透明度處理 ---
-    // 修正：直接限制 alpha 在 0-1 之間
-    const localAlpha = Math.max(0, Math.min(1, alpha));
-    const alphaHex = Math.floor(localAlpha * 255).toString(16).padStart(2, '0');
-    // 確保顏色字串長度正確，再附加透明度
-    const localColor = (color.length === 7 ? color : color.substring(0, 7)) + alphaHex;
+        const starShape = getStarPath(currentSize);
+        // --- 顏色與透明度處理 (使用 canvas 內建 globalAlpha) ---
+        const localAlpha = Math.max(0, Math.min(1, alpha));
+        // 取得不含 alpha 的基礎色碼
+        //const baseColor = (typeof color === 'string' && color.length >= 7) ? color.substring(0, 7) : color;
 
-    // --- 第一次描邊：白色外框 + 陰影 (製造外發光效果) ---
-    ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
-    ctx.shadowColor = (ex ? localColor : '#000000' + alphaHex)
-    ctx.lineWidth = currentSize * 0.6 * currentSettings.lineWidthFactor;
-    ctx.strokeStyle = '#ffffff' + alphaHex;
-    ctx.stroke(starShape);
+        // 使用 save/restore 管理 globalAlpha（上方已呼叫 ctx.save()）
+        ctx.globalAlpha = localAlpha;
 
-    // --- 第二次描邊：主題顏色內框 ---
-    ctx.shadowBlur = 0; // 關閉陰影
-    ctx.shadowColor = '#00000000';
-    ctx.lineWidth = currentSize * 0.35 * currentSettings.lineWidthFactor;
-    ctx.strokeStyle = localColor;
-    ctx.stroke(starShape);
+        // --- 第一次描邊：白色外框 + 陰影 (製造外發光效果) ---
+        ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
+        ctx.shadowColor = (ex ? color : 'rgba(0,0,0,1)');
+        ctx.lineWidth = currentSize * 0.6 * currentSettings.lineWidthFactor;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke(starShape);
 
+        // --- 第二次描邊：主題顏色內框 ---
+        ctx.shadowBlur = 0; // 關閉陰影
+        ctx.shadowColor = 'rgba(0,0,0,0)';
+        ctx.lineWidth = currentSize * 0.35 * currentSettings.lineWidthFactor;
+        ctx.strokeStyle = color;
+        ctx.stroke(starShape);
+    }
     ctx.restore();
 }
 
 
-export function drawNoteArc(ctx, options) {
+export function drawNoteArc(ctx, options, note = undefined) {
     const {
         centerX = 0,
         centerY = 0,
@@ -799,7 +830,7 @@ export function drawNoteArc(ctx, options) {
     ctx.stroke();
 }
 
-export function drawNoteDot(ctx, options) {
+export function drawNoteDot(ctx, options, note = undefined) {
     const {
         x = 0,
         y = 0,
@@ -1172,23 +1203,29 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             //ctx.font = "bold 24px Segoe UI"; // Smaller font
             //ctx.fillStyle = "black";
             //ctx.fillText(`${slidePosDiff(startNp, endNp)}`, 0, 50);
-            drawStar(0, 0, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
-            if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
-            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k);
+            drawStar(0, 0, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, noteData);
+            if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, noteData);
+            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, noteData);
             currentCtx.restore();
         }
     }
 
-    let localColor = color;
+    // 預設為不含 alpha 的基底顏色
+    let localColor = (typeof color === 'string' && color.length >= 7) ? color.substring(0, 7) : color;
     ctx.shadowBlur = s * 0.2;
     ctx.shadowColor = '#000000';
 
+    // 若需要淡入/淡出，使用 canvas 內建的 globalAlpha 包覆繪製區段，避免用 8 位 hex
+    let _appliedGlobalAlpha = false;
     if (t_progress < 0 && fading) {
         const alpha = Math.max(0, Math.min(1, (t_progress + 1))); // Alpha from 0 to 1
-        const alphaHex = Math.floor(alpha * 255).toString(16).padStart(2, '0');
-        localColor = color.length === 7 ? color + alphaHex : color.substring(0, 7) + alphaHex; // Handle existing alpha
-        ctx.shadowColor = '#000000' + alphaHex;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        // shadowColor 保持純黑，globalAlpha 會影響透明度
+        ctx.shadowColor = '#000000';
+        _appliedGlobalAlpha = true;
     }
+
     ctx.lineWidth = s * 0.15 * currentSettings.lineWidthFactor;
     ctx.strokeStyle = localColor;
 
@@ -1214,6 +1251,10 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
     // Draw arrows on the path
     // Ensure `a` is a PathRecorder with mathematical getPointAtLength and getTotalLength
     drawArrowAndStar(a, s * 1.245, t_progress, ctx, localColor, s * 2, type == "w", fading, noteData); // Pass arrowSize
+
+    if (_appliedGlobalAlpha) {
+        ctx.restore();
+    }
 
     // Debug text: (Consider removing for production)
     // ctx.shadowBlur = s * 0.2;
@@ -1379,7 +1420,7 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
 
 function slidePosDiff(startNp, endNp) { return (startNp - endNp + 8) % 8; }
 
-export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentSettings, calAng, noteBaseSize) {
+export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentSettings, calAng, noteBaseSize, note = undefined) {
     ang = ang - 0.125 * Math.PI;
     let s = noteBaseSize;
     let currentSize = Math.max(sizeFactor * s, 0);
@@ -1452,7 +1493,7 @@ export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentS
     ctx.restore();
 }
 
-export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize) {
+export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note = undefined) {
     opacity = Math.min(Math.max(opacity, 0), 1); // Clamp opacity
 
     let localColor = hexWithAlpha(color, opacity);

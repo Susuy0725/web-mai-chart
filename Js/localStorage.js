@@ -1,5 +1,7 @@
 // Local storage helpers for web-mai-chart
 // Exposes window.localStore with methods: saveSettings(obj), loadSettings(), clearSettings()
+import * as main from './main.js';
+
 (function () {
     const STORAGE_KEY = 'web_mai_chart_settings_v1';
 
@@ -36,6 +38,7 @@
     function loadSettings() {
         try {
             const raw = localStorage.getItem(STORAGE_KEY);
+            console.log('Loaded settings from localStorage:', JSON.parse(raw));
             return safeParse(raw) || null;
         } catch (e) {
             console.error('Failed to load settings from localStorage', e);
@@ -87,6 +90,9 @@
             try {
                 const s = loadSettings();
                 if (s) mergeIntoAppSettings(s);
+
+                try { main.updateBgDarknessCss(); } catch (e) { }
+                try { main.updateMainColorCss(); } catch (e) { }
             } catch (e) { /* ignore */ }
         });
     }

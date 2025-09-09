@@ -2,7 +2,7 @@ import { simai_decode } from "./decode.js";
 import * as render from "./render.js";
 import { loadZipFromUrl } from "./zipLoader.js";
 
-export let settings = { // Keep export if other modules might need direct access
+export const defaultSettings = {
     'musicDelay': 0,
     'distanceToMid': 0.3,
     'roundStroke': true,
@@ -28,11 +28,16 @@ export let settings = { // Keep export if other modules might need direct access
     'audioZoom': 200,
     'showPerfBreakdown': false,
     'backgroundDarkness': 0.5,
+    'showBgMask': true,
     'useImgSkin': false,
+    'mainColor': '#444e5d',
 };
 
+// Export a separate settings object (clone) so runtime changes don't mutate defaultSettings
+export let settings = JSON.parse(JSON.stringify(defaultSettings)); // deep clone
+
 // 把 settings.backgroundDarkness 同步到 CSS :root 的 --bg-dark
-function updateBgDarknessCss() {
+export function updateBgDarknessCss() {
     try {
         let v = parseFloat(settings.backgroundDarkness);
         if (!isFinite(v)) v = 0;
@@ -44,6 +49,41 @@ function updateBgDarknessCss() {
         }
     } catch (e) {
         // ignore
+    }
+}
+
+// 把 settings.mainColor 同步到 CSS :root 的 --main-color
+export function updateMainColorCss() {
+    try {
+        let v = settings.mainColor || defaultSettings.mainColor;
+        if (typeof document !== 'undefined' && document.documentElement && document.documentElement.style) {
+            document.documentElement.style.setProperty('--main-color', v);
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+// 顯示或隱藏背景遮罩 (#bgMask)
+// 如果傳入 value，則會更新 settings.showBgMask；否則使用目前的設定值
+export function showBgMask(value) {
+    try {
+        if (typeof value === 'boolean') settings.showBgMask = value;
+        const el = document.getElementById('bgMask');
+        if (!el) return;
+        // 確保 CSS 變數同步
+        try { updateBgDarknessCss(); } catch (e) { }
+        if (settings.showBgMask) {
+            // 顯示遮罩：恢復 display，讓 CSS 的背景漸層生效
+            el.style.display = '';
+            // 若之前被設定為負 z-index，保留檔案的樣式；確保能看到時可調
+            // 由 CSS 控制大小與背景，這裡不改變 background
+        } else {
+            // 隱藏遮罩：使用 display none
+            el.style.display = 'none';
+        }
+    } catch (e) {
+        console.error('showBgMask error:', e);
     }
 }
 const icons = ['pause', 'play_arrow', 'skip_previous', 'replay_10', 'replay_5', 'forward_5', 'forward_10'];
@@ -77,6 +117,8 @@ let soundSettings = {
     'hanabiVol': 0.3,
     'slideVol': 0.2,
 };
+// Snapshot of default sound settings for reset
+const defaultSoundSettings = JSON.parse(JSON.stringify(soundSettings));
 let maidata; // Chart data
 
 const settingsConfig = {
@@ -117,7 +159,8 @@ const settingsConfig = {
     ],
     other: [
         { target: settings, key: 'showFpsCounter', label: '顯示 FPS', type: 'boolean' },
-        { target: settings, key: 'showPerfBreakdown', label: '啟用性能監控', type: 'boolean' }
+        { target: settings, key: 'showPerfBreakdown', label: '啟用性能監控', type: 'boolean' },
+        { target: settings, key: 'mainColor', label: '主色', type: 'color' }
     ]
 };
 
@@ -127,6 +170,8 @@ let startTime = 0;
 let maxTime = 1000;
 let sfxReady = false, inSettings = false;
 let currentTimelineValue = 0;
+
+console.log(defaultSettings);
 
 // Export a mutable object that will be populated asynchronously.
 export const noteImages = {};
@@ -205,6 +250,7 @@ function queueSound(name, volume = 0.1) {
 
 function processSoundQueue() {
     if (!soundQueue || soundQueue.length === 0) return;
+    soundQueue = [...new Map(soundQueue.map(item => [item.name + item.when.toFixed(3), item])).values()];
     const now = audioCtx.currentTime;
     // play any sounds due within a small lookahead window
     const lookahead = 0.05; // seconds
@@ -216,7 +262,7 @@ function processSoundQueue() {
 
 // start interval processor
 if (!soundQueueInterval) {
-    soundQueueInterval = setInterval(processSoundQueue, 25);
+    soundQueueInterval = setInterval(processSoundQueue, 10);
     // ensure cleanup on page unload
     window.addEventListener('unload', () => {
         if (soundQueueInterval) clearInterval(soundQueueInterval);
@@ -370,6 +416,7 @@ async function triggerSave(data) {
 document.addEventListener('DOMContentLoaded', function () {
     // 初始時同步 CSS 變數
     try { updateBgDarknessCss(); } catch (e) { }
+    try { showBgMask(); } catch (e) { }
     const renderCanvas = document.getElementById("render");
     const ctx = renderCanvas.getContext("2d");
     const customMenu = document.getElementById("customMenu");
@@ -500,9 +547,10 @@ document.addEventListener('DOMContentLoaded', function () {
     audioCanvas.addEventListener("touchstart", (e) => {
         audioRenderDragging = true;
         lastDragX = e.touches[0].clientX;
-    });
+    }, { passive: true });
 
     // 問題
+    // touchmove 會呼叫 e.preventDefault()，因此需要 passive: false
     audioCanvas.addEventListener("touchmove", (e) => {
         if (audioRenderDragging) {
             e.preventDefault();
@@ -511,11 +559,11 @@ document.addEventListener('DOMContentLoaded', function () {
             handleAudioRenderPan(deltaX);
             lastDragX = touchX;
         }
-    });
+    }, { passive: false });
 
     audioCanvas.addEventListener("touchend", () => {
         audioRenderDragging = false;
-    });
+    }, { passive: true });
 
     function handleAudioRenderPan(deltaX) {
         // 畫面實際顯示的時間長度（秒），受 zoom 影響
@@ -1119,7 +1167,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         // Default behavior for standalone digits (keep original numeric flip)
                         if (/\d/.test(ch)) {
-                            result += ((9 - parseInt(ch, 10)) % 8).toString();
+                            result += ((8 - parseInt(ch, 10)) % 8 + 1).toString();
                             continue;
                         }
 
@@ -1582,6 +1630,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (config.max !== undefined) input.max = config.max;
                 fieldContainer.appendChild(label);
                 fieldContainer.appendChild(input);
+            } else if (config.type === 'color') {
+                input = document.createElement('input');
+                input.type = 'color';
+                input.value = currentValue || '#444e5d';
+                fieldContainer.appendChild(label);
+                fieldContainer.appendChild(input);
             }
 
             if (input) {
@@ -1604,6 +1658,7 @@ document.addEventListener('DOMContentLoaded', function () {
         h3Other.textContent = '其他設定';
         form.appendChild(h3Other);
         settingsConfig.other.forEach(config => createField(config, 'other'));
+        // 確保主色欄位可見（若尚未定義）
     }
 
     function generateInfoForm() {
@@ -1671,6 +1726,8 @@ document.addEventListener('DOMContentLoaded', function () {
                                 console.warn(`Invalid number for ${config.label}: ${input.value}. Using original value.`);
                                 newValue = config.target[config.key];
                             }
+                        } else if (config.type === 'color') {
+                            newValue = input.value;
                         } else {
                             newValue = input.value;
                         }
@@ -1702,6 +1759,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         // 儲存或變更設定後，更新 CSS 變數
         try { updateBgDarknessCss(); } catch (e) { }
+        try { updateMainColorCss(); } catch (e) { }
         // 嘗試將設定存回 localStorage
         try {
             if (window.localStore && typeof window.localStore.saveSettings === 'function') {
@@ -1715,35 +1773,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Reset settings to initial defaults
     function resetSettingsToDefault() {
-        // Recreate default settings object (mirror initial declaration)
-        const defaultSettings = {
-            'musicDelay': 0,
-            'distanceToMid': 0.3,
-            'roundStroke': true,
-            'noteSize': 0.09,
-            'speed': 2,
-            'pinkStar': false,
-            'touchSpeed': 2,
-            'slideSpeed': 2,
-            'holdEndNoSound': false,
-            'showSlide': true,
-            'nextNoteHighlight': false,
-            'followText': true,
-            'nowDiff': 5,
-            'showEffect': true,
-            'effectDecayTime': 0.3,
-            'noSensor': false,
-            'disableSensorWhenPlaying': true,
-            'lineWidthFactor': 0.8,
-            'noNoteArc': false,
-            'middleDisplay': 2,
-            'maxSlideOnScreenCount': 200,
-            'showFpsCounter': false,
-            'audioZoom': 200,
-            'showPerfBreakdown': false,
-            'backgroundDarkness': 0.5,
-        };
-
         // Overwrite existing settings keys with defaults
         Object.keys(defaultSettings).forEach(k => {
             settings[k] = defaultSettings[k];
@@ -1755,19 +1784,72 @@ document.addEventListener('DOMContentLoaded', function () {
         // Persist to localStorage if available
         try {
             if (window.localStore && typeof window.localStore.saveSettings === 'function') {
-                window.localStore.saveSettings(settings);
+                window.localStore.clearSettings(); // Clear all first to avoid stale keys
+                window.localStore.saveSettings(defaultSettings);
             }
         } catch (e) { console.warn('Failed to save settings after reset', e); }
 
         // Update CSS variables and render
         try { updateBgDarknessCss(); } catch (e) { }
+        try { updateMainColorCss(); } catch (e) { }
         try { render.clearRenderCaches(); } catch (e) { }
+        // Restore sound settings defaults as well
+        try {
+            Object.keys(defaultSoundSettings).forEach(k => {
+                soundSettings[k] = defaultSoundSettings[k];
+            });
+        } catch (e) { console.warn('Failed to restore sound settings defaults', e); }
 
+        // Regenerate settings form to reflect restored sound values
+        try { generateSettingsForm(); } catch (e) { }
+
+        console.log('Settings reset to defaults :', settings === defaultSettings);
         showNotification('已重置設定為預設值');
     }
 
     const resetBtn = document.getElementById('reset-settings-btn');
     if (resetBtn) resetBtn.addEventListener('click', resetSettingsToDefault);
+
+    // 清除快取（localStorage、音效緩存、影像 sprite 等）
+    function clearCache() {
+        try {
+            // 如果有自訂的 localStore Helper，嘗試呼叫其清除方法
+            if (window.localStore && typeof window.localStore.clearAll === 'function') {
+                try { window.localStore.clearAll(); } catch (e) { console.warn('localStore.clearAll failed', e); }
+            }
+            // 清除一般 localStorage（注意：若想保留其他網站設定，改為刪除特定鍵）
+            try { window.localStorage.clear(); } catch (e) { console.warn('localStorage.clear failed', e); }
+
+            // 清除已載入的 noteImages sprite 資料
+            try {
+                for (const k in noteImages) {
+                    try { delete noteImages[k]; } catch (e) { noteImages[k] = null; }
+                }
+            } catch (e) { console.warn('clear noteImages failed', e); }
+
+            // 清除音效緩存與緩衝區
+            try {
+                soundBuffers = {};
+                fullAudioBuffer = null;
+                // 若需要，可暫停並釋放 bgm
+                if (bgm && bgm.src) {
+                    try { URL.revokeObjectURL(bgm.src); } catch (e) { }
+                    bgm.src = '';
+                }
+            } catch (e) { console.warn('clear audio caches failed', e); }
+
+            // 清除 render cache（如果有實作）
+            try { render.clearRenderCaches(); } catch (e) { }
+
+            showNotification('已清除快取');
+        } catch (e) {
+            console.error('clearCache error', e);
+            showNotification('清除快取失敗');
+        }
+    }
+
+    const clearCacheBtn = document.getElementById('clear-cache-btn');
+    if (clearCacheBtn) clearCacheBtn.addEventListener('click', clearCache);
 
     _updCanvasRes();
     controls.play.textContent = icons[0 + play.btnPause];
@@ -1799,10 +1881,13 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!note) return;
             const notesAtSameTime = timeMap.get(note.time) || [];
             if (note.slide) {
-                note.isDoubleSlide = notesAtSameTime.filter((n, indx) => n !== note && n.slide && (n.chainTarget != note.chainTarget && note.chainTarget != indx)).length > 0;
+                note.isDoubleSlide = notesAtSameTime.filter((n, indx) => n !== note && n.slide && (!n.chain || (n.chainTarget != note.chainTarget && note.chainTarget != indx))).length > 0;
             } else if (note.touch) {
                 note.isDoubleTouch = notesAtSameTime.filter(n => n !== note && !n.starTime).length > 0;
             } else {
+                if (note.star) {
+                    note.doubleSlide = notesAtSameTime.filter(n => n !== note && n.slide && n.slideHead == note.pos).length > 1;
+                }
                 note.isDoubleTapHold = notesAtSameTime.filter(n => n !== note && !n.slide).length > 0;
             }
 
@@ -2392,8 +2477,9 @@ async function getImgs() {
             touch_each: 'touch_each',
             tap_ex: 'tap_ex',
             star: 'star',
+            star_ex: 'star_ex',
             star_break: 'star_break',
-            star_each: 'star_each'
+            star_each: 'star_each',
         };
         Object.entries(domMap).forEach(([domId, key]) => {
             const el = document.getElementById(domId);
@@ -2427,7 +2513,6 @@ async function getImgs() {
     } catch (e) {
         console.error('Error getting images:', e);
     }
-    console.log('Loaded images:', images);
     return images;
 }
 
