@@ -247,14 +247,15 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             sbuf.push({ note, t: _t });
             if (sbuf.length >= currentSettings.maxSlideOnScreenCount) break;
         }
+        // create reusable break gradient per frame to avoid allocations inside loop
+        const breakColor = ctx.createLinearGradient(0, 0, 0, 1);
+        breakColor.addColorStop(0, '#FF6C0C');
+        breakColor.addColorStop(0.49, '#FF6C0C');
+        breakColor.addColorStop(0.5, '#FFD900');
+        breakColor.addColorStop(1, '#FFD900');
         for (let i = 0; i < sbuf.length; i++) {
             const { note, t: _t } = sbuf[i];
             // color 決策快取
-            const breakColor = ctx.createLinearGradient(0, 0, 0, 1);
-            breakColor.addColorStop(0, '#FF6C0C');
-            breakColor.addColorStop(0.49, '#FF6C0C');
-            breakColor.addColorStop(0.5, '#FFD900');
-            breakColor.addColorStop(1, '#FFD900');
             let color = note.break ? breakColor : (note.isDoubleSlide ? '#FFD900' : '#5BCCFF');
             let nang = (typeof note.slideHead === 'string' ? parseInt(note.slideHead[0]) : note.slideHead) - 1;
             nang = nang % 8;
@@ -286,12 +287,14 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         const note = notesToRender[i];
         if (!note || note.starTime || note.touch || note.slide || note.invalid || !note.pos) continue;
         const _t = ((time - note.time) / 1000);
+        if (_t > currentSettings.effectDecayTime + (note.holdTime ?? 0)) continue;
         // only push notes that are within the active window for rendering or effect
         if (!(_t >= (currentSettings.distanceToMid - 2) / currentSettings.speed && (_t < (note.holdTime ?? 0) || _t <= currentSettings.effectDecayTime + (note.holdTime ?? 0)))) continue;
         tbuf.push({ note, t: _t });
     }
     for (let i = 0; i < tbuf.length; i++) {
         const { note, t: _t } = tbuf[i];
+        if (_t > currentSettings.effectDecayTime + (note.holdTime ?? 0)) continue;
         // color 決策快取
         let color = note.break ? '#FF6C0C' : (note.isDoubleTapHold ? '#FFD900' : (note.star && !currentSettings.pinkStar ? '#009FF9' : '#FF50AA'));
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
@@ -381,6 +384,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         const note = notesToRender[i];
         if (!note || !note.touch || note.invalid) continue;
         const _t = ((time - note.time) / 1000);
+        if (_t > currentSettings.effectDecayTime + (note.touchTime ?? 0)) continue;
         // only collect relevant ones
         if (!(_t >= -1 / currentSettings.touchSpeed && _t < (note.touchTime ?? 0)) && !(_t >= 0 && _t <= currentSettings.effectDecayTime + (note.touchTime ?? 0))) continue;
         tbuf2.push({ note, t: _t });
@@ -390,6 +394,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
     for (let i = 0; i < tbuf2.length; i++) {
         const { note, t: _t } = tbuf2[i];
+        if (_t > currentSettings.effectDecayTime + (note.touchTime ?? 0)) continue;
         let color = note.isDoubleTouch ? '#FFD900' : '#0089F4';
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
         if (_t >= -1 / currentSettings.touchSpeed && _t < (note.touchTime ?? 0)) {
@@ -459,19 +464,30 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
 
     if (currentSize < 1E-5) return; // 避免繪製過小的tap
 
+    // Frustum culling: skip drawing if off-canvas
+    try {
+        const canvas = ctx && ctx.canvas;
+        if (canvas) {
+            const margin = Math.max(48, noteBaseSize * 2);
+            if (x + margin < 0 || x - margin > canvas.width || y + margin < 0 || y - margin > canvas.height) return;
+        }
+    } catch (e) { /* ignore */ }
+
     ctx.save();
 
     if (currentSettings.useImgSkin) {
         // Draw using image skin
         const imgTap = (note.break ? noteImages.tap_break : (note.isDoubleTapHold ? noteImages.tap_each : noteImages.tap));
-        if (!isImageReady(imgTap)) return; // Image not loaded or broken
+        if (!isImageReady(imgTap)) { ctx.restore(); return; } // Image not loaded or broken
+        // Only change transform if needed
+        const needRotate = true;
         ctx.translate(x, y);
-        ctx.rotate(getNoteAng(parseInt(note.pos)) + Math.PI / 4);
-        ctx.scale(currentSize, currentSize);
+        if (needRotate) ctx.rotate(getNoteAng(parseInt(note.pos)) + Math.PI / 4);
+        if (currentSize !== 1) ctx.scale(currentSize, currentSize);
         ctx.drawImage(imgTap,
             -1.5, -1.5,
             3, 3);
-        if (note.ex) ctx.drawImage(noteImages.tap_ex,
+        if (note.ex && isImageReady(noteImages.tap_ex)) ctx.drawImage(noteImages.tap_ex,
             -1.5, -1.5,
             3, 3);
     } else {
@@ -481,7 +497,8 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
         ctx.shadowColor = (ex ? color : '#000000');
         ctx.translate(x, y);
         ctx.scale(currentSize, currentSize);
-        ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor / currentSize; // scale-compensated
+        // scale-compensated: equals 0.75 * currentSettings.lineWidthFactor
+        ctx.lineWidth = 0.75 * currentSettings.lineWidthFactor;
         ctx.strokeStyle = 'white';
         ctx.stroke(unit);
         //ctx.restore();
@@ -491,7 +508,8 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
         //ctx.save();
         //ctx.translate(x, y);
         //ctx.scale(currentSize, currentSize);
-        ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor / currentSize; // scale-compensated
+        // scale-compensated: equals 0.5 * currentSettings.lineWidthFactor
+        ctx.lineWidth = 0.5 * currentSettings.lineWidthFactor;
         ctx.strokeStyle = color;
         ctx.fillStyle = '#00000000';
         ctx.stroke(unit);
@@ -1496,6 +1514,15 @@ export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentS
     }
 
     const holdPath = getHoldPath(currentSize, l);
+
+    // Simple frustum culling: skip if center is far outside canvas bounds
+    try {
+        const canvas = ctx && ctx.canvas;
+        if (canvas) {
+            const margin = Math.max(64, noteBaseSize * 3);
+            if (x + margin < 0 || x - margin > canvas.width || y + margin < 0 || y - margin > canvas.height) return;
+        }
+    } catch (e) { /* ignore */ }
 
     ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
     ctx.shadowColor = (ex ? color : '#000000');

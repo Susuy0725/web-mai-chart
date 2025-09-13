@@ -577,16 +577,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
     audioCanvas.addEventListener("mousedown", (e) => {
         audioRenderDragging = true;
+        lastDragX = e.clientX;
     });
 
     audioCanvas.addEventListener("mousemove", (e) => {
         if (audioRenderDragging) {
-            handleAudioRenderPan(e.movementX);
+            const deltaX = e.clientX - (lastDragX || e.clientX);
+            handleAudioRenderPan(deltaX);
+            lastDragX = e.clientX;
         }
     });
 
-    audioCanvas.addEventListener("mouseup", () => {
+    // Ensure we stop dragging even if mouseup occurs outside the canvas
+    window.addEventListener("mouseup", () => {
         audioRenderDragging = false;
+        lastDragX = undefined;
     });
 
     audioCanvas.addEventListener("touchstart", (e) => {
@@ -2209,7 +2214,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 audioCtx2d.lineTo(x, y + 1);
                 audioCtx2d.stroke();
             }
-
         }
 
         for (let i = 0; i < marks.length; i++) {
@@ -2247,41 +2251,40 @@ document.addEventListener('DOMContentLoaded', function () {
         notes.forEach(note => {
             const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
             const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;
-            if (x < audioCanvas.width && x > 0 - ((note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) {
-                audioCtx2d.strokeStyle = note.break ? '#FF6C0C' : (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide ? "#FFD900" : (note.star || note.touch || note.slide ? '#0089F4' : "#FF569B"));
-                audioCtx2d.lineWidth = 3;
-                audioCtx2d.beginPath();
-                if (note.touch) {
-                    audioCtx2d.rect(x - 3, y - 3, 6, 6);
-                } else if (note.slide) {
-                    audioCtx2d.lineWidth = 6;
-                    audioCtx2d.setLineDash([8, 8]);
-                    const startY = (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height;
-                    audioCtx2d.moveTo(x + note.delay * sampleRate / zoom, startY);
-                    audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom, startY);
-                } else if (note.star) {
-                    const outerRadius = 5, innerRadius = 2, numPoints = 5;
-                    for (let i = 0; i < numPoints * 2; i++) {
-                        const radius = i % 2 === 0 ? outerRadius : innerRadius;
-                        const angle = Math.PI / numPoints * i - Math.PI / 2;
-                        const currentX = x + radius * Math.cos(angle);
-                        const currentY = y + radius * Math.sin(angle);
-                        if (i === 0) audioCtx2d.moveTo(currentX, currentY);
-                        else audioCtx2d.lineTo(currentX, currentY);
-                    }
-                } else {
-                    if (note.holdTime != null) {
-                        audioCtx2d.lineWidth = 6;
-                        audioCtx2d.moveTo(x, y);
-                        audioCtx2d.lineTo(x + note.holdTime * sampleRate / zoom, y);
-                    } else {
-                        audioCtx2d.arc(x, y, 4, 0, 2 * Math.PI);
-                    }
+            if (x > audioCanvas.width || x < 0 - ((note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) return;
+            audioCtx2d.strokeStyle = note.break ? '#FF6C0C' : (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide ? "#FFD900" : (note.star || note.touch || note.slide ? '#0089F4' : "#FF569B"));
+            audioCtx2d.lineWidth = 3;
+            audioCtx2d.beginPath();
+            if (note.touch) {
+                audioCtx2d.rect(x - 3, y - 3, 6, 6);
+            } else if (note.slide) {
+                audioCtx2d.lineWidth = 6;
+                audioCtx2d.setLineDash([8, 8]);
+                const startY = (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height;
+                audioCtx2d.moveTo(x + note.delay * sampleRate / zoom, startY);
+                audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom, startY);
+            } else if (note.star) {
+                const outerRadius = 5, innerRadius = 2, numPoints = 5;
+                for (let i = 0; i < numPoints * 2; i++) {
+                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                    const angle = Math.PI / numPoints * i - Math.PI / 2;
+                    const currentX = x + radius * Math.cos(angle);
+                    const currentY = y + radius * Math.sin(angle);
+                    if (i === 0) audioCtx2d.moveTo(currentX, currentY);
+                    else audioCtx2d.lineTo(currentX, currentY);
                 }
-                audioCtx2d.closePath();
-                audioCtx2d.stroke();
-                audioCtx2d.setLineDash([]);
+            } else {
+                if (note.holdTime != null) {
+                    audioCtx2d.lineWidth = 6;
+                    audioCtx2d.moveTo(x, y);
+                    audioCtx2d.lineTo(x + note.holdTime * sampleRate / zoom, y);
+                } else {
+                    audioCtx2d.arc(x, y, 4, 0, 2 * Math.PI);
+                }
             }
+            audioCtx2d.closePath();
+            audioCtx2d.stroke();
+            audioCtx2d.setLineDash([]);
         });
 
         audioCtx2d.beginPath();
