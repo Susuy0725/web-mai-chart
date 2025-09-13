@@ -4,6 +4,13 @@
 
 import { settings, noteImages } from "./main.js";
 
+// Helper: check if an HTMLImageElement is fully loaded and usable
+function isImageReady(img) {
+    try {
+        return img && img.complete && typeof img.naturalWidth === 'number' && img.naturalWidth > 0;
+    } catch (e) { return false; }
+}
+
 // import { settings } from "./main.js"; // Assuming settings is passed as currentSettings
 
 // Pre-calculate angular positions if they are static
@@ -201,7 +208,10 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         default:
             break;
     }
-
+    ctx.shadowColor = '#00000000';
+    ctx.shadowBlur = 0;
+    ctx.save();
+    if (!isImageReady(images.sensor)) return;
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 4;
     // images.sensor.style.fontFamily = 'monospace'; // Setting style on image element directly, not canvas related for drawing
@@ -209,16 +219,18 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
         bw, bw);
     if (!currentSettings.disableSensorWhenPlaying || play.pause) {
-        ctx.drawImage(images.sensorText,
+        if (!isImageReady(images.sensor_text)) return;
+        ctx.drawImage(images.sensor_text,
             (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
             bw, bw);
     }
-    ctx.shadowColor = '#00000000';
-    ctx.shadowBlur = 0;
+    ctx.restore();
 
-    ctx.drawImage(images.outline,
-        (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
-        bw, bw);
+    if (isImageReady(images.outline)) {
+        ctx.drawImage(images.outline,
+            (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
+            bw, bw);
+    }
 
     // slide render
     if (currentSettings.showSlide) {
@@ -319,7 +331,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 }, note);
             }
             if (note.star) {
-                if (note.doubleSlide) drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang + 1.2) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note);
+                if (note.doubleSlide && !currentSettings.useImgSkin) drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang + 1.2) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note);
                 drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note);
             } else if (note.holdTime != null) {
                 note.holdTime = note.holdTime == 0 ? 1E-64 : note.holdTime;
@@ -451,14 +463,17 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
 
     if (currentSettings.useImgSkin) {
         // Draw using image skin
-        if (!(noteImages.tap && noteImages.break && noteImages.each)) return; // Image not loaded yet
+        const imgTap = (note.break ? noteImages.tap_break : (note.isDoubleTapHold ? noteImages.tap_each : noteImages.tap));
+        if (!isImageReady(imgTap)) return; // Image not loaded or broken
         ctx.translate(x, y);
         ctx.rotate(getNoteAng(parseInt(note.pos)) + Math.PI / 4);
         ctx.scale(currentSize, currentSize);
-        ctx.drawImage((note.break ? noteImages.break : (note.isDoubleTapHold ? noteImages.each : noteImages.tap)),
+        ctx.drawImage(imgTap,
             -1.5, -1.5,
             3, 3);
-
+        if (note.ex) ctx.drawImage(noteImages.tap_ex,
+            -1.5, -1.5,
+            3, 3);
     } else {
         const unit = getUnitCirclePath();
 
@@ -761,14 +776,15 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
 
     if (currentSettings.useImgSkin) {
         // Draw using image skin
-        if (!(noteImages.star && noteImages.star_break && noteImages.star_ex)) return; // Image not loaded yet
+        const imgStar = noteImages[(note.break ? 'star_break' : (note.isDoubleTapHold ? 'star_each' : 'star')) + (note.doubleSlide ? '_double' : '')];
+        if (!isImageReady(imgStar)) return;
         ctx.translate(x, y);
         ctx.rotate((ang * 0.192 + 0.125) * Math.PI);
         ctx.scale(currentSize, currentSize);
-        ctx.drawImage((note.break ? noteImages.star_break : (note.isDoubleTapHold ? noteImages.star_each : noteImages.star)),
+        ctx.drawImage(imgStar,
             -1.5, -1.5,
             3, 3);
-        if (ex) {
+        if (ex && isImageReady(noteImages.star_ex)) {
             ctx.drawImage(noteImages.star_ex,
                 -1.5, -1.5,
                 3, 3);
@@ -1127,7 +1143,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
 
     // CRITICAL REWRITE: drawArrow should not use SVG DOM elements.
     // It should calculate points mathematically using the path object.
-    function drawArrowAndStar(pathObject, spacing, _t_arrow_progress, currentCtx, arrowColor, arrowSize, wSlide, fading, noteData) {
+    function drawArrowAndStar(pathObject, spacing, _t_arrow_progress, currentCtx, arrowColor, arrowSize, wSlide, fading, note) {
         const totalLen = pathObject.getTotalLength();
         if (totalLen <= 0) return;
         // 預先調整 spacing
@@ -1143,7 +1159,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         const bIncrementPer = arrowSize * (wSlide ? 0.3 : 0);
 
         // 計算可畫箭頭數量（視情況可用 Math.floor 以確保整數次數）
-        const fin = Math.floor(totalLen / spacing + 1 * wSlide);
+        const fin = Math.floor(totalLen / spacing + 1 * wSlide - 1E-5 - 0.5);
 
         // reuse arrow shape if available to avoid allocation
         const arrowKey = `${arrowSize.toFixed(2)}_${wSlide ? 1 : 0}`;
@@ -1186,14 +1202,23 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
                     currentCtx.closePath();
                     currentCtx.fill();
                 } else {
-                    currentCtx.fill(arrow);
+                    if (settings.useImgSkin) {
+                        if (!noteImages.slide) return;
+                        currentCtx.rotate(Math.PI);
+                        currentCtx.shadowColor = "#00000000";
+                        currentCtx.drawImage(noteImages[note.break ? 'slide_break' : (note.isDoubleSlide ? 'slide_each' : 'slide')],
+                            -arrowSize * 0.75, -arrowSize * 0.5,
+                            arrowSize * 0.8, arrowSize * 1);
+                    } else {
+                        currentCtx.fill(arrow);
+                    }
                 }
                 currentCtx.restore();
             }
             b -= bIncrementPer * 1.2;
         }
         if (!fading) {
-            const k = (noteData.chain && !noteData.firstOne) ? (_t_arrow_progress > 0) + 0 : Math.min(_t_arrow_progress * noteData.slideTime / noteData.delay + 1, 1);
+            const k = (note.chain && !note.firstOne) ? (_t_arrow_progress > 0) + 0 : Math.min(_t_arrow_progress * note.slideTime / note.delay + 1, 1);
 
             const p = pathObject.getPointAtLength(_t_arrow * totalLen);
             currentCtx.save();
@@ -1203,9 +1228,9 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
             //ctx.font = "bold 24px Segoe UI"; // Smaller font
             //ctx.fillStyle = "black";
             //ctx.fillText(`${slidePosDiff(startNp, endNp)}`, 0, 50);
-            drawStar(0, 0, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, noteData);
-            if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, noteData);
-            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, noteData);
+            drawStar(0, 0, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, note);
+            if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, note);
+            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, note);
             currentCtx.restore();
         }
     }
@@ -1511,7 +1536,8 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
 
     let effectiveDistance = (distance + 0.32) * currentSize; // Apply currentSize to distance scaling
 
-    function drawTouchElement(isFill = false) {
+    // drawTouchElement now draws relative to supplied center (cx, cy)
+    function drawTouchElement(cx, cy, isFill = false, stage = 0) {
         const outerStrokeStyle = `rgba(255,255,255,${opacity})`;
         const innerStrokeStyle = localColor;
         ctx.lineWidth = currentSize * (isFill ? 0.35 : 0.6); // Thinner for colored part
@@ -1525,7 +1551,7 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
 
         if (holdtime && holdtime > 0) {
             // strCh logic
-            const corners = [
+            /*const corners = [
                 { x_offset: 1, y_offset: -1, fill: `rgba(250,73,4,${opacity})` },
                 { x_offset: -1, y_offset: -1, fill: `rgba(0,141,244,${opacity})` },
                 { x_offset: 1, y_offset: 1, fill: `rgba(245,238,0,${opacity})` },
@@ -1533,13 +1559,13 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
             ];
             corners.forEach(corner => {
                 ctx.beginPath();
-                // Recalculate points based on centerX, centerY, effectiveDistance, and currentSize
-                const point1x = centerX + effectiveDistance * corner.x_offset;
-                const point1y = centerY + effectiveDistance * corner.y_offset;
-                const point2x = centerX + effectiveDistance * corner.x_offset;
-                const point2y = centerY + (effectiveDistance + currentSize * Math.SQRT2) * corner.y_offset; // Approx
-                const point3x = centerX + (effectiveDistance + currentSize * Math.SQRT2) * corner.x_offset; // Approx
-                const point3y = centerY + effectiveDistance * corner.y_offset;
+                // Recalculate points based on cx, cy, effectiveDistance, and currentSize
+                const point1x = cx + effectiveDistance * corner.x_offset;
+                const point1y = cy + effectiveDistance * corner.y_offset;
+                const point2x = cx + effectiveDistance * corner.x_offset;
+                const point2y = cy + (effectiveDistance + currentSize * Math.SQRT2) * corner.y_offset; // Approx
+                const point3x = cx + (effectiveDistance + currentSize * Math.SQRT2) * corner.x_offset; // Approx
+                const point3y = cy + effectiveDistance * corner.y_offset;
 
                 ctx.moveTo(point1x, point1y);
                 ctx.lineTo(point2x, point2y); // These points define triangles/quads for corners
@@ -1552,40 +1578,78 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
                     ctx.strokeStyle = corner.fill; // Match stroke to fill for filled parts
                 }
                 ctx.stroke();
-            });
+            });*/
+
+            const color4 = [
+                `rgba(250,73,4,${opacity})`,
+                `rgba(0,141,244,${opacity})`,
+                `rgba(245, 238, 0, ${opacity})`,
+                `rgba(17, 167, 105, ${opacity})`,
+            ];
+
+            ctx.beginPath();
+            // Recalculate points based on cx, cy, effectiveDistance, and currentSize
+            const point1x = cx + effectiveDistance * 1;
+            const point1y = cy + effectiveDistance * -1;
+            const point2x = cx + effectiveDistance * 1;
+            const point2y = cy + (effectiveDistance + currentSize * Math.SQRT2) * -1; // Approx
+            const point3x = cx + (effectiveDistance + currentSize * Math.SQRT2) * 1; // Approx
+            const point3y = cy + effectiveDistance * -1;
+
+            ctx.moveTo(point1x, point1y);
+            ctx.lineTo(point2x, point2y); // These points define triangles/quads for corners
+            ctx.lineTo(point3x, point3y); // Adjust geometry for exact original shape
+            ctx.closePath();
+
+            if (isFill) {
+                ctx.fillStyle = color4[stage];
+                ctx.fill();
+                ctx.strokeStyle = color4[stage]; // Match stroke to fill for filled parts
+            }
+            ctx.stroke();
+
             if (isFill) ctx.strokeStyle = innerStrokeStyle; // Reset for center arc
-            _arc(centerX, centerY, currentSize * 0.15, ctx);
+            if (stage === 3) _arc(cx, cy, currentSize * 0.15, ctx);
 
         } else { // str logic (non-hold)
-            const zs = 1;
-            const armLength = effectiveDistance + currentSize * zs; // Simplified arm length
+            if (currentSettings.useImgSkin) {
+                // use canvas built-in alpha handling for image opacity
+                if (!(noteImages.touch && noteImages.touch_each && noteImages.touch_point_each && noteImages.touch_point)) return;
+                const touchImg = noteImages[note.isDoubleTouch ? 'touch_each' : 'touch'];
+                ctx.globalAlpha = opacity;
+                ctx.drawImage(touchImg, cx - currentSize * 1.5, cy - currentSize * 0.8 + effectiveDistance * 1.25, currentSize * 3, currentSize * 2);
+                if (stage === 3) ctx.drawImage(noteImages[note.isDoubleTouch ? 'touch_point_each' : 'touch_point'], cx - currentSize * 0.5, cy - currentSize * 0.5, currentSize, currentSize);
+            } else {
+                const zs = 1;
+                const armLength = effectiveDistance + currentSize * zs; // Simplified arm length
 
-            // Top Triangle
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY - effectiveDistance * 1.25);
-            ctx.lineTo(centerX + currentSize * zs, centerY - armLength - effectiveDistance * 0.25);
-            ctx.lineTo(centerX - currentSize * zs, centerY - armLength - effectiveDistance * 0.25);
-            ctx.closePath(); ctx.stroke();
-            // Left Triangle
-            ctx.beginPath();
-            ctx.moveTo(centerX - effectiveDistance * 1.25, centerY);
-            ctx.lineTo(centerX - armLength - effectiveDistance * 0.25, centerY - currentSize * zs);
-            ctx.lineTo(centerX - armLength - effectiveDistance * 0.25, centerY + currentSize * zs);
-            ctx.closePath(); ctx.stroke();
-            // Bottom Triangle
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY + effectiveDistance * 1.25);
-            ctx.lineTo(centerX + currentSize * zs, centerY + armLength + effectiveDistance * 0.25);
-            ctx.lineTo(centerX - currentSize * zs, centerY + armLength + effectiveDistance * 0.25);
-            ctx.closePath(); ctx.stroke();
-            // Right Triangle
-            ctx.beginPath();
-            ctx.moveTo(centerX + effectiveDistance * 1.25, centerY);
-            ctx.lineTo(centerX + armLength + effectiveDistance * 0.25, centerY - currentSize * zs);
-            ctx.lineTo(centerX + armLength + effectiveDistance * 0.25, centerY + currentSize * zs);
-            ctx.closePath(); ctx.stroke();
+                // Top Triangle
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - effectiveDistance * 1.25);
+                ctx.lineTo(cx + currentSize * zs, cy - armLength - effectiveDistance * 0.25);
+                ctx.lineTo(cx - currentSize * zs, cy - armLength - effectiveDistance * 0.25);
+                ctx.closePath(); ctx.stroke();
+                /*// Left Triangle
+                ctx.beginPath();
+                ctx.moveTo(cx - effectiveDistance * 1.25, cy);
+                ctx.lineTo(cx - armLength - effectiveDistance * 0.25, cy - currentSize * zs);
+                ctx.lineTo(cx - armLength - effectiveDistance * 0.25, cy + currentSize * zs);
+                ctx.closePath(); ctx.stroke();
+                // Bottom Triangle
+                ctx.beginPath();
+                ctx.moveTo(cx, cy + effectiveDistance * 1.25);
+                ctx.lineTo(cx + currentSize * zs, cy + armLength + effectiveDistance * 0.25);
+                ctx.lineTo(cx - currentSize * zs, cy + armLength + effectiveDistance * 0.25);
+                ctx.closePath(); ctx.stroke();
+                // Right Triangle
+                ctx.beginPath();
+                ctx.moveTo(cx + effectiveDistance * 1.25, cy);
+                ctx.lineTo(cx + armLength + effectiveDistance * 0.25, cy - currentSize * zs);
+                ctx.lineTo(cx + armLength + effectiveDistance * 0.25, cy + currentSize * zs);
+                ctx.closePath(); ctx.stroke();*/
 
-            _arc(centerX, centerY, currentSize * 0.15, ctx);
+                if (stage === 3) _arc(cx, cy, currentSize * 0.15, ctx);
+            }
         }
     }
 
@@ -1598,10 +1662,10 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
             t_progress_hold - 0.75
         ];
         const colors = [
-            `rgba(250,73,4,${opacity})`,
-            `rgba(245,238,0,${opacity})`,
-            `rgba(17,167,105,${opacity})`,
-            `rgba(0,141,244,${opacity})`
+            `rgba(250, 73, 4, ${opacity})`,
+            `rgba(245, 238, 0, ${opacity})`,
+            `rgba(17, 167, 105, ${opacity})`,
+            `rgba(0, 141, 244, ${opacity})`
         ];
         const angles = [
             Math.PI * 0.25,
@@ -1638,14 +1702,23 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     }
 
     if (holdtime && holdtime > 0) {
-        ctx.shadowColor = `rgba(255,255,255)`;
+        ctx.shadowColor = `rgba(255, 255, 255)`;
         ctx.shadowBlur = s * 0.4;
         strPrg(t_touch / holdtime);
     }
     ctx.shadowBlur = s * 0.2;
-    ctx.shadowColor = `rgba(0,0,0,${opacity})`;
-    drawTouchElement(false); // Draw white outline
-    drawTouchElement(true);  // Draw colored center (original has two calls to str())
+    ctx.shadowColor = `rgba(0, 0, 0, ${opacity})`;
+    // Draw 4 rotated copies (0, 90, 180, 270 degrees)
+    for (let i = 0; i < 4; i++) {
+        const rot = i * (Math.PI / 2);
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rot);
+        // draw relative to origin (0,0) after transform
+        drawTouchElement(0, 0, false, i);
+        drawTouchElement(0, 0, true, i);
+        ctx.restore();
+    }
 
     ctx.shadowBlur = 0;
     ctx.shadowColor = '#00000000';
@@ -1664,7 +1737,7 @@ export function hexWithAlpha(hex, alpha) {
     // 將 alpha 轉為 0~255 的十六進位，並補滿兩位
     const alphaHex = Math.round(alpha * 255).toString(16).padStart(2, '0');
 
-    return `#${hex}${alphaHex}`;
+    return `#${hex}${alphaHex} `;
 }
 
 export function _arc(x, y, r = 0, currentCtx) {

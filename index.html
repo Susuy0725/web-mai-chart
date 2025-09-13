@@ -16,27 +16,27 @@
     <link rel="stylesheet" href="Styles/main.css">
 </head>
 <script>
-let masterExample = ``;
-/*
-||test using
-(180){16}
-1,2,3,4,5,6,7,8,
-12,23,34,45,56,67,78,81,
-1x,2x,3x,4x,5x,6x,7x,8x,
-1b,2b,3b,4b,5b,6b,7b,8b,
-1$,2$,3$,4$,5$,6$,7$,8$,
-A1,A2,A3,A4,A5,A6,A7,A8,
-B1,B2,B3,B4,B5,B6,B7,B8,
-D1,D2,D3,D4,D5,D6,D7,D8,
-E1,E2,E3,E4,E5,E6,E7,E8,
-C,
-1b^2^3^4^5^6^7^8^1[2:1],
-1>2>3<4<5<6<7>8>1[2:1]b,,,,,,,,,,,,
-1bp2p3p4p5p6p7p8p1[2:1],,,,,,,,,,,,
-1q2q3q4q5q6q7q8q1[2:1]b,,,,,,,,,,,,
-1bpp2pp3pp4pp5pp6pp7pp8pp1[2:1],,,,,,,,,,,,
-1qq2qq3qq4qq5qq6qq7qq8qq1[2:1]b,,,,,,,,,,,,
-*/
+    let masterExample = ``;
+    /*
+    ||test using
+    (180){16}
+    1,2,3,4,5,6,7,8,
+    12,23,34,45,56,67,78,81,
+    1x,2x,3x,4x,5x,6x,7x,8x,
+    1b,2b,3b,4b,5b,6b,7b,8b,
+    1$,2$,3$,4$,5$,6$,7$,8$,
+    A1,A2,A3,A4,A5,A6,A7,A8,
+    B1,B2,B3,B4,B5,B6,B7,B8,
+    D1,D2,D3,D4,D5,D6,D7,D8,
+    E1,E2,E3,E4,E5,E6,E7,E8,
+    C,
+    1b^2^3^4^5^6^7^8^1[2:1],
+    1>2>3<4<5<6<7>8>1[2:1]b,,,,,,,,,,,,
+    1bp2p3p4p5p6p7p8p1[2:1],,,,,,,,,,,,
+    1q2q3q4q5q6q7q8q1[2:1]b,,,,,,,,,,,,
+    1bpp2pp3pp4pp5pp6pp7pp8pp1[2:1],,,,,,,,,,,,
+    1qq2qq3qq4qq5qq6qq7qq8qq1[2:1]b,,,,,,,,,,,,
+    */
 </script>
 
 <body>
@@ -117,11 +117,11 @@ C,
 
     <div id="settings-overlay" class="hide"></div>
     <div id="settings-popup" class="hide">
-    <form id="settings-form"></form>
-    <button type="button" id="save-settings-btn">儲存</button>
-    <button type="button" id="reset-settings-btn">重置設定</button>
-    <button type="button" id="clear-cache-btn">清除快取</button>
-    <button type="button" id="cancel-settings-btn">取消</button>
+        <form id="settings-form"></form>
+        <button type="button" id="save-settings-btn">儲存</button>
+        <button type="button" id="reset-settings-btn">重置設定</button>
+        <button type="button" id="clear-cache-btn">清除快取</button>
+        <button type="button" id="cancel-settings-btn">取消</button>
     </div>
 
     <div id="info-popup" class="hide">
@@ -130,24 +130,7 @@ C,
         <button type="button" id="cancel-info-btn">取消</button>
     </div>
 
-    <div class="imgs">
-        <img src="Skin/outline.svg" id="outline">
-        <img src="Skin/sensor.svg" id="sensor">
-        <img src="Skin/sensor_text.svg" id="sensor_text">
-        <img src="Skin/tap.png" id="tap">
-        <img src="Skin/tap_break.png" id="break">
-        <img src="Skin/tap_each.png" id="each">
-        <img src="Skin/hold.png" id="hold">
-        <img src="Skin/hold_break.png" id="hold_break">
-        <img src="Skin/hold_each.png" id="hold_each">
-        <img src="Skin/touch.png" id="touch">
-        <img src="Skin/touch_each.png" id="touch_each">
-        <img src="Skin/tap_ex.png" id="tap_ex">
-        <img src="Skin/star.png" id="star">
-        <img src="Skin/star_ex.png" id="star_ex">
-        <img src="Skin/star_break.png" id="star_break">
-        <img src="Skin/star_each.png" id="star_each">
-    </div>
+    <div id="imgs" class="imgs"></div>
 </body>
 
 </html>

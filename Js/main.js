@@ -33,6 +33,34 @@ export const defaultSettings = {
     'mainColor': '#444e5d',
 };
 
+const imgsToCreate = [
+    ['outline', 'svg'],
+    ['sensor', 'svg'],
+    ['sensor_text', 'svg'],
+    ['tap', 'png'],
+    ['tap_break', 'png'],
+    ['tap_each', 'png'],
+    ['hold', 'png'],
+    ['hold_break', 'png'],
+    ['hold_each', 'png'],
+    ['touch', 'png'],
+    ['touch_point', 'png'],
+    ['touch_point_each', 'png'],
+    ['touch_each', 'png'],
+    ['tap_ex', 'png'],
+    ['star', 'png'],
+    ['star_ex', 'png'],
+    ['star_break', 'png'],
+    ['star_each', 'png'],
+    ['star_double', 'png'],
+    ['star_break_double', 'png'],
+    ['star_each_double', 'png'],
+    ['slide', 'png'],
+    ['slide_each', 'png'],
+    ['slide_ex', 'png'],
+    ['slide_break', 'png'],
+];
+
 // Export a separate settings object (clone) so runtime changes don't mutate defaultSettings
 export let settings = JSON.parse(JSON.stringify(defaultSettings)); // deep clone
 
@@ -424,6 +452,23 @@ document.addEventListener('DOMContentLoaded', function () {
     const timeDisplay = document.getElementById("nowTrackTime");
     const bgm = document.getElementById("bgm");
     const bgVideo = document.getElementById('backgroundVideo');
+
+    // --- 動態建立 imgs 區塊的 <img> 元素，並把對象放到 noteImages ---
+    try {
+        const imgsContainer = document.getElementById('imgs');
+        if (imgsContainer) {
+            imgsContainer.innerHTML = '';
+            imgsToCreate.forEach(([id, type]) => {
+                const img = document.createElement('img');
+                img.id = "img_" + id;
+                // only set src if using image skin; otherwise keep empty for programmatic draws
+                img.src = "Skin/" + id + "." + type;
+                imgsContainer.appendChild(img);
+                // Also populate the exported noteImages map for other modules to use
+            });
+            getImgs().catch(err => console.error('getImgs failed:', err));
+        }
+    } catch (e) { console.warn('create imgs error', e); }
     // If URL contains ?zip=<url>, fetch and unpack zip and load as folder
     (async function handleZipParam() {
         try {
@@ -1411,7 +1456,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         // Default behavior for standalone digits (keep original numeric flip)
                         if (/\d/.test(ch)) {
                             const next = selected[i + 1];
-                            if (/b/.test(next)) {
+                            if (/x/.test(next)) {
                                 result += ch;
                                 i++;
                                 continue;
@@ -2466,55 +2511,17 @@ async function getImgs() {
     // loading and attach `.sprite` properties expected by render.
     const images = noteImages; // fill this shared object
     try {
-        // Map DOM ids to keys used by render
-        const domMap = {
-            outline: 'outline',
-            sensor: 'sensor',
-            sensor_text: 'sensorText',
-            break: 'break',
-            each: 'each',
-            touch: 'touch',
-            touch_each: 'touch_each',
-            tap_ex: 'tap_ex',
-            star: 'star',
-            star_ex: 'star_ex',
-            star_break: 'star_break',
-            star_each: 'star_each',
-        };
-        Object.entries(domMap).forEach(([domId, key]) => {
-            const el = document.getElementById(domId);
-            if (el) images[key] = el;
+        Object.entries(imgsToCreate).forEach(([i, dom]) => {
+            const el = document.getElementById("img_" + dom[0]);
+            if (el) { images[dom[0]] = el; }
+            else { console.warn(`Image element #${dom[0]} not found.`); }
         });
-
-        if (!images.outline || !images.sensor || !images.sensorText) {
-            console.warn('Outline or Sensor image not found in DOM.');
-        }
-
-        // Fetch and create Image elements for skins that render expects as sprites
-        const toFetch = ['tap', 'hold'];
-        await Promise.all(toFetch.map(async (name) => {
-            try {
-                const resp = await fetch(`./Skin/${name}.png`);
-                if (!resp.ok) throw new Error(`Failed to fetch Skin/${name}.png (${resp.status})`);
-                const blob = await resp.blob();
-                const url = URL.createObjectURL(blob);
-                const img = new Image();
-                const p = new Promise((res, rej) => {
-                    img.onload = () => { res(); };
-                    img.onerror = (e) => { rej(new Error('Image load error for ' + name, e)); };
-                });
-                img.src = url;
-                await p;
-                images[name] = img;
-            } catch (e) {
-                console.error('Failed to load skin image', name, e);
-            }
-        }));
     } catch (e) {
         console.error('Error getting images:', e);
     }
+    console.log('Images loaded:', images);
     return images;
 }
 
 // Start loading in background; populate `noteImages` when ready.
-getImgs().catch(err => console.error('getImgs failed:', err));
+//getImgs().catch(err => console.error('getImgs failed:', err));
