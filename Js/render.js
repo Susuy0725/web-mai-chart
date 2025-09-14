@@ -26,6 +26,15 @@ const arrowShapeCache = new Map(); // key: `${arrowSize}_${wSlide}` -> Path2D
 // Offscreen canvas cache for arrow sprites: key `${arrowSize}_${wSlide}_${color}` -> HTMLCanvasElement
 const arrowCanvasCache = new Map();
 
+// Offscreen static layer cache (sensor + outline + sensor_text)
+const staticLayerCache = {
+    canvas: null,
+    width: 0,
+    height: 0,
+    scaleFactor: 1,
+    valid: false,
+};
+
 // 建立一個快取來儲存不同大小的星星路徑，避免重複計算
 const starCache = new Map();
 
@@ -211,26 +220,53 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     ctx.shadowColor = '#00000000';
     ctx.shadowBlur = 0;
     ctx.save();
-    if (!isImageReady(images.sensor)) return;
-    ctx.shadowColor = 'black';
-    ctx.shadowBlur = 4;
-    // images.sensor.style.fontFamily = 'monospace'; // Setting style on image element directly, not canvas related for drawing
-    ctx.drawImage(images.sensor,
-        (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
-        bw, bw);
-    if (!currentSettings.disableSensorWhenPlaying || play.pause) {
-        if (!isImageReady(images.sensor_text)) return;
-        ctx.drawImage(images.sensor_text,
+    // Try to use static offscreen cache for sensor/outline/sensor_text to reduce per-frame raster work
+    const shouldUseStatic = isImageReady(images.sensor) && isImageReady(images.outline) && (!currentSettings.disableSensorWhenPlaying || isImageReady(images.sensor_text));
+    const targetW = bw, targetH = bw;
+    if (shouldUseStatic) {
+        // invalidate cache if size changed or canvas missing
+        if (!staticLayerCache.canvas || staticLayerCache.width !== targetW || staticLayerCache.height !== targetH || staticLayerCache.scaleFactor !== factor) {
+            staticLayerCache.canvas = document.createElement('canvas');
+            staticLayerCache.canvas.width = targetW;
+            staticLayerCache.canvas.height = targetH;
+            staticLayerCache.width = targetW;
+            staticLayerCache.height = targetH;
+            staticLayerCache.scaleFactor = factor;
+            const sc = staticLayerCache.canvas.getContext('2d');
+            sc.clearRect(0, 0, targetW, targetH);
+            // draw sensor
+            sc.save();
+            sc.shadowColor = 'black';
+            sc.shadowBlur = 4;
+            sc.drawImage(images.sensor, 0, 0, targetW, targetH);
+            sc.restore();
+            // optionally draw sensor_text
+            if (!currentSettings.disableSensorWhenPlaying || play.pause) {
+                sc.drawImage(images.sensor_text, 0, 0, targetW, targetH);
+            }
+            // draw outline on top
+            sc.drawImage(images.outline, 0, 0, targetW, targetH);
+            staticLayerCache.valid = true;
+        }
+        if (staticLayerCache.valid) {
+            ctx.drawImage(staticLayerCache.canvas, (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0), bw, bw);
+        }
+    } else {
+        if (!isImageReady(images.sensor)) return;
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.drawImage(images.sensor,
             (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
             bw, bw);
+        if (!currentSettings.disableSensorWhenPlaying || play.pause) {
+            if (!isImageReady(images.sensor_text)) return;
+            ctx.drawImage(images.sensor_text,
+                (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
+                bw, bw);
+        }
     }
     ctx.restore();
 
-    if (isImageReady(images.outline)) {
-        ctx.drawImage(images.outline,
-            (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0),
-            bw, bw);
-    }
 
     // slide render
     if (currentSettings.showSlide) {
@@ -794,7 +830,7 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
 
     if (currentSettings.useImgSkin) {
         // Draw using image skin
-        const imgStar = noteImages[(note.break ? 'star_break' : (note.isDoubleTapHold ? 'star_each' : 'star')) + (note.doubleSlide ? '_double' : '')];
+        const imgStar = noteImages[(note.break ? 'star_break' : ((note.isDoubleTapHold || note.isDoubleSlide) ? 'star_each' : 'star')) + (note.doubleSlide ? '_double' : '')];
         if (!isImageReady(imgStar)) return;
         ctx.translate(x, y);
         ctx.rotate((ang * 0.192 + 0.125) * Math.PI);

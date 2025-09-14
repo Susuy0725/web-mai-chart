@@ -31,6 +31,7 @@ export const defaultSettings = {
     'showBgMask': true,
     'useImgSkin': false,
     'mainColor': '#444e5d',
+    'playMode': false,
 };
 
 const imgsToCreate = [
@@ -57,7 +58,6 @@ const imgsToCreate = [
     ['star_each_double', 'png'],
     ['slide', 'png'],
     ['slide_each', 'png'],
-    ['slide_ex', 'png'],
     ['slide_break', 'png'],
 ];
 
@@ -129,7 +129,65 @@ export let play = {
     'combo': 0,
     'score': 0,
     'playbackSpeed': 1,
+    'maximized': false,
 };
+
+// --- Performance instrumentation overlay ---
+export const perf = (function () {
+    let overlay = null;
+    const stats = {
+        fps: 0,
+        frameMs: 0,
+        updateMs: 0,
+        renderMs: 0,
+        audioMs: 0,
+    };
+    let lastTime = performance.now();
+    let frames = 0;
+
+    function ensureOverlay() {
+        if (overlay) return overlay;
+        overlay = document.createElement('div');
+        overlay.id = 'perfOverlay';
+        overlay.style.position = 'fixed';
+        overlay.style.right = '8px';
+        overlay.style.top = '8px';
+        overlay.style.zIndex = 99999;
+        overlay.style.background = 'rgba(0,0,0,0.6)';
+        overlay.style.color = '#0f0';
+        overlay.style.fontFamily = 'monospace';
+        overlay.style.fontSize = '12px';
+        overlay.style.padding = '6px 8px';
+        overlay.style.borderRadius = '6px';
+        overlay.style.pointerEvents = 'none';
+        document.body.appendChild(overlay);
+        return overlay;
+    }
+
+    function tick(frameMs, updateMs, renderMs, audioMs) {
+        frames++;
+        const now = performance.now();
+        if (now - lastTime >= 1000) {
+            stats.fps = Math.round((frames * 1000) / (now - lastTime));
+            frames = 0;
+            lastTime = now;
+        }
+        stats.frameMs = Math.round(frameMs * 10) / 10;
+        stats.updateMs = Math.round(updateMs * 10) / 10;
+        stats.renderMs = Math.round(renderMs * 10) / 10;
+        stats.audioMs = Math.round(audioMs * 10) / 10;
+
+        if (settings.showFpsCounter || settings.showPerfBreakdown) {
+            const ov = ensureOverlay();
+            ov.innerHTML = `FPS: ${stats.fps}<br/>frme ${stats.frameMs}ms<br/>updt ${stats.updateMs}ms<br/>rend ${stats.renderMs}ms<br/>audi ${stats.audioMs}ms`;
+            ov.style.display = '';
+        } else if (overlay) {
+            overlay.style.display = 'none';
+        }
+    }
+
+    return { tick, _stats: stats };
+})();
 
 let soundSettings = {
     'answer': true,
@@ -647,6 +705,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         hideControlsBtn.addEventListener('click', () => {
             const isMinimized = document.body.classList.contains('layout-minimized');
+            play.maximized = !isMinimized;
 
             if (isMinimized) {
                 // --- 準備最大化 (讓元素出現) ---
@@ -2247,6 +2306,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             }
         }
+        let slideOnAudioCount = 0;
 
         notes.forEach(note => {
             const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
@@ -2258,11 +2318,13 @@ document.addEventListener('DOMContentLoaded', function () {
             if (note.touch) {
                 audioCtx2d.rect(x - 3, y - 3, 6, 6);
             } else if (note.slide) {
+                if (slideOnAudioCount > settings.maxSlideOnScreenCount) return;
                 audioCtx2d.lineWidth = 6;
                 audioCtx2d.setLineDash([8, 8]);
                 const startY = (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height;
                 audioCtx2d.moveTo(x + note.delay * sampleRate / zoom, startY);
                 audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom, startY);
+                slideOnAudioCount++;
             } else if (note.star) {
                 const outerRadius = 5, innerRadius = 2, numPoints = 5;
                 for (let i = 0; i < numPoints * 2; i++) {
@@ -2295,24 +2357,51 @@ document.addEventListener('DOMContentLoaded', function () {
         audioCtx2d.stroke();
     }
 
-    function getScrollTopToCaret(textarea, position) {
-        const text = textarea.value.substring(0, position);
-        const div = document.createElement('div');
-        const style = window.getComputedStyle(textarea);
-        ['fontFamily', 'fontSize', 'lineHeight', 'padding', 'border', 'boxSizing', 'whiteSpace', 'letterSpacing', 'wordWrap', 'overflowWrap', 'width']
-            .forEach(prop => div.style[prop] = style[prop]);
-        div.style.position = 'absolute';
-        div.style.visibility = 'hidden';
-        div.style.whiteSpace = 'pre-wrap';
-        div.style.wordWrap = 'break-word';
-        div.textContent = text;
-        document.body.appendChild(div);
-        const caretY = div.offsetHeight;
-        document.body.removeChild(div);
-        return caretY - textarea.clientHeight / 2;
-    }
+    // Cache measurement divs per-textarea to avoid repeated DOM creation and style reads
+    (function () {
+        const measurementCache = new WeakMap();
+
+        function createMeasurementDiv(textarea) {
+            const div = document.createElement('div');
+            const style = window.getComputedStyle(textarea);
+            // copy only the properties we need for height measurement
+            const props = ['fontFamily', 'fontSize', 'lineHeight', 'padding', 'border', 'boxSizing', 'letterSpacing', 'width'];
+            props.forEach(prop => { try { div.style[prop] = style[prop]; } catch (e) { /* ignore read-only */ } });
+            div.style.position = 'absolute';
+            div.style.visibility = 'hidden';
+            div.style.whiteSpace = 'pre-wrap';
+            div.style.wordWrap = 'break-word';
+            // place it off-screen to avoid affecting layout
+            div.style.left = '-99999px';
+            div.style.top = '0';
+            document.body.appendChild(div);
+            return div;
+        }
+
+        window.getScrollTopToCaret = function getScrollTopToCaret(textarea, position) {
+            let entry = measurementCache.get(textarea);
+            if (!entry) {
+                const div = createMeasurementDiv(textarea);
+                entry = { div };
+                measurementCache.set(textarea, entry);
+            }
+            const div = entry.div;
+
+            // Keep the measurement div width in sync with the textarea; only update when changed
+            const widthPx = textarea.clientWidth + 'px';
+            if (div.style.width !== widthPx) div.style.width = widthPx;
+
+            // Use a zero-width space when substring is empty to ensure a height measurement > 0
+            const text = textarea.value.substring(0, position) || '\u200B';
+            if (div.textContent !== text) div.textContent = text;
+
+            const caretY = div.offsetHeight;
+            return caretY - textarea.clientHeight / 2;
+        };
+    })();
 
     function update() {
+        const tStartFrame = performance.now();
         if (!play.pause) {
             const newTimelineVal = ((Date.now() - startTime) / 1000) * play.playbackSpeed;
             if (Math.abs(currentTimelineValue - newTimelineVal) > 0.01) {
@@ -2480,7 +2569,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-        if (settings.followText && !play.pause && !inSettings) {
+        if (settings.followText && !(play.pause || inSettings || play.maximized)) {
             editor.focus();
             const b = editor.value.split(",");
             const a = b.slice(0, play.nowIndex + 1).toString().length;
@@ -2488,8 +2577,18 @@ document.addEventListener('DOMContentLoaded', function () {
             editor.scrollTop = getScrollTopToCaret(editor, a);
         }
 
+        // instrumentation: measure render and audio draw times
+        const tAfterUpdate = performance.now();
+        const tStartRender = performance.now();
         render.renderGame(ctx, notes, settings, noteImages, t, triggered, play, (1000 / frameTime).toFixed(1));
+        const tAfterRender = performance.now();
+        const tStartAudio = performance.now();
         drawAudioWaveform();
+        const tAfterAudio = performance.now();
+        const tEndFrame = performance.now();
+
+        // supply timings to perf overlay (frame, update, render, audio)
+        try { perf.tick(tEndFrame - tStartFrame, tAfterUpdate - tStartFrame, tAfterRender - tStartRender, tAfterAudio - tStartAudio); } catch (e) { /* ignore */ }
 
         const formatTime = (seconds) => {
             const min = Math.floor(seconds / 60);
@@ -2503,6 +2602,10 @@ document.addEventListener('DOMContentLoaded', function () {
         thisLoop = new Date();
         frameTime += (thisLoop - lastLoop - frameTime) / filterStrength;
         lastLoop = thisLoop;
+        if (play.tryReinit) {
+            play.tryReinit = false;
+            return;
+        }
         requestAnimationFrame(update);
     }
 

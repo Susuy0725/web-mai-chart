@@ -1,4 +1,4 @@
-import * as render from "../Js/render.js";
+import * as render from "../js/render.js";
 import { showNotification } from "./main.js";
 
 // Exported helper: parse parameter strings to delay/duration in seconds and effective bpm
