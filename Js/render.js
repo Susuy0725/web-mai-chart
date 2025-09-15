@@ -121,7 +121,7 @@ export function adjustBrightness(hex, factor) {
     return out;
 }
 
-export function renderGame(ctx, notesToRender, currentSettings, images, time, triggeredNotes, play, fps) {
+export function renderGame(ctx, notesToRender, currentSettings, images, time, triggered, play, fps) {
     const calAng = function (ang) { return { 'x': Math.sin(ang), 'y': Math.cos(ang) * -1 } }; // Keep if dynamic angles needed elsewhere
 
     // Optional performance breakdown (very low overhead when disabled)
@@ -323,18 +323,19 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         const note = notesToRender[i];
         if (!note || note.starTime || note.touch || note.slide || note.invalid || !note.pos) continue;
         const _t = ((time - note.time) / 1000);
-        if (_t > currentSettings.effectDecayTime + (note.holdTime ?? 0)) continue;
         // only push notes that are within the active window for rendering or effect
-        if (!(_t >= (currentSettings.distanceToMid - 2) / currentSettings.speed && (_t < (note.holdTime ?? 0) || _t <= currentSettings.effectDecayTime + (note.holdTime ?? 0)))) continue;
+        if (
+            _t < (currentSettings.distanceToMid - 2) / currentSettings.speed ||
+            (_t > currentSettings.effectDecayTime + (note.holdTime ?? 0) && (triggered[note._id] || _t > currentSettings.effectDecayTime + (note.holdTime ?? 0) + 3))
+        ) continue;
         tbuf.push({ note, t: _t });
     }
     for (let i = 0; i < tbuf.length; i++) {
         const { note, t: _t } = tbuf[i];
-        if (_t > currentSettings.effectDecayTime + (note.holdTime ?? 0)) continue;
         // color 決策快取
         let color = note.break ? '#FF6C0C' : (note.isDoubleTapHold ? '#FFD900' : (note.star && !currentSettings.pinkStar ? '#009FF9' : '#FF50AA'));
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
-        if (_t >= (currentSettings.distanceToMid - 2) / currentSettings.speed && _t < (note.holdTime ?? 0)) {
+        if (_t >= (currentSettings.distanceToMid - 2) / currentSettings.speed && (_t < (note.holdTime ?? 0) || !triggered[note._id])) {
             const d = (1 - currentSettings.distanceToMid);
             let nang = (typeof note.pos === 'string' ? parseInt(note.pos[0]) : note.pos) - 1;
             nang = nang % 8;
@@ -342,7 +343,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             let np = EIGHT_POSITIONS_ANG[isNaN(nang) ? 0 : nang];
             if (!np) continue;
             let currentX, currentY, currentSize = 1;
-            const scaleFactor = (Math.min(_t, 0) * currentSettings.speed + 1);
+            const scaleFactor = (note.holdTime != null ? (Math.min(_t, 0) * currentSettings.speed + 1) : (_t * currentSettings.speed + 1));
             if (_t >= -d / currentSettings.speed) {
                 currentX = hw + hbw * np.x * scaleFactor;
                 currentY = hh + hbw * np.y * scaleFactor;
@@ -1504,80 +1505,97 @@ export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentS
     let s = noteBaseSize;
     let currentSize = Math.max(sizeFactor * s, 0);
     // Use cached Path2D for hold shapes to reduce allocations
-    const holdShapeCache = drawHold.holdShapeCache || (drawHold.holdShapeCache = new Map());
+    if (currentSettings.useImgSkin) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-ang);
+        ctx.drawImage(noteImages['hold'],
+            0, 0,
+            122, 71,
+            0 - currentSize * 1.5, 0 - currentSize * 1.5,
+            currentSize * 3, currentSize * 1.5);
+        // 122 x 200
+        ctx.drawImage(noteImages['hold'],
+            0, 129,
+            122, 71,
+            0 - currentSize * 1.5, currentSize * 0.25,
+            currentSize * 3, currentSize * 1.5);
+    } else {
+        const holdShapeCache = drawHold.holdShapeCache || (drawHold.holdShapeCache = new Map());
 
-    function getHoldPath(size, length) {
-        const sizeKey = Math.round(size * 100) / 100;
-        const lenKey = Math.round(length * 100) / 100;
-        const key = `${sizeKey}_${lenKey}`;
-        let p = holdShapeCache.get(key);
-        if (p) return p;
+        function getHoldPath(size, length) {
+            const sizeKey = Math.round(size * 100) / 100;
+            const lenKey = Math.round(length * 100) / 100;
+            const key = `${sizeKey}_${lenKey}`;
+            let p = holdShapeCache.get(key);
+            if (p) return p;
 
-        // Build path in local coordinates centered at origin and oriented for ang = 0.
-        p = new Path2D();
-        const calAngLocal = (a) => ({ x: Math.sin(a), y: -Math.cos(a) });
-        const offsets = [0, Math.PI / 3, 2 * Math.PI / 3, Math.PI, 4 * Math.PI / 3, 5 * Math.PI / 3];
-        // length displacement in local space is along calAngLocal(0)
-        const lenDisp = calAngLocal(0);
+            // Build path in local coordinates centered at origin and oriented for ang = 0.
+            p = new Path2D();
+            const calAngLocal = (a) => ({ x: Math.sin(a), y: -Math.cos(a) });
+            const offsets = [0, Math.PI / 3, 2 * Math.PI / 3, Math.PI, 4 * Math.PI / 3, 5 * Math.PI / 3];
+            // length displacement in local space is along calAngLocal(0)
+            const lenDisp = calAngLocal(0);
 
-        // Point 0
-        const p0 = { x: -size * calAngLocal(offsets[0]).x, y: size * calAngLocal(offsets[0]).y };
-        p.moveTo(p0.x, p0.y);
+            // Point 0
+            const p0 = { x: -size * calAngLocal(offsets[0]).x, y: size * calAngLocal(offsets[0]).y };
+            p.moveTo(p0.x, p0.y);
 
-        // Point 1
-        const p1 = { x: -size * calAngLocal(offsets[1]).x, y: size * calAngLocal(offsets[1]).y };
-        p.lineTo(p1.x, p1.y);
+            // Point 1
+            const p1 = { x: -size * calAngLocal(offsets[1]).x, y: size * calAngLocal(offsets[1]).y };
+            p.lineTo(p1.x, p1.y);
 
-        // Point 2 (with length displacement)
-        const p2 = { x: -size * calAngLocal(offsets[2]).x + length * lenDisp.x, y: size * calAngLocal(offsets[2]).y - length * lenDisp.y };
-        p.lineTo(p2.x, p2.y);
+            // Point 2 (with length displacement)
+            const p2 = { x: -size * calAngLocal(offsets[2]).x + length * lenDisp.x, y: size * calAngLocal(offsets[2]).y - length * lenDisp.y };
+            p.lineTo(p2.x, p2.y);
 
-        // Point 3
-        const p3 = { x: -size * calAngLocal(offsets[3]).x + length * lenDisp.x, y: size * calAngLocal(offsets[3]).y - length * lenDisp.y };
-        p.lineTo(p3.x, p3.y);
+            // Point 3
+            const p3 = { x: -size * calAngLocal(offsets[3]).x + length * lenDisp.x, y: size * calAngLocal(offsets[3]).y - length * lenDisp.y };
+            p.lineTo(p3.x, p3.y);
 
-        // Point 4
-        const p4 = { x: -size * calAngLocal(offsets[4]).x + length * lenDisp.x, y: size * calAngLocal(offsets[4]).y - length * lenDisp.y };
-        p.lineTo(p4.x, p4.y);
+            // Point 4
+            const p4 = { x: -size * calAngLocal(offsets[4]).x + length * lenDisp.x, y: size * calAngLocal(offsets[4]).y - length * lenDisp.y };
+            p.lineTo(p4.x, p4.y);
 
-        // Point 5
-        const p5 = { x: -size * calAngLocal(offsets[5]).x, y: size * calAngLocal(offsets[5]).y };
-        p.lineTo(p5.x, p5.y);
+            // Point 5
+            const p5 = { x: -size * calAngLocal(offsets[5]).x, y: size * calAngLocal(offsets[5]).y };
+            p.lineTo(p5.x, p5.y);
 
-        p.closePath();
-        holdShapeCache.set(key, p);
-        return p;
-    }
-
-    const holdPath = getHoldPath(currentSize, l);
-
-    // Simple frustum culling: skip if center is far outside canvas bounds
-    try {
-        const canvas = ctx && ctx.canvas;
-        if (canvas) {
-            const margin = Math.max(64, noteBaseSize * 3);
-            if (x + margin < 0 || x - margin > canvas.width || y + margin < 0 || y - margin > canvas.height) return;
+            p.closePath();
+            holdShapeCache.set(key, p);
+            return p;
         }
-    } catch (e) { /* ignore */ }
 
-    ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
-    ctx.shadowColor = (ex ? color : '#000000');
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(-ang);
-    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
-    ctx.strokeStyle = 'white';
-    ctx.stroke(holdPath);
-    ctx.restore();
+        const holdPath = getHoldPath(currentSize, l);
 
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = '#00000000';
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(-ang);
-    ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor;
-    ctx.strokeStyle = color;
-    ctx.stroke(holdPath);
+        // Simple frustum culling: skip if center is far outside canvas bounds
+        try {
+            const canvas = ctx && ctx.canvas;
+            if (canvas) {
+                const margin = Math.max(64, noteBaseSize * 3);
+                if (x + margin < 0 || x - margin > canvas.width || y + margin < 0 || y - margin > canvas.height) return;
+            }
+        } catch (e) { /* ignore */ }
+
+        ctx.shadowBlur = noteBaseSize * (ex ? 0.3 : 0.2);
+        ctx.shadowColor = (ex ? color : '#000000');
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-ang);
+        ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
+        ctx.strokeStyle = 'white';
+        ctx.stroke(holdPath);
+        ctx.restore();
+
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = '#00000000';
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-ang);
+        ctx.lineWidth = currentSize * 0.5 * currentSettings.lineWidthFactor;
+        ctx.strokeStyle = color;
+        ctx.stroke(holdPath);
+    }
     ctx.restore();
 }
 

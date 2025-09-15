@@ -32,6 +32,7 @@ export const defaultSettings = {
     'useImgSkin': false,
     'mainColor': '#444e5d',
     'playMode': false,
+    'debug': false,
 };
 
 const imgsToCreate = [
@@ -177,13 +178,13 @@ export const perf = (function () {
         stats.renderMs = Math.round(renderMs * 10) / 10;
         stats.audioMs = Math.round(audioMs * 10) / 10;
 
-        if (settings.showFpsCounter || settings.showPerfBreakdown) {
+        /*if (settings.showFpsCounter || settings.showPerfBreakdown) {
             const ov = ensureOverlay();
             ov.innerHTML = `FPS: ${stats.fps}<br/>frme ${stats.frameMs}ms<br/>updt ${stats.updateMs}ms<br/>rend ${stats.renderMs}ms<br/>audi ${stats.audioMs}ms`;
             ov.style.display = '';
         } else if (overlay) {
             overlay.style.display = 'none';
-        }
+        }*/
     }
 
     return { tick, _stats: stats };
@@ -348,7 +349,7 @@ function processSoundQueue() {
 
 // start interval processor
 if (!soundQueueInterval) {
-    soundQueueInterval = setInterval(processSoundQueue, 10);
+    soundQueueInterval = setInterval(processSoundQueue, 1);
     // ensure cleanup on page unload
     window.addEventListener('unload', () => {
         if (soundQueueInterval) clearInterval(soundQueueInterval);
@@ -510,6 +511,61 @@ document.addEventListener('DOMContentLoaded', function () {
     const timeDisplay = document.getElementById("nowTrackTime");
     const bgm = document.getElementById("bgm");
     const bgVideo = document.getElementById('backgroundVideo');
+    const debugBtn = document.createElement('div');
+
+    if (settings.debug) {
+        const a = document.getElementsByClassName('actions')[0];
+        console.log("Debug mode is ON");
+        debugBtn.className = 'debug-button';
+        debugBtn.innerHTML = '<span>Log Debug Info</span>';
+        if (a) a.appendChild(debugBtn);
+    }
+    // --- Prevent native gestures: pinch-zoom, pull-to-refresh, and left-edge swipe ---
+    (function preventNativeGestures() {
+        let touchStartX = 0, touchStartY = 0;
+        // pinch or multi-touch
+        document.addEventListener('touchstart', function (e) {
+            if (e.touches && e.touches.length > 1) {
+                // prevent pinch-zoom
+                e.preventDefault();
+                return;
+            }
+            touchStartX = e.touches && e.touches[0] ? e.touches[0].clientX : 0;
+            touchStartY = e.touches && e.touches[0] ? e.touches[0].clientY : 0;
+        }, { passive: false });
+
+        // iOS gesturestart
+        document.addEventListener('gesturestart', function (e) {
+            try { e.preventDefault(); } catch (err) { }
+        }, { passive: false });
+
+        // prevent pull-to-refresh (when at top and pulling down) and left-edge swipe
+        document.addEventListener('touchmove', function (e) {
+            if (!e.touches || e.touches.length === 0) return;
+            // multi-touch => prevent
+            if (e.touches.length > 1) { e.preventDefault(); return; }
+            const t = e.touches[0];
+            const dx = t.clientX - touchStartX;
+            const dy = t.clientY - touchStartY;
+
+            // if at top of page and pulling down => block pull-to-refresh
+            if (window.scrollY === 0 && dy > 10 && Math.abs(dy) > Math.abs(dx)) { e.preventDefault(); return; }
+
+            // left-edge swipe heuristic: started within 30px of left edge and horizontal swipe to right
+            if (touchStartX < 30 && dx > 10 && Math.abs(dx) > Math.abs(dy)) { e.preventDefault(); return; }
+
+            // otherwise allow
+        }, { passive: false });
+
+        // Also prevent two-finger gesture via pointer events where supported
+        document.addEventListener('pointerdown', function (e) {
+            // For pointer events, prevent default if multiple pointers are active
+            // track via navigator.maxTouchPoints if available
+            if (navigator.maxTouchPoints && navigator.maxTouchPoints > 1 && e.pointerType === 'touch') {
+                // nothing to do here; touchstart handler will catch multi-touch
+            }
+        }, { passive: true });
+    })();
 
     // --- 動態建立 imgs 區塊的 <img> 元素，並把對象放到 noteImages ---
     try {
@@ -590,6 +646,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     bgVideoEl.load();
                 }
             } catch (e) { console.error('pv load error', e); }
+
+            // Check for background image file named like "bg.*" in pseudoFiles and attach to #bgImg
+            try {
+                const bgImgEl = document.getElementById('bgImg');
+                const bgFile = pseudoFiles.find(f => {
+                    const n = (f.name || '').toLowerCase();
+                    return n.startsWith('bg.') || n === 'bg';
+                });
+                if (bgFile && bgImgEl) {
+                    if (bgImgEl.src) try { URL.revokeObjectURL(bgImgEl.src); } catch (e) { }
+                    bgImgEl.src = URL.createObjectURL(bgFile);
+                    bgImgEl.style.display = '';
+                }
+            } catch (e) { console.warn('set bg from zip failed', e); }
 
             if (foundMaidata) {
                 const reader = new FileReader();
@@ -748,7 +818,10 @@ document.addEventListener('DOMContentLoaded', function () {
             hideControlsBtn.querySelector('.text-maximize').style.display = currentlyMinimized ? 'flex' : 'none';
 
             // 重新計算畫布大小
-            setTimeout(() => _updCanvasRes(), 350);
+            setTimeout(() => {
+                _updCanvasRes();
+                setTimeout(() => _updCanvasRes(), 120);
+            }, 350);
         });
     }
     // ***** END OF NEW FEATURE *****
@@ -954,6 +1027,24 @@ document.addEventListener('DOMContentLoaded', function () {
                             console.error('載入 PV 檔案時發生錯誤:', e);
                         }
 
+                        // 檢查資料夾內是否有 bg.* 圖片，若有則設定為背景圖
+                        try {
+                            const bgImgEl = document.getElementById('bgImg');
+                            let bgFileHandle = null;
+                            for await (const [name, handle] of directoryHandle.entries()) {
+                                if (handle.kind === 'file') {
+                                    const lname = name.toLowerCase();
+                                    if (lname.startsWith('bg.') || lname === 'bg') { bgFileHandle = handle; break; }
+                                }
+                            }
+                            if (bgFileHandle && bgImgEl) {
+                                const bgFile = await bgFileHandle.getFile();
+                                if (bgImgEl.src) try { URL.revokeObjectURL(bgImgEl.src); } catch (e) { }
+                                bgImgEl.src = URL.createObjectURL(bgFile);
+                                bgImgEl.style.display = '';
+                            }
+                        } catch (e) { console.warn('set bg from folder failed', e); }
+
                         // 然後處理譜面載入/創建
                         if (maidataFileHandle) {
                             const maidataFile = await maidataFileHandle.getFile();
@@ -1114,6 +1205,19 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
                     fileInput.remove();
+                        // 嘗試從所選檔案中尋找 bg.* 圖片並載入到 #bgImg
+                        try {
+                            const bgImgEl = document.getElementById('bgImg');
+                            const bgFile = files.find(f => {
+                                const n = (f.name || '').toLowerCase();
+                                return n.startsWith('bg.') || n === 'bg';
+                            });
+                            if (bgFile && bgImgEl) {
+                                if (bgImgEl.src) try { URL.revokeObjectURL(bgImgEl.src); } catch (e) { }
+                                bgImgEl.src = URL.createObjectURL(bgFile);
+                                bgImgEl.style.display = '';
+                            }
+                        } catch (e) { console.warn('set bg from fallback files failed', e); }
                 });
 
                 // 觸發選檔（必須在使用者互動觸發中呼叫，這個分支本身在點擊事件中）
@@ -2445,6 +2549,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (triggered[i] === undefined) continue; // Skip if no trigger state for this note
 
+                if (settings.playMode) {
+                    if (note.pos == '1') {
+                        if (Array.isArray(triggered[i])) {
+                            triggered[i][0] = true;
+                        }
+                        else {
+                            triggered[i] = true;
+                        }
+                    }
+
+                    continue;
+                } // If in play mode, skip all note triggering logic
                 // Tap, Star, Hold (start) logic
                 if (!note.starTime && !note.touch && !note.slide) {
                     if (_t_note_relative >= 0) {
@@ -2608,6 +2724,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         requestAnimationFrame(update);
     }
+
+    debugBtn.addEventListener('click', function () {
+        console.log(triggered);
+    });
 
     update();
 });

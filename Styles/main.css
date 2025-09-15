@@ -34,6 +34,9 @@ body {
     overflow: clip;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: lightgray;
+    overscroll-behavior: none;
+    -ms-touch-action: pan-y;
+    touch-action: pan-y;
 }
 
 #editor {
@@ -56,6 +59,11 @@ body {
 
 #editor:disabled {
     background: red;
+}
+
+#render,
+#audioRender {
+    touch-action: none;
 }
 
 #render {
@@ -502,7 +510,7 @@ textarea {
 #info-popup.hide {
     display: block !important;
     opacity: 0 !important;
-    transform: translate(-50%, -55%) scale(0.98) !important;
+    transform: translate(-50%, -55%) scale(0.98) rotateX(50deg)!important;
     pointer-events: none !important;
 }
 
@@ -687,10 +695,11 @@ body.layout-minimized #hideContorls .text-maximize {
 
 #settings-popup button,
 #info-popup button {
+    height: 32px;
     background-color: #ffffff;
     color: black;
+    padding: 0 15px;
     border: none;
-    padding: 10px 15px;
     border-radius: 5px;
     cursor: pointer;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
@@ -734,6 +743,16 @@ body.layout-minimized #backgroundVideo {
     object-position: center center;
 }
 
+body.layout-minimized #bgImg {
+    /*display: none;*/
+    width: 100%;
+    top: 0%;
+    height: 100%;
+    /* 同樣以 cover 顯示，滿版裁切 */
+    object-fit: contain;
+    object-position: center center;
+}
+
 #bgMask {
     position: absolute;
     top: 30px;
@@ -748,6 +767,17 @@ body.layout-minimized #backgroundVideo {
             #000 25vw
             /* 黑色外圈，銳利邊緣 */
         );
+}
+
+#bgImg {
+    position: absolute;
+    top: 30px;
+    left: 0;
+    width: 50%;
+    height: calc(100% - 30px);
+    transition: width ease 0.5s, background ease 0.5s;
+    z-index: -12;
+    object-fit: scale-down;
 }
 
 body.layout-minimized #bgMask {

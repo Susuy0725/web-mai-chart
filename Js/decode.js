@@ -582,7 +582,7 @@ export function simai_decode(_data) {
         return a.time - b.time;
     });
 
-    tempNote.forEach((e) => {
+    tempNote.forEach((e, i) => {
         if (!e.invalid) {
             if (e.slideTime) {
                 if (!e.chain || e.lastOne) {
@@ -599,6 +599,7 @@ export function simai_decode(_data) {
                 if (e.break) breakCounts++;
                 else tapCounts++;
             }
+            e._id = i;
         }
     });
 
