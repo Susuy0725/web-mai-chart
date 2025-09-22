@@ -4,6 +4,8 @@
 
 import { settings, noteImages } from "./main.js";
 
+const speedFactor = 0.525;
+
 // Helper: check if an HTMLImageElement is fully loaded and usable
 function isImageReady(img) {
     try {
@@ -170,6 +172,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         ctx.fillText(`FPS: ${Math.floor(fps)}`, hbw * 0.02, hbw * 0.02);
     }
 
+    // middle display
     switch (currentSettings.middleDisplay) {
         case 1:
             if (play.combo != 0) {
@@ -267,6 +270,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     }
     ctx.restore();
 
+    if (play.pause && currentSettings.disablePreview) return;
 
     // slide render
     if (currentSettings.showSlide) {
@@ -325,7 +329,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         const _t = ((time - note.time) / 1000);
         // only push notes that are within the active window for rendering or effect
         if (
-            _t < (currentSettings.distanceToMid - 2) / currentSettings.speed ||
+            _t < (currentSettings.distanceToMid - 2) / (currentSettings.speed * speedFactor) ||
             (_t > currentSettings.effectDecayTime + (note.holdTime ?? 0) && (triggered[note._id] || _t > currentSettings.effectDecayTime + (note.holdTime ?? 0) + 3))
         ) continue;
         tbuf.push({ note, t: _t });
@@ -335,7 +339,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         // color 決策快取
         let color = note.break ? '#FF6C0C' : (note.isDoubleTapHold ? '#FFD900' : (note.star && !currentSettings.pinkStar ? '#009FF9' : '#FF50AA'));
         if (currentSettings.nextNoteHighlight && play.nowIndex + 1 == note.index) color = '#220022';
-        if (_t >= (currentSettings.distanceToMid - 2) / currentSettings.speed && (_t < (note.holdTime ?? 0) || !triggered[note._id])) {
+        if (_t >= (currentSettings.distanceToMid - 2) / (currentSettings.speed * speedFactor) && (_t < (note.holdTime ?? 0) || !triggered[note._id])) {
             const d = (1 - currentSettings.distanceToMid);
             let nang = (typeof note.pos === 'string' ? parseInt(note.pos[0]) : note.pos) - 1;
             nang = nang % 8;
@@ -343,14 +347,14 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             let np = EIGHT_POSITIONS_ANG[isNaN(nang) ? 0 : nang];
             if (!np) continue;
             let currentX, currentY, currentSize = 1;
-            const scaleFactor = (note.holdTime != null ? (Math.min(_t, 0) * currentSettings.speed + 1) : (_t * currentSettings.speed + 1));
-            if (_t >= -d / currentSettings.speed) {
+            const scaleFactor = (note.holdTime != null ? (Math.min(_t, 0) * (currentSettings.speed * speedFactor) + 1) : (_t * (currentSettings.speed * speedFactor) + 1));
+            if (_t >= -d / (currentSettings.speed * speedFactor)) {
                 currentX = hw + hbw * np.x * scaleFactor;
                 currentY = hh + hbw * np.y * scaleFactor;
             } else {
                 currentX = hw + hbw * np.x * (1 - d);
                 currentY = hh + hbw * np.y * (1 - d);
-                currentSize = (_t * currentSettings.speed + (2 - currentSettings.distanceToMid));
+                currentSize = (_t * (currentSettings.speed * speedFactor) + (2 - currentSettings.distanceToMid));
             }
             if (!currentSettings.noNoteArc) {
                 drawNoteArc(ctx, {
@@ -376,17 +380,18 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             } else if (note.holdTime != null) {
                 note.holdTime = note.holdTime == 0 ? 1E-64 : note.holdTime;
                 let holdLength = 0;
-                if (_t >= -d / currentSettings.speed) {
-                    holdLength = (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * currentSettings.speed, (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / currentSettings.speed)) / (d / currentSettings.speed))) * hbw;
+                if (_t >= -d / (currentSettings.speed * speedFactor)) {
+                    holdLength = (Math.min((note.holdTime - (_t > 0 ? _t : 0)) * (currentSettings.speed * speedFactor), (1 - currentSettings.distanceToMid) * (Math.min(_t, 0) + (d / (currentSettings.speed * speedFactor))) / (d / (currentSettings.speed * speedFactor)))) * hbw;
                 }
                 drawHold(currentX, currentY, currentSize, color, note.ex ?? false, nang / -4 * Math.PI, holdLength, ctx, hbw, currentSettings, calAng, noteBaseSize, note);
-                if (holdLength > 0 && _t > note.holdTime * (1 - d)) drawNoteDot(ctx, {
-                    x: currentX - holdLength * calAng((nang / -4 + 0.875) * Math.PI).x,
-                    y: currentY + holdLength * calAng((nang / -4 + 0.875) * Math.PI).y,
-                    size: currentSize * hbw * 0.0075,
-                    color: color,
-                    transparency: 1,
-                }, note);
+                if (!currentSettings.noNoteArc) if (_t > (note.holdTime ?? 0) - d / (currentSettings.speed * speedFactor))
+                    drawNoteDot(ctx, {
+                        x: currentX - holdLength * calAng((nang / -4 + 0.875) * Math.PI).x,
+                        y: currentY + holdLength * calAng((nang / -4 + 0.875) * Math.PI).y,
+                        size: currentSize * hbw * 0.0075,
+                        color: color,
+                        transparency: 1,
+                    }, note);
             } else {
                 drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize, note);
             }
@@ -1486,7 +1491,10 @@ export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
                     7.5 * (slidePosDiff(startNp, endNp) == 4) +
                     7.5 * (slidePosDiff(startNp, endNp) == 3) +
                     0.5 * (slidePosDiff(startNp, endNp) == 1)
-                ) - 7.5 * (startNp == 4 && endNp == 7)) / 4,
+                ) - 7.5 * (startNp == 4 && endNp == 7)
+                    + 8 * (startNp == 3 && endNp == 0)
+                    - 0.75 * (startNp == 4 && endNp == 7)) / 4
+                ,
                 true);
             pathRec.lineTo(np[1].x, np[1].y);
             break;
@@ -1506,20 +1514,44 @@ export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentS
     let currentSize = Math.max(sizeFactor * s, 0);
     // Use cached Path2D for hold shapes to reduce allocations
     if (currentSettings.useImgSkin) {
+        if (!(noteImages.hold && noteImages.hold_ex && noteImages.hold_each && noteImages.hold_break)) return;
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(-ang);
-        ctx.drawImage(noteImages['hold'],
+        const noteImage = noteImages[note.break ? 'hold_break' : (note.isDoubleTapHold ? 'hold_each' : 'hold')];
+        ctx.drawImage(noteImage,
             0, 0,
-            122, 71,
-            0 - currentSize * 1.5, 0 - currentSize * 1.5,
-            currentSize * 3, currentSize * 1.5);
+            122, 50,
+            0 - currentSize * 1.5, 0 - currentSize * 1.75,
+            currentSize * 3, currentSize * 1.25);
         // 122 x 200
-        ctx.drawImage(noteImages['hold'],
-            0, 129,
-            122, 71,
-            0 - currentSize * 1.5, currentSize * 0.25,
-            currentSize * 3, currentSize * 1.5);
+        ctx.drawImage(noteImage,
+            0, 50,
+            122, 95,
+            0 - currentSize * 1.5, 0 - currentSize * 0.5,
+            currentSize * 3, currentSize * (0.85 + l / noteBaseSize));
+        ctx.drawImage(noteImage,
+            0, 145,
+            122, 50,
+            0 - currentSize * 1.5, currentSize * (0.35 + l / noteBaseSize),
+            currentSize * 3, currentSize * 1.25);
+        if (note.ex) {
+            ctx.drawImage(noteImages.hold_ex,
+                0, 0,
+                122, 50,
+                0 - currentSize * 1.5, 0 - currentSize * 1.75,
+                currentSize * 3, currentSize * 1.25);
+            ctx.drawImage(noteImages.hold_ex,
+                0, 50,
+                122, 95,
+                0 - currentSize * 1.5, 0 - currentSize * 0.5,
+                currentSize * 3, currentSize * (0.85 + l / noteBaseSize));
+            ctx.drawImage(noteImages.hold_ex,
+                0, 145,
+                122, 50,
+                0 - currentSize * 1.5, currentSize * (0.35 + l / noteBaseSize),
+                currentSize * 3, currentSize * 1.25);
+        }
     } else {
         const holdShapeCache = drawHold.holdShapeCache || (drawHold.holdShapeCache = new Map());
 

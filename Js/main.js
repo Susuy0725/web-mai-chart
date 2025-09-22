@@ -33,6 +33,9 @@ export const defaultSettings = {
     'mainColor': '#444e5d',
     'playMode': false,
     'debug': false,
+    'hires': true,
+    'disablePreview': false,
+    'disablePreviewAtAudio': false,
 };
 
 const imgsToCreate = [
@@ -45,6 +48,7 @@ const imgsToCreate = [
     ['hold', 'png'],
     ['hold_break', 'png'],
     ['hold_each', 'png'],
+    ['hold_ex', 'png'],
     ['touch', 'png'],
     ['touch_point', 'png'],
     ['touch_point_each', 'png'],
@@ -247,7 +251,9 @@ const settingsConfig = {
     other: [
         { target: settings, key: 'showFpsCounter', label: '顯示 FPS', type: 'boolean' },
         { target: settings, key: 'showPerfBreakdown', label: '啟用性能監控', type: 'boolean' },
-        { target: settings, key: 'mainColor', label: '主色', type: 'color' }
+        { target: settings, key: 'mainColor', label: '主色', type: 'color' },
+        { target: settings, key: 'useImgSkin', label: '使用圖片皮膚(測試中)', type: 'boolean' },
+        { target: settings, key: 'hires', label: '高解析度', type: 'boolean' },
     ]
 };
 
@@ -511,6 +517,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const timeDisplay = document.getElementById("nowTrackTime");
     const bgm = document.getElementById("bgm");
     const bgVideo = document.getElementById('backgroundVideo');
+    const bgImg = document.getElementById('bgImg');
     const debugBtn = document.createElement('div');
 
     if (settings.debug) {
@@ -624,6 +631,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!foundPV && name.startsWith('pv.')) foundPV = f;
             }
 
+            abortBgAndVid();
+
             if (foundAudio) {
                 const reader = new FileReader();
                 reader.onload = function (e) {
@@ -640,6 +649,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             try {
                 const bgVideoEl = document.getElementById('backgroundVideo');
+                bgVideoEl.src = '';
                 if (foundPV && bgVideoEl) {
                     if (bgVideoEl.src) try { URL.revokeObjectURL(bgVideoEl.src); } catch (e) { }
                     bgVideoEl.src = URL.createObjectURL(foundPV);
@@ -878,6 +888,36 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    function abortBgAndVid() {
+        if (bgVideo.src) {
+            try { URL.revokeObjectURL(bgVideo.src); } catch (e) { }
+        }
+        try { bgVideo.pause(); } catch (e) { }
+        bgVideo.src = '';
+        // reload to reset media element state
+        try { bgVideo.load(); } catch (e) { }
+        // 隱藏背景視訊（視覺上回復為沒有背景）
+        try { bgVideo.style.display = 'none'; } catch (e) { }
+
+        if (bgImg.src) {
+            try { URL.revokeObjectURL(bgImg.src); } catch (e) { }
+        }
+        bgImg.src = '';
+        // reload to reset media element state
+        try { bgImg.load(); } catch (e) { }
+
+        play.pauseBoth(controls.play);
+
+        // 清除舊的音訊來源和緩衝區，為載入新音訊做準備
+        if (bgm.src) { // 如果有舊的音訊來源，先釋放其 URL
+            URL.revokeObjectURL(bgm.src);
+        }
+        bgm.src = ''; // 清空音訊來源
+
+        fullAudioBuffer = null; // 清空緩衝區
+        isAudioSourceConnected = false; // 重設音訊連接狀態
+    }
+
     // --- File & Diff Menu Actions (Event Delegation) ---
     dropdownList.addEventListener('click', (event) => {
         const target = event.target;
@@ -903,17 +943,7 @@ document.addEventListener('DOMContentLoaded', function () {
             bgm.pause();
             // 清除背景視訊（若有的話）
             try {
-                if (bgVideo) {
-                    if (bgVideo.src) {
-                        try { URL.revokeObjectURL(bgVideo.src); } catch (e) { }
-                    }
-                    try { bgVideo.pause(); } catch (e) { }
-                    bgVideo.src = '';
-                    // reload to reset media element state
-                    try { bgVideo.load(); } catch (e) { }
-                    // 隱藏背景視訊（視覺上回復為沒有背景）
-                    try { bgVideo.style.display = 'none'; } catch (e) { }
-                }
+                abortBgAndVid();
             } catch (e) { console.error('清除背景視訊時發生錯誤', e); }
             currentTimelineValue = 0;
             controls.timeline.value = 0;
@@ -974,18 +1004,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             if (audioFileHandle && maidataFileHandle && pvFileHandle) break;
                         }
 
-                        // --- START MODIFICATION ---
-                        // 不論是否找到新音訊，都先暫停當前播放的音樂
-                        play.pauseBoth(controls.play);
-
-                        // 清除舊的音訊來源和緩衝區，為載入新音訊做準備
-                        if (bgm.src) { // 如果有舊的音訊來源，先釋放其 URL
-                            URL.revokeObjectURL(bgm.src);
-                        }
-                        bgm.src = ''; // 清空音訊來源
-                        fullAudioBuffer = null; // 清空緩衝區
-                        isAudioSourceConnected = false; // 重設音訊連接狀態
-                        // --- END MODIFICATION ---
+                        abortBgAndVid();
 
                         // 處理音訊載入
                         if (audioFileHandle) {
@@ -1104,12 +1123,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         return;
                     }
 
-                    // 暫停並清除舊的音訊來源
-                    play.pauseBoth(controls.play);
-                    if (bgm.src) URL.revokeObjectURL(bgm.src);
-                    bgm.src = '';
-                    fullAudioBuffer = null;
-                    isAudioSourceConnected = false;
+                    abortBgAndVid();
 
                     // 嘗試在所選檔案中尋找 maidata 與 audio
                     let foundMaidata = null;
@@ -1205,19 +1219,19 @@ document.addEventListener('DOMContentLoaded', function () {
                     }
 
                     fileInput.remove();
-                        // 嘗試從所選檔案中尋找 bg.* 圖片並載入到 #bgImg
-                        try {
-                            const bgImgEl = document.getElementById('bgImg');
-                            const bgFile = files.find(f => {
-                                const n = (f.name || '').toLowerCase();
-                                return n.startsWith('bg.') || n === 'bg';
-                            });
-                            if (bgFile && bgImgEl) {
-                                if (bgImgEl.src) try { URL.revokeObjectURL(bgImgEl.src); } catch (e) { }
-                                bgImgEl.src = URL.createObjectURL(bgFile);
-                                bgImgEl.style.display = '';
-                            }
-                        } catch (e) { console.warn('set bg from fallback files failed', e); }
+                    // 嘗試從所選檔案中尋找 bg.* 圖片並載入到 #bgImg
+                    try {
+                        const bgImgEl = document.getElementById('bgImg');
+                        const bgFile = files.find(f => {
+                            const n = (f.name || '').toLowerCase();
+                            return n.startsWith('bg.') || n === 'bg';
+                        });
+                        if (bgFile && bgImgEl) {
+                            if (bgImgEl.src) try { URL.revokeObjectURL(bgImgEl.src); } catch (e) { }
+                            bgImgEl.src = URL.createObjectURL(bgFile);
+                            bgImgEl.style.display = '';
+                        }
+                    } catch (e) { console.warn('set bg from fallback files failed', e); }
                 });
 
                 // 觸發選檔（必須在使用者互動觸發中呼叫，這個分支本身在點擊事件中）
@@ -1680,7 +1694,13 @@ document.addEventListener('DOMContentLoaded', function () {
         allDropdowns.forEach(menu => menu.classList.add('hide'));
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
-        fileInput.style.display = 'none';
+        // Avoid display:none: on some iOS versions programmatic click on a display:none
+        // input is blocked. Place it offscreen and invisible instead.
+        fileInput.style.position = 'fixed';
+        fileInput.style.left = '-9999px';
+        fileInput.style.top = '-9999px';
+        fileInput.style.opacity = '0';
+        fileInput.style.zIndex = '-9999';
 
         // 如果需要選擇資料夾，就加上 webkitdirectory 屬性
         if (isDirectory) {
@@ -2252,6 +2272,8 @@ document.addEventListener('DOMContentLoaded', function () {
             bgm.pause();
             if (bgVideo && bgVideo.src) try { bgVideo.pause(); } catch (e) { }
         }
+
+        _updCanvasRes();
     });
 
     controls.stop.addEventListener('click', function () {
@@ -2262,6 +2284,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (bgVideo && bgVideo.src) try { bgVideo.pause(); bgVideo.currentTime = 0; } catch (e) { }
         controls.timeline.value = 0;
         updateTimelineVisual(0);
+
+        _updCanvasRes();
     });
 
     function seek(seconds) {
@@ -2329,14 +2353,14 @@ document.addEventListener('DOMContentLoaded', function () {
     function _updCanvasRes() {
         const editorLeft = editor.getBoundingClientRect().left;
         const bodyWidth = document.body.clientWidth;
-        ctx.canvas.width = doc_width * 2 * ((editorLeft == 0 ? bodyWidth : editorLeft) / bodyWidth);
+        ctx.canvas.width = doc_width * (settings.hires ? 2 : 1) * ((editorLeft == 0 ? bodyWidth : editorLeft) / bodyWidth);
 
         const controlsEl = document.querySelector('.controls');
         const actionsEl = document.querySelector('.actions');
         // Get heights only if elements are visible
         const controlsHeight = controlsEl ? controlsEl.offsetHeight : 0;
         const actionsHeight = actionsEl ? actionsEl.offsetHeight : 0;
-        ctx.canvas.height = Math.max(150, (doc_height - actionsHeight) * 2);
+        ctx.canvas.height = Math.max(150, (doc_height - actionsHeight) * (settings.hires ? 2 : 1));
 
         const audioCanvas = document.getElementById("audioRender");
         if (audioCanvas) {
@@ -2412,46 +2436,48 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         let slideOnAudioCount = 0;
 
-        notes.forEach(note => {
-            const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
-            const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;
-            if (x > audioCanvas.width || x < 0 - ((note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) return;
-            audioCtx2d.strokeStyle = note.break ? '#FF6C0C' : (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide ? "#FFD900" : (note.star || note.touch || note.slide ? '#0089F4' : "#FF569B"));
-            audioCtx2d.lineWidth = 3;
-            audioCtx2d.beginPath();
-            if (note.touch) {
-                audioCtx2d.rect(x - 3, y - 3, 6, 6);
-            } else if (note.slide) {
-                if (slideOnAudioCount > settings.maxSlideOnScreenCount) return;
-                audioCtx2d.lineWidth = 6;
-                audioCtx2d.setLineDash([8, 8]);
-                const startY = (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height;
-                audioCtx2d.moveTo(x + note.delay * sampleRate / zoom, startY);
-                audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom, startY);
-                slideOnAudioCount++;
-            } else if (note.star) {
-                const outerRadius = 5, innerRadius = 2, numPoints = 5;
-                for (let i = 0; i < numPoints * 2; i++) {
-                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
-                    const angle = Math.PI / numPoints * i - Math.PI / 2;
-                    const currentX = x + radius * Math.cos(angle);
-                    const currentY = y + radius * Math.sin(angle);
-                    if (i === 0) audioCtx2d.moveTo(currentX, currentY);
-                    else audioCtx2d.lineTo(currentX, currentY);
-                }
-            } else {
-                if (note.holdTime != null) {
+        if (!settings.disableNotePreviewAtAudio) {
+            notes.forEach(note => {
+                const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
+                const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;
+                if (x > audioCanvas.width || x < 0 - ((note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) return;
+                audioCtx2d.strokeStyle = note.break ? '#FF6C0C' : (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide ? "#FFD900" : (note.star || note.touch || note.slide ? '#0089F4' : "#FF569B"));
+                audioCtx2d.lineWidth = 3;
+                audioCtx2d.beginPath();
+                if (note.touch) {
+                    audioCtx2d.rect(x - 3, y - 3, 6, 6);
+                } else if (note.slide) {
+                    if (slideOnAudioCount > settings.maxSlideOnScreenCount) return;
                     audioCtx2d.lineWidth = 6;
-                    audioCtx2d.moveTo(x, y);
-                    audioCtx2d.lineTo(x + note.holdTime * sampleRate / zoom, y);
+                    audioCtx2d.setLineDash([8, 8]);
+                    const startY = (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height;
+                    audioCtx2d.moveTo(x + note.delay * sampleRate / zoom, startY);
+                    audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom, startY);
+                    slideOnAudioCount++;
+                } else if (note.star) {
+                    const outerRadius = 5, innerRadius = 2, numPoints = 5;
+                    for (let i = 0; i < numPoints * 2; i++) {
+                        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                        const angle = Math.PI / numPoints * i - Math.PI / 2;
+                        const currentX = x + radius * Math.cos(angle);
+                        const currentY = y + radius * Math.sin(angle);
+                        if (i === 0) audioCtx2d.moveTo(currentX, currentY);
+                        else audioCtx2d.lineTo(currentX, currentY);
+                    }
                 } else {
-                    audioCtx2d.arc(x, y, 4, 0, 2 * Math.PI);
+                    if (note.holdTime != null) {
+                        audioCtx2d.lineWidth = 6;
+                        audioCtx2d.moveTo(x, y);
+                        audioCtx2d.lineTo(x + note.holdTime * sampleRate / zoom, y);
+                    } else {
+                        audioCtx2d.arc(x, y, 4, 0, 2 * Math.PI);
+                    }
                 }
-            }
-            audioCtx2d.closePath();
-            audioCtx2d.stroke();
-            audioCtx2d.setLineDash([]);
-        });
+                audioCtx2d.closePath();
+                audioCtx2d.stroke();
+                audioCtx2d.setLineDash([]);
+            });
+        }
 
         audioCtx2d.beginPath();
         audioCtx2d.strokeStyle = "red";

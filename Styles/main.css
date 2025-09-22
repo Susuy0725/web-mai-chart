@@ -479,7 +479,9 @@ textarea {
     z-index: 499;
 }
 
-#settings-popup {
+/* Animated show/hide for settings/info popups and overlay */
+#settings-popup,
+#info-popup {
     position: fixed;
     top: 50%;
     left: 50%;
@@ -493,11 +495,6 @@ textarea {
     overflow-y: hidden;
     border-radius: 5px;
     border: none;
-}
-
-/* Animated show/hide for settings/info popups and overlay */
-#settings-popup,
-#info-popup {
     transition: transform 260ms cubic-bezier(.2, .9, .2, 1), opacity 200ms ease;
     /*will-change: transform, opacity;*/
     opacity: 1;
@@ -510,7 +507,7 @@ textarea {
 #info-popup.hide {
     display: block !important;
     opacity: 0 !important;
-    transform: translate(-50%, -55%) scale(0.98) rotateX(50deg)!important;
+    transform: translate(-50%, -55%) scale(0.98)!important;
     pointer-events: none !important;
 }
 
@@ -566,22 +563,6 @@ textarea {
     overflow-y: auto;
     margin-bottom: 10px;
     box-shadow: 0px -5px 5px -5px #00000087 inset;
-}
-
-#info-popup {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80%;
-    background-color: white;
-    padding: 20px;
-    border: 1px solid #ccc;
-    z-index: 500;
-    max-height: 80vh;
-    overflow-y: hidden;
-    border-radius: 5px;
-    border: none;
 }
 
 .info-field {
