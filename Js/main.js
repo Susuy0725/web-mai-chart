@@ -7,7 +7,7 @@ export const defaultSettings = {
     'distanceToMid': 0.3,
     'roundStroke': true,
     'noteSize': 0.09,
-    'speed': 2.75,
+    'speed': 6,
     'pinkStar': false,
     'touchSpeed': 2,
     'slideSpeed': 2,
@@ -36,6 +36,7 @@ export const defaultSettings = {
     'hires': true,
     'disablePreview': false,
     'disablePreviewAtAudio': false,
+    'deviceAudioOffset': 0,
 };
 
 const imgsToCreate = [
@@ -233,6 +234,7 @@ const settingsConfig = {
         { target: settings, key: 'disableSensorWhenPlaying', label: '播放時隱藏 Touch 位置文本', type: 'boolean' },
         { target: settings, key: 'noNoteArc', label: '不顯示音符弧線', type: 'boolean' },
         { target: settings, key: 'effectDecayTime', label: '效果持續時間', type: 'number', step: 0.01 },
+        { target: settings, key: 'deviceAudioOffset', label: '設備音訊延遲 (毫秒)', type: 'number', step: 1, min: -1000, max: 1000 },
     ],
     sound: [
         { target: soundSettings, key: 'sfxs', label: '啟用打擊音效', type: 'boolean' },
@@ -270,6 +272,31 @@ console.log(defaultSettings);
 export const noteImages = {};
 
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// Ensure AudioContext is resumed on first user interaction (fixes iOS autoplay restrictions)
+function ensureAudioUnlocked() {
+    try {
+        if (!audioCtx) return Promise.resolve();
+        if (audioCtx.state === 'suspended') {
+            return audioCtx.resume().then(() => {
+                console.log('AudioContext resumed by user interaction.');
+            }).catch(e => {
+                console.warn('AudioContext resume failed:', e);
+            });
+        }
+    } catch (e) {
+        console.warn('ensureAudioUnlocked error:', e);
+    }
+    return Promise.resolve();
+}
+
+// install one-time listeners to resume AudioContext on first user gesture (touch/mouse/keyboard)
+['touchstart', 'mousedown', 'keydown'].forEach(evt => {
+    window.addEventListener(evt, function _unlockOnce() {
+        try { ensureAudioUnlocked(); } catch (e) { /* ignore */ }
+        window.removeEventListener(evt, _unlockOnce);
+    }, { passive: true });
+});
 
 let analyser;
 let audioWaveform_dataArray;
@@ -337,7 +364,7 @@ function queueSound(name, volume = 0.1) {
     if (!sfxReady || !soundBuffers[name]) return;
     if (audioCtx.state === 'suspended') { audioCtx.resume(); }
     // schedule slightly in the future to avoid glitches
-    const when = audioCtx.currentTime + 0.02;
+    const when = audioCtx.currentTime + 0.02 + settings.deviceAudioOffset / 1000;
     soundQueue.push({ name, volume, when });
 }
 
@@ -462,13 +489,15 @@ export function showNotification(message) {
 // --- 新增結束 ---
 
 async function triggerSave(data) {
-    // 1. 序列化文字
+    data.first = settings.musicDelay ?? 0;
+    // 1. 序列化文字    
     function serializeMaidata(dataObj) {
         const lines = [];
         for (const key in dataObj) {
             // 忽略沒有內容的難度
-            if (key.includes("inote_") && !dataObj[key]) continue;
+            if ((key.includes("des_") || key.includes("lv_") || key.includes("inote_")) && !dataObj[key]) continue;
             lines.push(`&${key}=${dataObj[key] ?? ''}`);
+            console.log(key);
         };
         return lines.join('\n');
     }
@@ -532,6 +561,14 @@ document.addEventListener('DOMContentLoaded', function () {
         let touchStartX = 0, touchStartY = 0;
         // pinch or multi-touch
         document.addEventListener('touchstart', function (e) {
+            // If settings popup is open and touch is inside it, allow native handling (scrolling inside popup)
+            try {
+                const overlay = document.getElementById('settings-overlay');
+                if (overlay && !overlay.classList.contains('hide')) {
+                    if (e.target && e.target.closest && e.target.closest('#settings-popup')) return;
+                }
+            } catch (err) { /* ignore DOM errors */ }
+
             if (e.touches && e.touches.length > 1) {
                 // prevent pinch-zoom
                 e.preventDefault();
@@ -543,12 +580,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // iOS gesturestart
         document.addEventListener('gesturestart', function (e) {
+            try {
+                const overlay = document.getElementById('settings-overlay');
+                if (overlay && !overlay.classList.contains('hide')) {
+                    if (e.target && e.target.closest && e.target.closest('#settings-popup')) return;
+                }
+            } catch (err) { }
             try { e.preventDefault(); } catch (err) { }
         }, { passive: false });
 
         // prevent pull-to-refresh (when at top and pulling down) and left-edge swipe
         document.addEventListener('touchmove', function (e) {
             if (!e.touches || e.touches.length === 0) return;
+            // If settings popup is open and touch is inside it, allow native handling (scrolling inside popup)
+            try {
+                const overlay = document.getElementById('settings-overlay');
+                if (overlay && !overlay.classList.contains('hide')) {
+                    if (e.target && e.target.closest && e.target.closest('#settings-popup')) return;
+                }
+            } catch (err) { /* ignore DOM errors */ }
+
             // multi-touch => prevent
             if (e.touches.length > 1) { e.preventDefault(); return; }
             const t = e.touches[0];
@@ -823,9 +874,7 @@ document.addEventListener('DOMContentLoaded', function () {
             // 無論是最大化還是最小化，都更新按鈕外觀
             const currentlyMinimized = document.body.classList.contains('layout-minimized');
             hideControlsBtn.querySelector('.icon-minimize').style.display = currentlyMinimized ? 'none' : 'flex';
-            hideControlsBtn.querySelector('.text-minimize').style.display = currentlyMinimized ? 'none' : 'flex';
             hideControlsBtn.querySelector('.icon-maximize').style.display = currentlyMinimized ? 'flex' : 'none';
-            hideControlsBtn.querySelector('.text-maximize').style.display = currentlyMinimized ? 'flex' : 'none';
 
             // 重新計算畫布大小
             setTimeout(() => {
@@ -844,7 +893,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (event.key.toLowerCase() === 's' && isCtrlOrCmd) {
             // 阻止瀏覽器預設的儲存頁面行為
             event.preventDefault();
-
             // 呼叫我們的儲存函式
             triggerSave(data);
         }
@@ -1111,7 +1159,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const fileInput = document.createElement('input');
                 fileInput.type = 'file';
                 fileInput.multiple = true;
-                fileInput.accept = 'audio/*,text/*';
+                fileInput.accept = '*';
                 fileInput.style.display = 'none';
                 document.body.appendChild(fileInput);
 
@@ -1182,7 +1230,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             startTime = Date.now();
                             processChartData();
                             diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : "");
-                            console.log("回退模式：Maidata 檔案已載入");
+                            //showNotification("回退模式：Maidata 檔案已載入");
                         };
                         reader2.readAsText(maidataFile);
                     } else if (foundAudio && !foundMaidata) {
@@ -1574,6 +1622,45 @@ document.addEventListener('DOMContentLoaded', function () {
                 editor.setRangeText(result, start, end, "end");
                 break;
             }
+            case "trun-180": {
+                let result = '';
+                let inParen = 0, inBrace = 0, inBrack = 0;
+
+                for (let i = 0; i < selected.length; i++) {
+                    const ch = selected[i];
+                    if (ch === '(') inParen++; if (ch === ')') inParen--;
+                    if (ch === '{') inBrace++; if (ch === '}') inBrace--;
+                    if (ch === '[') inBrack++; if (ch === ']') inBrack--;
+
+                    // only transform when not inside any brackets
+                    if (inParen === 0 && inBrack === 0 && inBrace === 0) {
+                        const up = ch.toUpperCase();
+                        // Handle C / C1 (leave unchanged)
+                        if (up === 'C') {
+                            const next = selected[i + 1];
+                            if (next === '1') {
+                                result += ch + next; // preserve original case of letter
+                                i++; // consume digit
+                                continue;
+                            } else {
+                                result += ch;
+                                continue;
+                            }
+                        }
+
+                        // Default behavior for standalone digits (keep original numeric flip)
+                        if (/\d/.test(ch)) {
+                            result += ((parseInt(ch, 10) + 3) % 8 + 1).toString();
+                            continue;
+                        }
+                    }
+
+                    // by default, copy character unchanged
+                    result += ch;
+                }
+                editor.setRangeText(result, start, end, "end");
+                break;
+            }
             case "ad-rm-bk": {
                 let result = '';
                 let inParen = 0, inBrace = 0, inBrack = 0;
@@ -1899,37 +1986,45 @@ document.addEventListener('DOMContentLoaded', function () {
         form.innerHTML = '';
 
         const fields = [
+            { key: '', label: '歌曲資料', title: true, noinput: true },
             { key: 'title', label: '標題' },
             { key: 'artist', label: '作曲' },
             { key: 'des', label: '譜師 (未指定難度)' },
             { key: 'wholebpm', label: '全曲 BPM' },
-            { key: 'lv_1', label: 'EASY 難度' },
-            { key: 'des_1', label: 'EASY 譜師' },
-            { key: 'lv_2', label: 'BASIC 難度' },
-            { key: 'des_2', label: 'BASIC 譜師' },
-            { key: 'lv_3', label: 'ADVANCED 難度' },
-            { key: 'des_3', label: 'ADVANCED 譜師' },
-            { key: 'lv_4', label: 'EXPERT 難度' },
-            { key: 'des_4', label: 'EXPERT 譜師' },
-            { key: 'lv_5', label: 'MASTER 難度' },
-            { key: 'des_5', label: 'MASTER 譜師' },
-            { key: 'lv_6', label: 'RE:MASTER 難度' },
-            { key: 'des_6', label: 'RE:MASTER 譜師' },
-            { key: 'lv_7', label: 'ORIGINAL 難度' },
-            { key: 'des_7', label: 'ORIGINAL 譜師' },
+            { key: '', label: 'EASY', title: true, noinput: true },
+            { key: 'lv_1', label: '難度', kid: true },
+            { key: 'des_1', label: '譜師', kid: true },
+            { key: '', label: 'BASIC', title: true, noinput: true },
+            { key: 'lv_2', label: '難度' },
+            { key: 'des_2', label: '譜師' },
+            { key: '', label: 'ADVANCED', title: true, noinput: true },
+            { key: 'lv_3', label: '難度' },
+            { key: 'des_3', label: '譜師' },
+            { key: '', label: 'EXPERT', title: true, noinput: true },
+            { key: 'lv_4', label: '難度' },
+            { key: 'des_4', label: '譜師' },
+            { key: '', label: 'MASTER', title: true, noinput: true },
+            { key: 'lv_5', label: '難度' },
+            { key: 'des_5', label: '譜師' },
+            { key: '', label: 'RE:MASTER', title: true, noinput: true },
+            { key: 'lv_6', label: '難度' },
+            { key: 'des_6', label: '譜師' },
+            { key: '', label: 'ORIGINAL', title: true, noinput: true },
+            { key: 'lv_7', label: '難度' },
+            { key: 'des_7', label: '譜師' },
         ];
 
         fields.forEach(f => {
             const val = data[f.key] || '';
-            const label = document.createElement('label');
+            const label = f.title ? document.createElement('h4') : document.createElement('label');
             label.textContent = f.label;
             const input = document.createElement('input');
             input.name = f.key;
             input.value = val;
             const a = document.createElement('div');
-            a.className = 'info-field';
+            a.className = f.title ? 'info-title' : 'info-field';
             a.appendChild(label);
-            a.appendChild(input);
+            if (!f.noinput) a.appendChild(input);
             form.appendChild(a);
         });
     }
@@ -2263,7 +2358,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (!play.pause) {
             bgm.currentTime = currentTimelineValue;
-            bgm.play().catch(e => null);
+            // ensure audio context unlocked before playing (iOS requirement)
+            ensureAudioUnlocked().then(() => {
+                bgm.play().catch(e => console.error('BGM play failed:', e));
+            }).catch(e => { console.warn('ensureAudioUnlocked failed:', e); bgm.play().catch(() => { }); });
             if (bgVideo && bgVideo.src) {
                 try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
                 bgVideo.play().catch(() => { });

@@ -41,6 +41,8 @@ body {
 
 #editor {
     position: absolute;
+    box-sizing: border-box;
+    padding: 2px;
     bottom: 0;
     left: 50%;
     width: 50%;
@@ -55,6 +57,11 @@ body {
     color: white;
     background: #232323;
     transition: transform 0.3s ease, opacity 0.3s ease, left 0.3s ease;
+}
+
+#editor:focus-visible {
+    outline: none;
+    border: none;
 }
 
 #editor:disabled {
@@ -181,14 +188,24 @@ body {
     background: #00000080;
 }
 
+#fullscreen {
+    position: absolute;
+    top: 30px;
+    right: calc(50% + 40px);
+}
+
 #hideContorls {
     position: absolute;
     top: 30px;
     right: 50%;
+}
+
+#hideContorls,
+#fullscreen {
     width: 30px;
     height: 30px;
     margin: 10px;
-    background: #00000020;
+    background: #ffffff20;
     font-family: Icon;
     font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     font-size: 20px;
@@ -201,13 +218,14 @@ body {
     transition: all 240ms ease;
 }
 
-#hideContorls:hover {
-    width: 160px;
-    background: #00000030;
+#hideContorls:hover,
+#fullscreen:hover {
+    background: #444;
     box-shadow: 0 1px 2px #00000080, 0 0 1px #0000005e inset;
 }
 
-#hideContorls:active {
+#hideContorls:active,
+#fullscreen:active {
     background: #bbb;
     box-shadow: 0 0 1px #00000080, 0 0 3px #00000060 inset;
 }
@@ -501,13 +519,21 @@ textarea {
     transform-origin: 50% 50%;
 }
 
+#info-popup {
+    max-width: 400px;
+}
+
+#settings-popup {
+    max-width: 500px;
+}
+
 /* When 'hide' class is present we keep element in layout but make it invisible and non-interactive
    This overrides the generic .hide which sets display:none so transitions can run smoothly */
 #settings-popup.hide,
 #info-popup.hide {
     display: block !important;
     opacity: 0 !important;
-    transform: translate(-50%, -55%) scale(0.98)!important;
+    transform: translate(-50%, -55%) scale(0.98) !important;
     pointer-events: none !important;
 }
 
@@ -572,11 +598,12 @@ textarea {
     align-items: center;
     /* 垂直居中 */
     justify-content: space-between;
+    margin-left: 40px;
 }
 
 .info-field label {
     margin-right: 10px;
-    min-width: 200px;
+    min-width: 100px;
     /* 讓標籤寬度一致，方便對齊 */
     display: inline-block;
 }
@@ -586,11 +613,22 @@ textarea {
     /* 或其他合適的寬度 */
 }
 
+.info-field input {
+    width: 140px;
+    /* 或其他合適的寬度 */
+}
+
 #info-form {
     max-height: 70vh;
     overflow-y: auto;
     box-shadow: 0px -5px 5px -5px #00000087 inset;
     margin-bottom: 10px;
+}
+
+#info-form h4 {
+    margin: 10px 0 5px 0;
+    border-bottom: 1.5px solid #ccc;
+    padding-bottom: 3px;
 }
 
 /* Add these rules for the minimize controls feature */
@@ -624,13 +662,16 @@ body.layout-minimized #hideContorls {
     top: 0%;
 }
 
-body.layout-minimized #hideContorls .icon-minimize,
-body.layout-minimized #hideContorls .text-minimize {
+body.layout-minimized #fullscreen {
+    right: calc(0% + 40px);
+    top: 0%;
+}
+
+body.layout-minimized #hideContorls .icon-minimize {
     display: none;
 }
 
-body.layout-minimized #hideContorls .icon-maximize,
-body.layout-minimized #hideContorls .text-maximize {
+body.layout-minimized #hideContorls .icon-maximize {
     display: inline;
     /* Or block, depending on your layout preference */
 }
