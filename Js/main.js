@@ -32,7 +32,7 @@ export const defaultSettings = {
     'useImgSkin': false,
     'mainColor': '#444e5d',
     'playMode': false,
-    'debug': false,
+    'debug': true,
     'hires': true,
     'disablePreview': false,
     'disablePreviewAtAudio': false,
@@ -364,7 +364,7 @@ function queueSound(name, volume = 0.1) {
     if (!sfxReady || !soundBuffers[name]) return;
     if (audioCtx.state === 'suspended') { audioCtx.resume(); }
     // schedule slightly in the future to avoid glitches
-    const when = audioCtx.currentTime + 0.02 + settings.deviceAudioOffset / 1000;
+    const when = audioCtx.currentTime + 0.02;
     soundQueue.push({ name, volume, when });
 }
 
@@ -544,10 +544,160 @@ document.addEventListener('DOMContentLoaded', function () {
     const customMenu = document.getElementById("customMenu");
     const editor = document.getElementById("editor");
     const timeDisplay = document.getElementById("nowTrackTime");
-    const bgm = document.getElementById("bgm");
+    const bgmEl = document.getElementById("bgm");
+    // WebAudio-based bgm wrapper to replace <audio> playback while preserving the original API used across the codebase
+    const bgm = (function () {
+        const listeners = {};
+        let source = null;
+        let startedAt = 0; // audioCtx.currentTime when started
+        let offset = 0; // seconds into buffer when started
+        let playing = false;
+        let _playbackRate = 1;
+
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = 1;
+        try {
+            // connect to analyser if available
+            if (typeof analyser !== 'undefined' && analyser) {
+                gainNode.connect(analyser);
+                analyser.connect(audioCtx.destination);
+            } else {
+                gainNode.connect(audioCtx.destination);
+            }
+        } catch (e) {
+            try { gainNode.connect(audioCtx.destination); } catch (e2) { /* ignore */ }
+        }
+
+        function dispatch(evt) {
+            const cbs = listeners[evt];
+            if (cbs) cbs.forEach(cb => { try { cb.call(bgm); } catch (e) { console.error(e); } });
+        }
+
+        function createSource(startOffset) {
+            if (!fullAudioBuffer) return null;
+            const s = audioCtx.createBufferSource();
+            s.buffer = fullAudioBuffer;
+            s.playbackRate.value = _playbackRate;
+            s.connect(gainNode);
+            s.onended = function () {
+                // natural end: set offset to duration and mark not playing
+                try {
+                    if (fullAudioBuffer) offset = fullAudioBuffer.duration;
+                } catch (e) { /* ignore */ }
+                playing = false;
+                source = null;
+                dispatch('ended');
+            };
+            return s;
+        }
+
+        function stopSource(updateOffset = true) {
+            if (!source) {
+                playing = false;
+                return;
+            }
+            try {
+                // detach onended to avoid double-handling
+                source.onended = null;
+                source.stop();
+            } catch (e) { /* ignore */ }
+            // update offset to reflect current play position if requested
+            if (updateOffset && startedAt) {
+                try {
+                    offset = Math.min(fullAudioBuffer ? fullAudioBuffer.duration : 0, offset + (audioCtx.currentTime - startedAt));
+                } catch (e) { /* ignore */ }
+            }
+            source = null;
+            playing = false;
+        }
+
+        async function fetchAndDecode(url) {
+            try {
+                if (!url) return;
+                const resp = await fetch(url);
+                const ab = await resp.arrayBuffer();
+                fullAudioBuffer = await audioCtx.decodeAudioData(ab);
+                // notify listeners
+                dispatch('loadedmetadata');
+            } catch (e) {
+                console.error('Error fetching/decoding bgm:', e);
+            }
+        }
+
+        // Monkey-patch the original <audio> element's load() so when older code sets bgmEl.src and calls load(), we decode into AudioBuffer
+        try {
+            const origLoad = bgmEl.load.bind(bgmEl);
+            bgmEl.load = function () {
+                if (bgmEl.src) fetchAndDecode(bgmEl.src);
+                return origLoad();
+            };
+        } catch (e) { /* ignore if bgmEl missing or non-writable */ }
+
+        return {
+            // mimic <audio> src property
+            get src() { return bgmEl ? bgmEl.src : ''; },
+            set src(v) { if (bgmEl) { bgmEl.src = v; fetchAndDecode(v); } },
+            addEventListener(name, cb) { listeners[name] = listeners[name] || []; listeners[name].push(cb); },
+            removeEventListener(name, cb) { if (!listeners[name]) return; listeners[name] = listeners[name].filter(f => f !== cb); },
+            load() { if (bgmEl && bgmEl.src) fetchAndDecode(bgmEl.src); },
+            play() {
+                if (!fullAudioBuffer) return Promise.reject(new Error('No audio loaded'));
+                return ensureAudioUnlocked().then(() => {
+                    // stop any existing source and capture offset
+                    stopSource(true);
+                    source = createSource(offset);
+                    if (!source) return Promise.reject(new Error('Failed to create source'));
+                    startedAt = audioCtx.currentTime;
+                    try {
+                        source.start(0, offset);
+                        playing = true;
+                        dispatch('play');
+                        return Promise.resolve();
+                    } catch (e) {
+                        console.error('source.start error', e);
+                        return Promise.reject(e);
+                    }
+                });
+            },
+            pause() {
+                // stop source and keep offset
+                stopSource(true);
+                if (listeners['pause']) dispatch('pause');
+            },
+            get currentTime() { return playing ? offset + (audioCtx.currentTime - startedAt) : offset; },
+            set currentTime(v) {
+                const clamped = Math.max(0, Math.min(fullAudioBuffer ? fullAudioBuffer.duration : v, v));
+                const wasPlaying = playing;
+                // stop existing source without updating offset (we'll set offset directly)
+                stopSource(false);
+                offset = clamped;
+                if (wasPlaying) {
+                    // restart at new offset
+                    source = createSource(offset);
+                    if (source) {
+                        startedAt = audioCtx.currentTime;
+                        try {
+                            source.start(0, offset);
+                            playing = true;
+                            dispatch('play');
+                        } catch (e) { console.error('restart start error', e); }
+                    }
+                }
+            },
+            get duration() { return fullAudioBuffer ? fullAudioBuffer.duration : NaN; },
+            get playbackRate() { return _playbackRate; },
+            set playbackRate(v) { _playbackRate = v; if (source) try { source.playbackRate.value = v; } catch (e) { /* ignore */ } },
+            get volume() { return gainNode.gain.value; },
+            set volume(v) { try { gainNode.gain.setValueAtTime(Number(v) || 0, audioCtx.currentTime); } catch (e) { gainNode.gain.value = v; } },
+            // expose element for advanced usages if needed
+            _element: bgmEl
+        };
+    })();
     const bgVideo = document.getElementById('backgroundVideo');
     const bgImg = document.getElementById('bgImg');
     const debugBtn = document.createElement('div');
+    const resyncBtn = document.getElementById('resync');
+    const fullscreenBtn = document.getElementById('fullscreen');
 
     if (settings.debug) {
         const a = document.getElementsByClassName('actions')[0];
@@ -1808,25 +1958,16 @@ document.addEventListener('DOMContentLoaded', function () {
         fileInput.click();
     }
 
+    // When our WebAudio wrapper finishes decoding into fullAudioBuffer it will dispatch 'loadedmetadata'
     bgm.addEventListener('loadedmetadata', function () {
-        bgm.volume = soundSettings.musicVol * soundSettings.music;
-        const audioDurationMs = (bgm.duration + 1) * 1000;
-        maxTime = Math.max(maxTime, audioDurationMs);
-        controls.timeline.max = maxTime / 1000;
-        bgm.playbackRate = play.playbackSpeed;
-        updateTimelineVisual(currentTimelineValue);
-
-        if (!isAudioSourceConnected) {
-            try {
-                const source = audioCtx.createMediaElementSource(bgm);
-                source.connect(analyser);
-                analyser.connect(audioCtx.destination);
-                isAudioSourceConnected = true;
-                console.log("Audio source connected to analyser.");
-            } catch (e) {
-                console.error("Error connecting media element source:", e);
-            }
-        }
+        try { bgm.volume = soundSettings.musicVol * soundSettings.music; } catch (e) { /* ignore */ }
+        try {
+            const audioDurationMs = (bgm.duration + 1) * 1000;
+            maxTime = Math.max(maxTime, audioDurationMs);
+            controls.timeline.max = maxTime / 1000;
+            bgm.playbackRate = play.playbackSpeed;
+            updateTimelineVisual(currentTimelineValue);
+        } catch (e) { console.warn('loadedmetadata handler failed:', e); }
     });
 
     function loadDiff(diff, data) {
@@ -2642,7 +2783,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        const t = (currentTimelineValue - settings.musicDelay) * 1000;
+        const t = (currentTimelineValue - settings.musicDelay + settings.deviceAudioOffset) * 1000;
         const sVal = 1000000 / notesData.val;
         const bVal = (notesData.breakCounts === 0 ? 0 : 10000) / notesData.breakCounts;
 
@@ -2846,12 +2987,36 @@ document.addEventListener('DOMContentLoaded', function () {
             play.tryReinit = false;
             return;
         }
+
+        debugText();
         requestAnimationFrame(update);
     }
 
     debugBtn.addEventListener('click', function () {
-        console.log(triggered);
+
     });
+
+    resyncBtn.addEventListener('click', function () {
+        settings.deviceAudioOffset = bgm.currentTime - currentTimelineValue;
+        //currentTimelineValue -= (bgm.currentTime - currentTimelineValue);
+    });
+
+    fullscreenBtn.addEventListener('click', function () {
+        if (!document.fullscreenElement) {
+            this.innerText = 'fullscreen_exit';
+            document.documentElement.requestFullscreen().catch((err) => {
+                console.error('Error attempting to enable full-screen mode:', err);
+                showNotification('Failed to enter fullscreen mode.');
+            });
+        } else {
+            document.exitFullscreen();
+            this.innerText = 'fullscreen';
+        }
+    });
+
+    function debugText() {
+        debugBtn.innerText = `${bgm.currentTime - currentTimelineValue}`;
+    }
 
     update();
 });

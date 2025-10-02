@@ -7,6 +7,11 @@
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>AssTroll XD chart broker</title>
     <link rel="icon" type="image/x-icon" href="deku.ico">
+    <!-- Preload common fonts to speed up first paint -->
+    <link rel="preload" href="Fonts/Inter.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="preload" href="Fonts/Handlee-Regular.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="preload" href="Fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf" as="font" type="font/ttf"
+        crossorigin>
     <script src="./Js/main.js" type="module"></script>
     <script src="./Js/localStorage.js" type="module"></script>
     <script type="module">
@@ -15,6 +20,18 @@
         window.play = play;
     </script>
     <link rel="stylesheet" href="Styles/main.css">
+    <script>
+        // Register service worker to cache fonts and assets for faster repeat loads
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/sw.js').then(function (reg) {
+                    console.log('Service worker registered.', reg.scope);
+                }).catch(function (err) {
+                    console.warn('Service worker registration failed:', err);
+                });
+            });
+        }
+    </script>
 </head>
 <script>
     let masterExample = ``;
@@ -43,12 +60,17 @@
 </script>
 
 <body>
-    <div id="fullscreen">
-        <div class="icon-minimize">fullscreen</div>
-    </div>
-    <div id="hideContorls">
-        <div class="icon-minimize">open_in_full</div>
-        <div class="icon-maximize" style="display: none;">hide</div>
+    <div class="icons-container">
+        <div id="fullscreen">
+            <span class="icon-minimize">fullscreen</span>
+        </div>
+        <div id="resync">
+            <span class="icon-minimize">autoplay</span>
+        </div>
+        <div id="hideContorls">
+            <span class="icon-minimize">open_in_full</span>
+            <span class="icon-maximize" style="display: none;">hide</span>
+        </div>
     </div>
     <div class="preview-control">
         <div id="zoomIn">+</div>

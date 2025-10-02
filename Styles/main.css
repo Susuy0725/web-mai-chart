@@ -2,16 +2,19 @@
     font-family: 'Icon';
     font-style: normal;
     src: url('../Fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf') format('truetype-variations');
+    font-display: swap;
 }
 
 @font-face {
     font-family: 'Handwriting';
     src: url('../Fonts/Handlee-Regular.ttf') format('truetype');
+    font-display: swap;
 }
 
 @font-face {
     font-family: 'combo';
     src: url('../Fonts/Inter.ttf') format('truetype');
+    font-display: swap;
 }
 
 :root {
@@ -188,23 +191,28 @@ body {
     background: #00000080;
 }
 
-#fullscreen {
+.icons-container {
     position: absolute;
-    top: 30px;
-    right: calc(50% + 40px);
-}
-
-#hideContorls {
-    position: absolute;
-    top: 30px;
     right: 50%;
+    top: 30px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    width: 50%;
+    height: 50px;
+    transition: all 0.3s ease;
 }
 
-#hideContorls,
-#fullscreen {
+body.layout-minimized .icons-container {
+    right: 0%;
+    top: 0%;
+    width: 100%;
+}
+
+.icons-container>div {
     width: 30px;
     height: 30px;
-    margin: 10px;
+    margin: 10px 10px 10px 0px;
     background: #ffffff20;
     font-family: Icon;
     font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -215,11 +223,10 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 240ms ease;
+    transition: all 200ms ease;
 }
 
-#hideContorls:hover,
-#fullscreen:hover {
+.icons-container>div:hover {
     background: #444;
     box-shadow: 0 1px 2px #00000080, 0 0 1px #0000005e inset;
 }
@@ -230,31 +237,13 @@ body {
     box-shadow: 0 0 1px #00000080, 0 0 3px #00000060 inset;
 }
 
-#hideContorls>div {
+.icons-container>div>span {
     display: flex;
     width: 20px;
     height: 20px;
     margin: 5px;
     align-items: center;
     justify-self: center;
-}
-
-#hideContorls>span {
-    width: 0%;
-    text-align: left;
-    white-space: nowrap;
-    overflow-x: hidden;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 12px;
-    opacity: 0;
-    transition: all 100ms ease;
-}
-
-#hideContorls:hover>span {
-    padding-right: 10px;
-    width: calc(100% - 30px);
-    opacity: 1;
-    font-size: 16px;
 }
 
 .controls {
@@ -657,22 +646,12 @@ body.layout-minimized #render {
     height: 100%;
 }
 
-body.layout-minimized #hideContorls {
-    right: 0%;
-    top: 0%;
-}
-
-body.layout-minimized #fullscreen {
-    right: calc(0% + 40px);
-    top: 0%;
-}
-
 body.layout-minimized #hideContorls .icon-minimize {
     display: none;
 }
 
 body.layout-minimized #hideContorls .icon-maximize {
-    display: inline;
+    display: block;
     /* Or block, depending on your layout preference */
 }
 
