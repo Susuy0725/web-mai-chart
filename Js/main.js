@@ -10,7 +10,7 @@ export const defaultSettings = {
     'speed': 6,
     'pinkStar': false,
     'touchSpeed': 2,
-    'slideSpeed': 2,
+    'slideSpeed': 0,
     'holdEndNoSound': false,
     'showSlide': true,
     'nextNoteHighlight': false,
@@ -29,42 +29,93 @@ export const defaultSettings = {
     'showPerfBreakdown': false,
     'backgroundDarkness': 0.5,
     'showBgMask': true,
-    'useImgSkin': false,
+    'useImgSkin': true,
     'mainColor': '#444e5d',
     'playMode': false,
-    'debug': true,
+    'debug': false,
     'hires': true,
     'disablePreview': false,
     'disablePreviewAtAudio': false,
     'deviceAudioOffset': 0,
+    'noteSkin': 'default',// default ,Deluxe
 };
 
 const imgsToCreate = [
-    ['outline', 'svg'],
-    ['sensor', 'svg'],
-    ['sensor_text', 'svg'],
-    ['tap', 'png'],
-    ['tap_break', 'png'],
-    ['tap_each', 'png'],
-    ['hold', 'png'],
-    ['hold_break', 'png'],
-    ['hold_each', 'png'],
-    ['hold_ex', 'png'],
-    ['touch', 'png'],
-    ['touch_point', 'png'],
-    ['touch_point_each', 'png'],
-    ['touch_each', 'png'],
-    ['tap_ex', 'png'],
-    ['star', 'png'],
-    ['star_ex', 'png'],
-    ['star_break', 'png'],
-    ['star_each', 'png'],
-    ['star_double', 'png'],
-    ['star_break_double', 'png'],
-    ['star_each_double', 'png'],
-    ['slide', 'png'],
-    ['slide_each', 'png'],
-    ['slide_break', 'png'],
+    ['outline',
+        'png',
+        ''],
+    ['sensor',
+        'svg',
+        ''],
+    ['sensor_text',
+        'svg',
+        ''],
+    ['tap',
+        'png',
+        'TapSkins'],
+    ['tap_break',
+        'png',
+        'TapSkins'],
+    ['tap_each',
+        'png',
+        'TapSkins'],
+    ['tap_ex',
+        'png',
+        'TapSkins'],
+    ['hold',
+        'png',
+        'HoldSkins'],
+    ['hold_break',
+        'png',
+        'HoldSkins'],
+    ['hold_each',
+        'png',
+        'HoldSkins'],
+    ['hold_ex',
+        'png',
+        'HoldSkins'],
+    ['touch',
+        'png',
+        'TouchSkins'],
+    ['touch_point',
+        'png',
+        'TouchSkins'],
+    ['touch_point_each',
+        'png',
+        'TouchSkins'],
+    ['touch_each',
+        'png',
+        'TouchSkins'],
+    ['star',
+        'png',
+        'StarSkins'],
+    ['star_ex',
+        'png',
+        'StarSkins'],
+    ['star_break',
+        'png',
+        'StarSkins'],
+    ['star_each',
+        'png',
+        'StarSkins'],
+    ['star_double',
+        'png',
+        'StarSkins'],
+    ['star_break_double',
+        'png',
+        'StarSkins'],
+    ['star_each_double',
+        'png',
+        'StarSkins'],
+    ['slide',
+        'png',
+        'SlideSkins'],
+    ['slide_each',
+        'png',
+        'SlideSkins'],
+    ['slide_break',
+        'png',
+        'SlideSkins'],
 ];
 
 // Export a separate settings object (clone) so runtime changes don't mutate defaultSettings
@@ -780,11 +831,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const imgsContainer = document.getElementById('imgs');
         if (imgsContainer) {
             imgsContainer.innerHTML = '';
-            imgsToCreate.forEach(([id, type]) => {
+            imgsToCreate.forEach(([id, filetype, notetype]) => {
                 const img = document.createElement('img');
                 img.id = "img_" + id;
                 // only set src if using image skin; otherwise keep empty for programmatic draws
-                img.src = "Skin/" + id + "." + type;
+                img.src = `Skins/${settings.noteSkin}/${notetype == "" ? "" : (notetype + "/")}${id}.${filetype}`;
                 imgsContainer.appendChild(img);
                 // Also populate the exported noteImages map for other modules to use
             });
@@ -2814,18 +2865,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (triggered[i] === undefined) continue; // Skip if no trigger state for this note
 
-                if (settings.playMode) {
-                    if (note.pos == '1') {
-                        if (Array.isArray(triggered[i])) {
-                            triggered[i][0] = true;
-                        }
-                        else {
-                            triggered[i] = true;
-                        }
-                    }
-
-                    continue;
-                } // If in play mode, skip all note triggering logic
                 // Tap, Star, Hold (start) logic
                 if (!note.starTime && !note.touch && !note.slide) {
                     if (_t_note_relative >= 0) {

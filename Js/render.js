@@ -248,14 +248,20 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 sc.drawImage(images.sensor_text, 0, 0, targetW, targetH);
             }
             // draw outline on top
-            sc.drawImage(images.outline, 0, 0, targetW, targetH);
+            sc.translate(targetW / 2, targetH / 2);
+            const outline = 1.015;
+            sc.scale(outline, outline);
+            sc.drawImage(images.outline, -targetW / 2, -targetH / 2, targetW, targetH);
             staticLayerCache.valid = true;
         }
         if (staticLayerCache.valid) {
             ctx.drawImage(staticLayerCache.canvas, (h > w ? 0 : (w - h) / 2), (h > w ? (h - w) / 2 : 0), bw, bw);
         }
     } else {
-        if (!isImageReady(images.sensor)) return;
+        if (!isImageReady(images.sensor)) {
+            console.warn('Sensor image not ready');
+            return;
+        }
         ctx.shadowColor = 'black';
         ctx.shadowBlur = 4;
         ctx.drawImage(images.sensor,
@@ -283,7 +289,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             const note = notesToRender[i];
             if (!note || !note.slide || note.invalid) continue;
             const _t = ((time - note.time) / 1000);
-            if (!(_t >= -1 / currentSettings.slideSpeed && _t <= note.delay + note.slideTime)) continue;
+            if (!(_t >= (currentSettings.distanceToMid - 1) / (currentSettings.speed * speedFactor) && _t <= note.delay + note.slideTime)) continue;
             sbuf.push({ note, t: _t });
             if (sbuf.length >= currentSettings.maxSlideOnScreenCount) break;
         }
@@ -310,7 +316,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawSlidePath(nang, nang2, note.slideType, color, (_t - note.delay) / note.slideTime, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, false);
                 currentSlideNumbersOnScreen++;
             } else {
-                drawSlidePath(nang, nang2, note.slideType, color, _t * currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, true);
+                drawSlidePath(nang, nang2, note.slideType, color, 0 - _t * (currentSettings.speed * speedFactor) / (currentSettings.distanceToMid - 1) - currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, true);
                 currentSlideNumbersOnScreen++;
             }
         }
@@ -524,11 +530,12 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
         // Only change transform if needed
         const needRotate = true;
         ctx.translate(x, y);
-        if (needRotate) ctx.rotate(getNoteAng(parseInt(note.pos)) + Math.PI / 4);
+        if (needRotate) ctx.rotate(getNoteAng(parseInt(note.pos)) - Math.PI / 4);
         if (currentSize !== 1) ctx.scale(currentSize, currentSize);
+        const imgSize = currentSettings.noteSkin == 'Deluxe' ? 4.5 : 3;
         ctx.drawImage(imgTap,
-            -1.5, -1.5,
-            3, 3);
+            -imgSize / 2, -imgSize / 2,
+            imgSize, imgSize);
         if (note.ex && isImageReady(noteImages.tap_ex)) ctx.drawImage(noteImages.tap_ex,
             -1.5, -1.5,
             3, 3);
@@ -841,13 +848,14 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
         ctx.translate(x, y);
         ctx.rotate((ang * 0.192 + 0.125) * Math.PI);
         ctx.scale(currentSize, currentSize);
+        const imgSize = currentSettings.noteSkin == 'Deluxe' ? 4.5 : 3;
         ctx.drawImage(imgStar,
-            -1.5, -1.5,
-            3, 3);
+            -imgSize / 2, -imgSize / 2,
+            imgSize, imgSize);
         if (ex && isImageReady(noteImages.star_ex)) {
             ctx.drawImage(noteImages.star_ex,
-                -1.5, -1.5,
-                3, 3);
+                -imgSize / 2, -imgSize / 2,
+                imgSize, imgSize);
         }
     } else {
         ctx.translate(x, y);
