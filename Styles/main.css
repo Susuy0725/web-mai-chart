@@ -248,6 +248,7 @@ body.layout-minimized .icons-container {
 }
 
 .controls {
+    display: block;
     position: absolute;
     left: 0;
     bottom: 0;
@@ -639,6 +640,18 @@ body.layout-minimized #audioRender {
     opacity: 0;
 }
 
+/* Auto-hide controls in minimized mode, show on hover near bottom */
+body.layout-minimized .controls {
+    width: 100%;
+    transition: transform 0.3s ease, opacity 0.3s ease, width 0.2s ease;
+}
+
+body.layout-minimized .controls.show-on-hover {
+    transform: rotateX(0deg);
+    pointer-events: auto;
+    opacity: 1;
+}
+
 body.layout-minimized #editor {
     /*display: none;*/
     transform: rotateY(90deg);
@@ -872,4 +885,9 @@ body.layout-minimized #bgMask {
 
 .setting-field label {
     min-width: 120px
+}
+
+.controls.show-on-hover{
+    transform: rotateY(0deg);
+    transition: transform 0.3s ease, opacity 0.3s ease;
 }

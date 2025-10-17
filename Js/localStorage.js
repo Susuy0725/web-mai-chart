@@ -88,8 +88,17 @@ import * as main from './main.js';
     if (typeof document !== 'undefined') {
         document.addEventListener('DOMContentLoaded', function () {
             try {
+                // loadSettings() returns a parsed object (or null), not a Promise.
                 const s = loadSettings();
+                // If stored settings exist, merge them into the global settings object.
                 if (s) mergeIntoAppSettings(s);
+
+                // Call main.loadimgs() if available and callable. Protect with try/catch
+                try {
+                    if (main && typeof main.loadimgs === 'function') {
+                        main.loadimgs();
+                    }
+                } catch (e) { /* ignore loadimgs errors */ }
 
                 try { main.updateBgDarknessCss(); } catch (e) { }
                 try { main.updateMainColorCss(); } catch (e) { }

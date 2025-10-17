@@ -1,5 +1,5 @@
 import * as render from "./render.js";
-import { showNotification } from "./main.js";
+import { showNotification, settings } from "./main.js";
 
 // Exported helper: parse parameter strings to delay/duration in seconds and effective bpm
 export function parseParameter(param, currentBpm) {
@@ -580,7 +580,7 @@ export function simai_decode(_data) {
             }
         } catch (error) {
             console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
-            showNotification(`音符 "${tempNote[i]?.pos}" 解析錯誤：${error.message}`);
+            if (!settings.disableSyntaxErrorNotify) showNotification(`音符 "${tempNote[i]?.pos}" 解析錯誤：${error.message}`);
             tempNote[i].invalid = true;
             //throw new Error(error.message);
         }

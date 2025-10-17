@@ -32,13 +32,14 @@ export const defaultSettings = {
     'useImgSkin': true,
     'mainColor': '#444e5d',
     'playMode': false,
-    'debug': true,
+    'debug': false,
     'hires': true,
     'disablePreview': false,
     'disablePreviewAtAudio': false,
     'deviceAudioOffset': 0,
     'noteSkin': 1,// 0 default ,1 Deluxe
     'disableSyntaxErrorNotify': true,
+    'hideBgAndVideoWhenPaused': true,
 };
 
 const imgsToCreate = [
@@ -170,6 +171,26 @@ async function saveBgToDirectory(blobOrFile, directoryHandle) {
     }
 }
 
+// Show/hide background image and video depending on play state
+function updateBgVisibility() {
+    try {
+        const bgImgEl = document.getElementById('bgImg');
+        const bgVideoEl = document.getElementById('backgroundVideo');
+        const isPlaying = !play.pause; // play.pause true means paused
+
+        if (bgImgEl) {
+            try {
+                bgImgEl.style.display = (isPlaying && bgImgEl.src) ? '' : 'none';
+            } catch (e) { }
+        }
+        if (bgVideoEl) {
+            try {
+                bgVideoEl.style.display = (isPlaying && bgVideoEl.src) ? '' : 'none';
+            } catch (e) { }
+        }
+    } catch (e) { console.warn('updateBgVisibility failed', e); }
+}
+
 // 把 settings.mainColor 同步到 CSS :root 的 --main-color
 export function updateMainColorCss() {
     try {
@@ -235,25 +256,6 @@ export const perf = (function () {
     let lastTime = performance.now();
     let frames = 0;
 
-    function ensureOverlay() {
-        if (overlay) return overlay;
-        overlay = document.createElement('div');
-        overlay.id = 'perfOverlay';
-        overlay.style.position = 'fixed';
-        overlay.style.right = '8px';
-        overlay.style.top = '8px';
-        overlay.style.zIndex = 99999;
-        overlay.style.background = 'rgba(0,0,0,0.6)';
-        overlay.style.color = '#0f0';
-        overlay.style.fontFamily = 'monospace';
-        overlay.style.fontSize = '12px';
-        overlay.style.padding = '6px 8px';
-        overlay.style.borderRadius = '6px';
-        overlay.style.pointerEvents = 'none';
-        document.body.appendChild(overlay);
-        return overlay;
-    }
-
     function tick(frameMs, updateMs, renderMs, audioMs) {
         frames++;
         const now = performance.now();
@@ -266,18 +268,30 @@ export const perf = (function () {
         stats.updateMs = Math.round(updateMs * 10) / 10;
         stats.renderMs = Math.round(renderMs * 10) / 10;
         stats.audioMs = Math.round(audioMs * 10) / 10;
-
-        /*if (settings.showFpsCounter || settings.showPerfBreakdown) {
-            const ov = ensureOverlay();
-            ov.innerHTML = `FPS: ${stats.fps}<br/>frme ${stats.frameMs}ms<br/>updt ${stats.updateMs}ms<br/>rend ${stats.renderMs}ms<br/>audi ${stats.audioMs}ms`;
-            ov.style.display = '';
-        } else if (overlay) {
-            overlay.style.display = 'none';
-        }*/
     }
 
     return { tick, _stats: stats };
 })();
+
+export function loadimgs() {
+    // --- 動態建立 imgs 區塊的 <img> 元素，並把對象放到 noteImages ---
+    try {
+        const imgsContainer = document.getElementById('imgs');
+        if (imgsContainer) {
+            imgsContainer.innerHTML = '';
+            console.log('Creating note images for skin:', noteSkin[settings.noteSkin]);
+            imgsToCreate.forEach(([id, filetype, notetype]) => {
+                const img = document.createElement('img');
+                img.id = "img_" + id;
+                // only set src if using image skin; otherwise keep empty for programmatic draws
+                img.src = `Skins/${noteSkin[settings.noteSkin]}/${notetype == "" ? "" : (notetype + "/")}${id}.${filetype}`;
+                imgsContainer.appendChild(img);
+                // Also populate the exported noteImages map for other modules to use
+            });
+            getImgs().catch(err => console.error('getImgs failed:', err));
+        }
+    } catch (e) { console.warn('create imgs error', e); }
+}
 
 const noteSkin = ['default', 'Deluxe'];
 
@@ -342,7 +356,10 @@ const settingsConfig = {
         { target: settings, key: 'mainColor', label: '主色', type: 'color' },
         { target: settings, key: 'useImgSkin', label: '使用圖片皮膚(測試中)', type: 'boolean' },
         { target: settings, key: 'hires', label: '高解析度', type: 'boolean' },
-        { target: settings, key: 'noteSkin', label: 'Note 皮膚 (需要重新整理)', type: 'dropdown', options: ['default', 'Deluxe'], value: [0, 1] }
+        { target: settings, key: 'noteSkin', label: 'Note 皮膚 (需要重新整理)', type: 'dropdown', options: ['default', 'Deluxe'], value: [0, 1] },
+        { target: settings, key: 'disablePreview', label: '禁用音符預覽', type: 'boolean' },
+        { target: settings, key: 'disableSyntaxErrorNotify', label: '不要顯示語法錯誤訊息', type: 'boolean' },
+        { target: settings, key: 'hideBgAndVideoWhenPaused', label: '當暫停時不要顯示BG和影片', type: 'boolean' },
     ]
 };
 
@@ -863,23 +880,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }, { passive: true });
     })();
 
-    // --- 動態建立 imgs 區塊的 <img> 元素，並把對象放到 noteImages ---
-    try {
-        const imgsContainer = document.getElementById('imgs');
-        if (imgsContainer) {
-            imgsContainer.innerHTML = '';
-            console.log('Creating note images for skin:', noteSkin[settings.noteSkin]);
-            imgsToCreate.forEach(([id, filetype, notetype]) => {
-                const img = document.createElement('img');
-                img.id = "img_" + id;
-                // only set src if using image skin; otherwise keep empty for programmatic draws
-                img.src = `Skins/${noteSkin[settings.noteSkin]}/${notetype == "" ? "" : (notetype + "/")}${id}.${filetype}`;
-                imgsContainer.appendChild(img);
-                // Also populate the exported noteImages map for other modules to use
-            });
-            getImgs().catch(err => console.error('getImgs failed:', err));
-        }
-    } catch (e) { console.warn('create imgs error', e); }
     // If URL contains ?zip=<url>, fetch and unpack zip and load as folder
     (async function handleZipParam() {
         try {
@@ -1079,7 +1079,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const hideControlsBtn = document.getElementById('hideContorls');
     if (hideControlsBtn) {
         // 選取所有需要執行動畫的元素
-        const elementsToAnimate = document.querySelectorAll('.controls, .actions, .preview-control, #audioRender, #editor');
+        const elementsToAnimate = document.querySelectorAll('.actions, .preview-control, #audioRender, #editor');
 
         hideControlsBtn.addEventListener('click', () => {
             const isMinimized = document.body.classList.contains('layout-minimized');
@@ -1319,6 +1319,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             console.log(`偵測到音訊檔案：${audioFileHandle.name}。`);
                         } else {
                             // If no audio found, continue but still allow drag/drop background handling
+                            // 如果新資料夾中沒有音訊檔案
+                            console.log("新資料夾中未找到音訊檔案。");
                         }
 
                         // Register drag/drop handler scoped to this opened directory
@@ -1363,13 +1365,11 @@ document.addEventListener('DOMContentLoaded', function () {
                             console.warn('Failed to register drag/drop for background saving:', e);
                         }
 
-                        // 如果新資料夾中沒有音訊檔案
-                        console.log("新資料夾中未找到音訊檔案。");
-
                         // 處理 pv 視訊檔（優先於其他影像行為）
                         try {
                             const bgVideoEl = document.getElementById('backgroundVideo');
                             if (pvFileHandle) {
+                                bgVideoEl.style.display = ''; // 顯示背景視訊元素
                                 const pvFile = await pvFileHandle.getFile();
                                 // 釋放舊的 URL
                                 if (bgVideoEl && bgVideoEl.src) {
@@ -1379,6 +1379,13 @@ document.addEventListener('DOMContentLoaded', function () {
                                     const pvUrl = URL.createObjectURL(pvFile);
                                     bgVideoEl.src = pvUrl;
                                     bgVideoEl.load();
+                                    console.log("PV 視訊檔已載入。");
+                                }
+                            } else {
+                                // 如果沒有 pv 檔案，確保背景視訊被清除
+                                console.log("新資料夾中未找到 PV 視訊檔案。");
+                                if (bgVideoEl && bgVideoEl.src) {
+                                    try { URL.revokeObjectURL(bgVideoEl.src); } catch (e) { }
                                 }
                             }
                         } catch (e) {
@@ -2241,11 +2248,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 fieldContainer.appendChild(input);
             } else if (config.type === 'dropdown') {
                 input = document.createElement('select');
+                console.log(config);
                 if (Array.isArray(config.options)) {
-                    config.options.forEach(option => {
+                    config.options.forEach((option, index) => {
                         const opt = document.createElement('option');
-                        if (typeof option === 'object') { opt.value = option.value; opt.textContent = option.label || option.value; }
-                        else { opt.value = option; opt.textContent = option; }
+                        if (typeof config === 'object') {
+                            opt.value = config.value[index]; opt.textContent = option;
+                        } else {
+                            opt.value = option; opt.textContent = option;
+                        }
+                        console.log('dropdown option', opt.value, currentValue);
                         if (opt.value == currentValue) opt.selected = true;
                         input.appendChild(opt);
                     });
@@ -2424,7 +2436,9 @@ document.addEventListener('DOMContentLoaded', function () {
         // 嘗試將設定存回 localStorage
         try {
             if (window.localStore && typeof window.localStore.saveSettings === 'function') {
-                window.localStore.saveSettings(settings);
+                const settingsToSave = JSON.parse(JSON.stringify(settings));
+                settingsToSave.musicDelay = 0;
+                window.localStore.saveSettings(settingsToSave);
             }
         } catch (e) { console.warn('Failed to save settings to localStorage', e); }
     }
@@ -2630,6 +2644,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 bgVideoWasPlaying = false;
             }
         } catch (e) { bgVideoWasPlaying = false; }
+        if (settings.hideBgAndVideoWhenPaused) try { updateBgVisibility(); } catch (e) { };
     }
 
     function onTimelineInteractionEnd(e) {
@@ -2656,6 +2671,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         // 重置狀態旗標
         bgVideoWasPlaying = false;
+        if (settings.hideBgAndVideoWhenPaused) try { updateBgVisibility(); } catch (e) { };
     }
 
     controls.timeline.addEventListener("touchstart", onTimelineInteractionStart, { passive: true });
@@ -2704,6 +2720,9 @@ document.addEventListener('DOMContentLoaded', function () {
             if (bgVideo && bgVideo.src) try { bgVideo.pause(); } catch (e) { }
         }
 
+        // update background visibility based on play state
+        if (settings.hideBgAndVideoWhenPaused) try { updateBgVisibility(); } catch (e) { };
+
         _updCanvasRes();
     });
 
@@ -2717,6 +2736,7 @@ document.addEventListener('DOMContentLoaded', function () {
         updateTimelineVisual(0);
 
         _updCanvasRes();
+        if (settings.hideBgAndVideoWhenPaused) try { updateBgVisibility(); } catch (e) { };
     });
 
     function seek(seconds) {
@@ -2741,6 +2761,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         controls.timeline.value = currentTimelineValue;
         updateTimelineVisual(currentTimelineValue);
+        if (settings.hideBgAndVideoWhenPaused) try { updateBgVisibility(); } catch (e) { };
     }
 
     controls.b10.addEventListener('click', () => seek(-10));
@@ -2875,9 +2896,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (note.touch) {
                     if (note.touchTime != null) {
                         audioCtx2d.lineWidth = 6;
-                        audioCtx2d.moveTo(x, y);
-                        const x_p = (note.touchTime) * sampleRate / zoom;
-                        audioCtx2d.lineTo(x + x_p, y);
+                        const colorMap = ['#FA4904', '#F5EE00', '#11A769', '#008DF4'];
+                        for (let t = 3; t >= 0; t--) {
+                            const x_p = ((t + 1) / 4) * note.touchTime * sampleRate / zoom;
+                            audioCtx2d.strokeStyle = colorMap[t];
+                            audioCtx2d.beginPath();
+                            audioCtx2d.moveTo(x, y);
+                            audioCtx2d.lineTo(x + x_p, y);
+                            audioCtx2d.closePath();
+                            audioCtx2d.stroke();
+                        }
                     } else {
                         audioCtx2d.rect(x - 3, y - 3, 6, 6);
                     }
@@ -2908,9 +2936,11 @@ document.addEventListener('DOMContentLoaded', function () {
                         audioCtx2d.arc(x, y, 4, 0, 2 * Math.PI);
                     }
                 }
-                audioCtx2d.closePath();
-                audioCtx2d.stroke();
-                audioCtx2d.setLineDash([]);
+                if (!(note.touch && note.touchTime != null)) {
+                    audioCtx2d.closePath();
+                    audioCtx2d.stroke();
+                    audioCtx2d.setLineDash([]);
+                }
             });
         }
 
@@ -3177,8 +3207,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     resyncBtn.addEventListener('click', function () {
-        settings.deviceAudioOffset = bgm.currentTime - currentTimelineValue;
-        //currentTimelineValue -= (bgm.currentTime - currentTimelineValue);
+        //settings.deviceAudioOffset = bgm.currentTime - currentTimelineValue;
+        currentTimelineValue += (bgm.currentTime - currentTimelineValue);
     });
 
     fullscreenBtn.addEventListener('click', function () {
@@ -3201,6 +3231,70 @@ document.addEventListener('DOMContentLoaded', function () {
     function debugText() {
 
     }
+
+    // Auto-show controls when mouse is near bottom in minimized mode
+    (function setupAutoShowControls() {
+        const controlsEl = document.querySelector('.controls');
+        let hideTimeout = null;
+        const BOTTOM_THRESHOLD = 120; // pixels from bottom to trigger show
+        const HIDE_DELAY = 1000; // milliseconds to wait before hiding
+
+        function showControls() {
+            if (document.body.classList.contains('layout-minimized')) {
+                controlsEl.classList.add('show-on-hover');
+                // Clear any pending hide timeout
+                if (hideTimeout) {
+                    clearTimeout(hideTimeout);
+                    hideTimeout = null;
+                }
+            }
+        }
+
+        function scheduleHideControls() {
+            if (document.body.classList.contains('layout-minimized')) {
+                // Clear any existing timeout
+                if (hideTimeout) clearTimeout(hideTimeout);
+                // Schedule hide after delay
+                hideTimeout = setTimeout(() => {
+                    controlsEl.classList.remove('show-on-hover');
+                    hideTimeout = null;
+                }, HIDE_DELAY);
+            }
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            if (!document.body.classList.contains('layout-minimized')) return;
+
+            const distanceFromBottom = window.innerHeight - e.clientY;
+
+            if (distanceFromBottom <= BOTTOM_THRESHOLD) {
+                showControls();
+            } else {
+                scheduleHideControls();
+            }
+        });
+
+        // Also hide when mouse leaves the window
+        document.addEventListener('mouseleave', () => {
+            if (document.body.classList.contains('layout-minimized')) {
+                scheduleHideControls();
+            }
+        });
+
+        // Keep controls visible when hovering directly over them
+        if (controlsEl) {
+            controlsEl.addEventListener('mouseenter', () => {
+                if (hideTimeout) {
+                    clearTimeout(hideTimeout);
+                    hideTimeout = null;
+                }
+            });
+
+            controlsEl.addEventListener('mouseleave', () => {
+                scheduleHideControls();
+            });
+        }
+    })();
 
     update();
 });
