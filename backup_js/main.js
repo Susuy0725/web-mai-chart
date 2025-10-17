@@ -32,13 +32,12 @@ export const defaultSettings = {
     'useImgSkin': true,
     'mainColor': '#444e5d',
     'playMode': false,
-    'debug': true,
+    'debug': false,
     'hires': true,
     'disablePreview': false,
     'disablePreviewAtAudio': false,
     'deviceAudioOffset': 0,
-    'noteSkin': 1,// 0 default ,1 Deluxe
-    'disableSyntaxErrorNotify': true,
+    'noteSkin': 0,// 0 default ,1 Deluxe
 };
 
 const imgsToCreate = [
@@ -135,38 +134,6 @@ export function updateBgDarknessCss() {
         }
     } catch (e) {
         // ignore
-    }
-
-    // Save a blob/file as bg.<ext> into the provided directoryHandle (File System Access API)
-}
-
-async function saveBgToDirectory(blobOrFile, directoryHandle) {
-    if (!directoryHandle) return false;
-    try {
-        // Determine extension
-        let ext = 'png';
-        try {
-            if (blobOrFile.name) {
-                const parts = blobOrFile.name.split('.');
-                if (parts.length > 1) ext = parts.pop().toLowerCase();
-            } else if (blobOrFile.type) {
-                const t = blobOrFile.type.split('/').pop();
-                if (t) ext = t;
-            }
-        } catch (e) { /* fallback to png */ }
-
-        const newName = `bg.${ext}`;
-        // get or create file handle
-        const fh = await directoryHandle.getFileHandle(newName, { create: true });
-        const writable = await fh.createWritable();
-        // If it's a File or Blob, get ArrayBuffer
-        const buffer = await (blobOrFile.arrayBuffer ? blobOrFile.arrayBuffer() : (await fetch(blobOrFile).then(r => r.arrayBuffer())));
-        await writable.write(buffer);
-        await writable.close();
-        return true;
-    } catch (e) {
-        console.warn('saveBgToDirectory failed:', e);
-        return false;
     }
 }
 
@@ -342,7 +309,7 @@ const settingsConfig = {
         { target: settings, key: 'mainColor', label: '主色', type: 'color' },
         { target: settings, key: 'useImgSkin', label: '使用圖片皮膚(測試中)', type: 'boolean' },
         { target: settings, key: 'hires', label: '高解析度', type: 'boolean' },
-        { target: settings, key: 'noteSkin', label: 'Note 皮膚 (需要重新整理)', type: 'dropdown', options: ['default', 'Deluxe'], value: [0, 1] }
+        { target: settings, key: 'noteSkin', label: 'Note 皮膚 (需要重新整理)', type: 'dropdown', options: ['default', 'Deluxe'] , value: [0, 1] }
     ]
 };
 
@@ -353,7 +320,7 @@ let maxTime = 1000;
 let sfxReady = false, inSettings = false;
 let currentTimelineValue = 0;
 
-console.log(settings.noteSkin, noteSkin[settings.noteSkin]);
+console.log(defaultSettings);
 
 // Export a mutable object that will be populated asynchronously.
 export const noteImages = {};
@@ -958,14 +925,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (bgImgEl.src) try { URL.revokeObjectURL(bgImgEl.src); } catch (e) { }
                     bgImgEl.src = URL.createObjectURL(bgFile);
                     bgImgEl.style.display = '';
-                    // If user opened a directory, try to save bg into it
-                    try {
-                        if (typeof directoryHandle !== 'undefined' && directoryHandle) {
-                            saveBgToDirectory(bgFile, directoryHandle).then(ok => {
-                                if (ok) console.log('bg file from zip saved to opened directory');
-                            }).catch(() => { });
-                        }
-                    } catch (e) { /* ignore */ }
                 }
             } catch (e) { console.warn('set bg from zip failed', e); }
 
@@ -1318,53 +1277,9 @@ document.addEventListener('DOMContentLoaded', function () {
                             reader.readAsArrayBuffer(audioFile);
                             console.log(`偵測到音訊檔案：${audioFileHandle.name}。`);
                         } else {
-                            // If no audio found, continue but still allow drag/drop background handling
+                            // 如果新資料夾中沒有音訊檔案
+                            console.log("新資料夾中未找到音訊檔案。");
                         }
-
-                        // Register drag/drop handler scoped to this opened directory
-                        try {
-                            const bgImgEl = document.getElementById('bgImg');
-                            // remove any previous handlers to avoid duplicate prompts
-                            const dropHandler = async function (ev) {
-                                ev.preventDefault();
-                                ev.stopPropagation();
-                                const items = ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files : null;
-                                if (!items || items.length === 0) return;
-                                // only consider first file for quick UX
-                                const f = items[0];
-                                if (!f.type || !f.type.startsWith('image/')) return;
-                                const ok = confirm('是否將拖入的圖片設為背景並儲存到此資料夾為 bg.' + (f.name.split('.').pop() || 'png') + ' ?');
-                                if (!ok) return;
-                                try {
-                                    // show image locally
-                                    const url = URL.createObjectURL(f);
-                                    if (bgImgEl) {
-                                        bgImgEl.src = url;
-                                        bgImgEl.style.display = '';
-                                    }
-
-                                    // attempt to write file into directory via helper
-                                    if (directoryHandle) {
-                                        const okSaved = await saveBgToDirectory(f, directoryHandle);
-                                        if (okSaved) showNotification('Saved background to opened directory');
-                                        else console.warn('Failed to save background to opened directory');
-                                    } else {
-                                        console.warn('Directory handle not available for writing bg file.');
-                                    }
-                                } catch (e) {
-                                    console.error('drop handler error:', e);
-                                }
-                            };
-
-                            // allow drop on body; scoped removal not trivial so we set once
-                            document.body.addEventListener('dragover', function (e) { e.preventDefault(); }, { passive: false });
-                            document.body.addEventListener('drop', dropHandler, { passive: false });
-                        } catch (e) {
-                            console.warn('Failed to register drag/drop for background saving:', e);
-                        }
-
-                        // 如果新資料夾中沒有音訊檔案
-                        console.log("新資料夾中未找到音訊檔案。");
 
                         // 處理 pv 視訊檔（優先於其他影像行為）
                         try {
@@ -2206,21 +2121,20 @@ document.addEventListener('DOMContentLoaded', function () {
         const form = document.getElementById('settings-form');
         form.innerHTML = '';
 
-        function createField(config, groupKey, container) {
-            container = container || form;
+        function createField(config, groupKey) {
             const fieldContainer = document.createElement('div');
             fieldContainer.className = 'setting-field';
             const fieldId = `setting-${groupKey}-${config.key}`;
             const label = document.createElement('label');
             label.htmlFor = fieldId;
-            label.textContent = (config.label || config.key) + ':';
+            label.textContent = config.label + ':';
             let input;
-            const currentValue = (config.target && config.target[config.key] !== undefined) ? config.target[config.key] : (settings[config.key] !== undefined ? settings[config.key] : '');
+            const currentValue = config.target[config.key];
 
             if (config.type === 'boolean') {
                 input = document.createElement('input');
                 input.type = 'checkbox';
-                input.checked = !!currentValue;
+                input.checked = currentValue;
                 label.style.marginRight = '5px';
                 fieldContainer.appendChild(label);
                 fieldContainer.appendChild(input);
@@ -2241,21 +2155,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 fieldContainer.appendChild(input);
             } else if (config.type === 'dropdown') {
                 input = document.createElement('select');
-                if (Array.isArray(config.options)) {
-                    config.options.forEach(option => {
-                        const opt = document.createElement('option');
-                        if (typeof option === 'object') { opt.value = option.value; opt.textContent = option.label || option.value; }
-                        else { opt.value = option; opt.textContent = option; }
-                        if (opt.value == currentValue) opt.selected = true;
-                        input.appendChild(opt);
-                    });
-                }
-                fieldContainer.appendChild(label);
-                fieldContainer.appendChild(input);
-            } else {
-                input = document.createElement('input');
-                input.type = 'text';
-                input.value = currentValue;
+                config.options.forEach((option, index) => {
+                    const opt = document.createElement('option');
+                    opt.value = config.value ? config.value[index] : option;
+                    opt.textContent = option;
+                    if (option === currentValue) {
+                        opt.selected = true;
+                    }
+                    input.appendChild(opt);
+                });
                 fieldContainer.appendChild(label);
                 fieldContainer.appendChild(input);
             }
@@ -2263,52 +2171,24 @@ document.addEventListener('DOMContentLoaded', function () {
             if (input) {
                 input.id = fieldId;
                 input.name = config.key;
-                container.appendChild(fieldContainer);
+                form.appendChild(fieldContainer);
             }
         }
-
-        // build bookmark layout
-        const wrapper = document.createElement('div');
-        wrapper.className = 'settings-bookmark-container';
-        const sidebar = document.createElement('div');
-        sidebar.className = 'settings-bookmark-sidebar';
-        const content = document.createElement('div');
-        content.className = 'settings-bookmark-content';
-
-        const groups = [{ key: 'game', title: '基本' }, { key: 'sound', title: '音效' }, { key: 'other', title: '其他' }];
-
-        groups.forEach((g, idx) => {
-            const btn = document.createElement('div');
-            btn.className = 'bookmark-btn' + (idx === 0 ? ' active' : '');
-            btn.textContent = g.title;
-            btn.dataset.group = g.key;
-            sidebar.appendChild(btn);
-
-            const pane = document.createElement('div');
-            pane.className = 'bookmark-pane' + (idx === 0 ? '' : ' hide');
-            pane.dataset.group = g.key;
-            const h3 = document.createElement('h3');
-            h3.textContent = g.title; h3.style.marginTop = '0';
-            pane.appendChild(h3);
-
-            try {
-                const cfgs = settingsConfig[g.key] || [];
-                cfgs.forEach(cfg => createField(cfg, g.key, pane));
-            } catch (e) { console.warn('generateSettingsForm: missing settingsConfig for', g.key); }
-
-            content.appendChild(pane);
-
-            btn.addEventListener('click', () => {
-                sidebar.querySelectorAll('.bookmark-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                content.querySelectorAll('.bookmark-pane').forEach(p => p.classList.add('hide'));
-                pane.classList.remove('hide');
-            });
-        });
-
-        wrapper.appendChild(sidebar);
-        wrapper.appendChild(content);
-        form.appendChild(wrapper);
+        const h3Game = document.createElement('h3');
+        h3Game.textContent = '基本';
+        h3Game.style.marginTop = '0';
+        form.appendChild(h3Game);
+        settingsConfig.game.forEach(config => createField(config, 'game'));
+        form.appendChild(document.createElement('hr'));
+        const h3Sound = document.createElement('h3');
+        h3Sound.textContent = '音效設定';
+        form.appendChild(h3Sound);
+        settingsConfig.sound.forEach(config => createField(config, 'sound'));
+        const h3Other = document.createElement('h3');
+        h3Other.textContent = '其他設定';
+        form.appendChild(h3Other);
+        settingsConfig.other.forEach(config => createField(config, 'other'));
+        // 確保主色欄位可見（若尚未定義）
     }
 
     function generateInfoForm() {
@@ -2388,7 +2268,6 @@ document.addEventListener('DOMContentLoaded', function () {
                             newValue = input.value;
                         } else if (config.type === 'dropdown') {
                             newValue = config.value ? config.value[input.selectedIndex] : input.value;
-                            console
                         } else {
                             newValue = input.value;
                         }
@@ -2816,18 +2695,18 @@ document.addEventListener('DOMContentLoaded', function () {
         audioCtx2d.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
         audioCtx2d.strokeStyle = "#00000060";
         audioCtx2d.lineWidth = 1;
-        const ahw = audioCanvas.width / 2;
+        const a = audioCanvas.width / 2;
         let sampleRate = 44100;
 
         if (fullAudioBuffer && bgm) {
             const pcmData = fullAudioBuffer.getChannelData(0);
             sampleRate = fullAudioBuffer.sampleRate;
 
-            for (let i = -ahw; i < ahw; i++) {
+            for (let i = -a; i < a; i++) {
                 const data = pcmData[(Math.floor(i + currentTimelineValue * sampleRate / zoom)) * zoom];
                 audioCtx2d.beginPath();
                 const y = (data + 1) * audioCanvas.height / 2;
-                const x = i + ahw;
+                const x = i + a;
                 audioCtx2d.moveTo(x, audioCanvas.height - y);
                 audioCtx2d.lineTo(x, y + 1);
                 audioCtx2d.stroke();
@@ -2836,28 +2715,31 @@ document.addEventListener('DOMContentLoaded', function () {
 
         for (let i = 0; i < marks.length; i++) {
             const mark = marks[i];
+            const find = marks.find((e) => (e.time > mark.time && e.type != "bpm")) ?? { time: Infinity };
             switch (mark.type) {
-                case "slice": {
-                    for (let j = 0; j < mark.repeat; j++) {
-                        const x = ahw + (mark.time / 1000 + j * (60 / ((mark.slice / 4) * mark.bpm)) - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
-                        if (x > audioCanvas.width || x < 0) continue;
-                        audioCtx2d.beginPath();
-                        audioCtx2d.strokeStyle = "white";
-                        audioCtx2d.lineWidth = (j % mark.slice == 0 ? 3 : 2);
-                        audioCtx2d.moveTo(x, audioCanvas.height / (j % mark.slice == 0 ? 8 : 1.8));
-                        audioCtx2d.lineTo(x, audioCanvas.height);
-                        audioCtx2d.stroke();
-                    }
-                    break;
-                }
                 case "bpm": {
-                    const x = ahw + (mark.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
+                    const x = a + (mark.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
                     audioCtx2d.beginPath();
                     audioCtx2d.strokeStyle = "#FFF200";
-                    audioCtx2d.lineWidth = 5;
+                    audioCtx2d.lineWidth = 4;
                     audioCtx2d.moveTo(x, 0);
                     audioCtx2d.lineTo(x, audioCanvas.height);
                     audioCtx2d.stroke();
+                    break;
+                }
+                case "slice": {
+                    let t = (find.time - mark.time) / (4000 * 60 / (mark.slice * mark.bpm));
+                    t = t > 10000 ? 10000 : Math.round(t);
+                    for (let j = 0; j < t; j++) {
+                        const x = a + (mark.time / 1000 + j * (60 / ((mark.slice / 4) * mark.bpm)) - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
+                        if (x > audioCanvas.width || x < 0) continue;
+                        audioCtx2d.beginPath();
+                        audioCtx2d.strokeStyle = "white";
+                        audioCtx2d.lineWidth = 2;
+                        audioCtx2d.moveTo(x, audioCanvas.height / 2);
+                        audioCtx2d.lineTo(x, audioCanvas.height);
+                        audioCtx2d.stroke();
+                    }
                     break;
                 }
             }
@@ -2866,21 +2748,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (!settings.disableNotePreviewAtAudio) {
             notes.forEach(note => {
-                const x = ahw + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
+                const x = a + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
                 const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;
                 if (x > audioCanvas.width || x < 0 - ((note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) return;
                 audioCtx2d.strokeStyle = note.break ? '#FF6C0C' : (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide ? "#FFD900" : (note.star || note.touch || note.slide ? '#0089F4' : "#FF569B"));
                 audioCtx2d.lineWidth = 3;
                 audioCtx2d.beginPath();
                 if (note.touch) {
-                    if (note.touchTime != null) {
-                        audioCtx2d.lineWidth = 6;
-                        audioCtx2d.moveTo(x, y);
-                        const x_p = (note.touchTime) * sampleRate / zoom;
-                        audioCtx2d.lineTo(x + x_p, y);
-                    } else {
-                        audioCtx2d.rect(x - 3, y - 3, 6, 6);
-                    }
+                    audioCtx2d.rect(x - 3, y - 3, 6, 6);
                 } else if (note.slide) {
                     if (slideOnAudioCount > settings.maxSlideOnScreenCount) return;
                     audioCtx2d.lineWidth = 6;
@@ -2917,8 +2792,8 @@ document.addEventListener('DOMContentLoaded', function () {
         audioCtx2d.beginPath();
         audioCtx2d.strokeStyle = "red";
         audioCtx2d.lineWidth = 4;
-        audioCtx2d.moveTo(ahw, 0);
-        audioCtx2d.lineTo(ahw, audioCanvas.height);
+        audioCtx2d.moveTo(a, 0);
+        audioCtx2d.lineTo(a, audioCanvas.height);
         audioCtx2d.stroke();
     }
 
@@ -3176,6 +3051,10 @@ document.addEventListener('DOMContentLoaded', function () {
         requestAnimationFrame(update);
     }
 
+    debugBtn.addEventListener('click', function () {
+
+    });
+
     resyncBtn.addEventListener('click', function () {
         settings.deviceAudioOffset = bgm.currentTime - currentTimelineValue;
         //currentTimelineValue -= (bgm.currentTime - currentTimelineValue);
@@ -3194,12 +3073,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    debugBtn.addEventListener('click', function () {
-
-    });
-
     function debugText() {
-
+        debugBtn.innerText = `${bgm.currentTime - currentTimelineValue}`;
     }
 
     update();

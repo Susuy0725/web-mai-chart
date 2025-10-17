@@ -532,7 +532,7 @@ export function drawTap(x, y, sizeFactor, color, ex, ctx, hbw, currentSettings, 
         ctx.translate(x, y);
         if (needRotate) ctx.rotate(getNoteAng(parseInt(note.pos)) - Math.PI / 4);
         if (currentSize !== 1) ctx.scale(currentSize, currentSize);
-        const imgSize = currentSettings.noteSkin == 'Deluxe' ? 4.5 : 3;
+        const imgSize = currentSettings.noteSkin === 1 ? 4.5 : 3;
         ctx.drawImage(imgTap,
             -imgSize / 2, -imgSize / 2,
             imgSize, imgSize);
@@ -848,7 +848,7 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
         ctx.translate(x, y);
         ctx.rotate((ang * 0.192 + 0.125) * Math.PI);
         ctx.scale(currentSize, currentSize);
-        const imgSize = currentSettings.noteSkin == 'Deluxe' ? 4.5 : 3;
+        const imgSize = currentSettings.noteSkin === 1 ? 4.5 : 3;
         ctx.drawImage(imgStar,
             -imgSize / 2, -imgSize / 2,
             imgSize, imgSize);

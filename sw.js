@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `wmc-cache-${CACHE_VERSION}`;
 
 // assets to cache on install - include fonts and key static assets

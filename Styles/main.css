@@ -74,7 +74,7 @@ body {
 #render,
 #audioRender {
     touch-action: none;
-    
+
 }
 
 #render {
@@ -564,21 +564,28 @@ textarea {
 
 .setting-field label {
     margin-right: 10px;
-    min-width: 200px;
+    width: 80px;
+    padding: 2px;
     /* 讓標籤寬度一致，方便對齊 */
     display: inline-block;
 }
 
 .setting-field input[type="number"] {
     width: 80px;
+    padding: 2px;
     /* 或其他合適的寬度 */
 }
 
+.setting-field select {
+    border-radius: 4px;
+    padding: 2px;
+    width: 80px;
+    height: 30px;
+}
+
 #settings-form {
-    max-height: 70vh;
-    overflow-y: auto;
+    height: 70vh;
     margin-bottom: 10px;
-    box-shadow: 0px -5px 5px -5px #00000087 inset;
 }
 
 .info-field {
@@ -697,29 +704,25 @@ body.layout-minimized #hideContorls .icon-maximize {
 
 #settings-popup button,
 #info-popup button {
-    height: 32px;
+    height: 34px;
     background-color: #ffffff;
     color: black;
     padding: 0 15px;
     border: none;
-    border-radius: 5px;
+    border-radius: 0px;
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    transition: background-color 0.2s;
+    /*box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);*/
+    transition: background-color 0.2s, box-shadow 0.2s;
     margin-right: 10px;
 }
 
 #save-settings-btn:hover,
-#save-info-btn:hover {
-    background-color: #50c254;
-    color: white;
-}
-
+#save-info-btn:hover,
 #cancel-settings-btn:hover,
 #cancel-info-btn:hover,
 #reset-settings-btn:hover,
 #clear-cache-btn:hover {
-    background-color: #b3b3b3;
+    box-shadow: 0 -2px 0 rgba(0, 0, 0, 0.5);
 }
 
 #backgroundVideo {
@@ -814,4 +817,59 @@ body.layout-minimized #bgMask {
                 /* 黑色外圈，銳利邊緣 */
             );
     }
+}
+
+.settings-bookmark-container {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    height: 100%;
+}
+
+.settings-bookmark-sidebar {
+    width: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px
+}
+
+.settings-bookmark-sidebar .bookmark-btn {
+    background: transparent;
+    border: none;
+    padding: 8px 10px;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    height: 40px;
+    width: 80px;
+    padding-left: 16px;
+    box-sizing: border-box;
+    transition: all 200ms ease;
+}
+
+.settings-bookmark-sidebar .bookmark-btn.active {
+    font-weight: 600;
+    box-shadow: 8px 0 4px -4px var(--main-color) inset;
+}
+
+.settings-bookmark-content {
+    flex: 1;
+    min-width: 240px;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.bookmark-pane.hide {
+    display: none
+}
+
+.setting-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0
+}
+
+.setting-field label {
+    min-width: 120px
 }

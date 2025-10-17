@@ -150,6 +150,8 @@ export function simai_decode(_data) {
         breakCounts = 0;
 
     // 基本 note 解析（依據逗號分隔，每筆 note 記錄原始 pos 與時間）
+    let sliceRepeat = 0;
+
     for (let i = 0; i < dataTemp.length; i++) {
         let data = dataTemp[i];
         if (data) {
@@ -182,8 +184,13 @@ export function simai_decode(_data) {
                 data = data.slice(data.indexOf("}") + 1);
             }
             if (lastslice !== slice) {
+                if (sliceRepeat > 1) {
+                    // find last slice mark and set repeat count
+                    marks.findLast(m => m.type === "slice").repeat = sliceRepeat;
+                }
                 marks.push({ slice, bpm, time: timeSum, type: "slice" });
                 lastslice = slice;
+                sliceRepeat = 0;
             }
             dataTemp[i] = data;
 
@@ -208,6 +215,10 @@ export function simai_decode(_data) {
         }
         // 累加時間：此處公式依 slice 與 bpm 計算，4000 為單位比例，可依需求調整
         timeSum += (1 / slice) * (60 / bpm) * 4000;
+        sliceRepeat++;
+    }
+    if (sliceRepeat > 1) {
+        marks[marks.length - 1].repeat = sliceRepeat - 1;
     }
 
     for (let i = 0; i < tempNote.length; i++) {
