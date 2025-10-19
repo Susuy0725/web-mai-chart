@@ -413,6 +413,9 @@ let directoryHandle = null;
 let maidataFileHandle = null;
 let audioFileHandle = null;
 let lastDragX;
+// 用來儲存當前為開啟資料夾註冊的 drop/dragover handler，以便在需要時解除註冊
+let openFolderDropHandler = null;
+let openFolderDragOverHandler = null;
 
 const soundFiles = {
     tap: 'judge.wav', ex: 'judge_ex.wav', break: 'judge_break.wav', break_woo: 'break.wav',
@@ -1214,7 +1217,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- File & Diff Menu Actions (Event Delegation) ---
-    dropdownList.addEventListener('click', (event) => {
+    dropdownList.addEventListener('click', async (event) => {
         const target = event.target;
         if (target.tagName !== 'LI') return;
 
@@ -1240,6 +1243,26 @@ document.addEventListener('DOMContentLoaded', function () {
             try {
                 abortBgAndVid();
             } catch (e) { console.error('清除背景視訊時發生錯誤', e); }
+            // 如果之前有開啟的資料夾，把相關 handle 與 drag/drop handler 一併清除
+            try {
+                if (openFolderDropHandler) {
+                    try { document.body.removeEventListener('drop', openFolderDropHandler); } catch (e) { }
+                    openFolderDropHandler = null;
+                }
+                if (openFolderDragOverHandler) {
+                    try { document.body.removeEventListener('dragover', openFolderDragOverHandler); } catch (e) { }
+                    openFolderDragOverHandler = null;
+                }
+            } catch (e) { /* ignore */ }
+            try {
+                // attempt to close directory handle if API supported
+                if (directoryHandle && typeof directoryHandle.close === 'function') {
+                    try { const _closePromise = directoryHandle.close(); if (_closePromise && typeof _closePromise.then === 'function') { _closePromise.catch(function () {/* ignore */ }); } } catch (e) { /* ignore */ }
+                }
+            } catch (e) { /* ignore */ }
+            directoryHandle = null;
+            maidataFileHandle = null;
+            audioFileHandle = null;
             currentTimelineValue = 0;
             controls.timeline.value = 0;
             updateTimelineVisual(0);
@@ -1358,9 +1381,22 @@ document.addEventListener('DOMContentLoaded', function () {
                                 }
                             };
 
-                            // allow drop on body; scoped removal not trivial so we set once
-                            document.body.addEventListener('dragover', function (e) { e.preventDefault(); }, { passive: false });
-                            document.body.addEventListener('drop', dropHandler, { passive: false });
+                            // allow drop on body; remove any previous handlers first to avoid duplicates
+                            try {
+                                if (openFolderDragOverHandler) {
+                                    try { document.body.removeEventListener('dragover', openFolderDragOverHandler); } catch (e) { }
+                                    openFolderDragOverHandler = null;
+                                }
+                                if (openFolderDropHandler) {
+                                    try { document.body.removeEventListener('drop', openFolderDropHandler); } catch (e) { }
+                                    openFolderDropHandler = null;
+                                }
+                            } catch (e) { /* ignore cleanup errors */ }
+
+                            openFolderDragOverHandler = function (e) { e.preventDefault(); };
+                            openFolderDropHandler = dropHandler;
+                            document.body.addEventListener('dragover', openFolderDragOverHandler, { passive: false });
+                            document.body.addEventListener('drop', openFolderDropHandler, { passive: false });
                         } catch (e) {
                             console.warn('Failed to register drag/drop for background saving:', e);
                         }
@@ -2491,6 +2527,21 @@ document.addEventListener('DOMContentLoaded', function () {
             // 如果有自訂的 localStore Helper，嘗試呼叫其清除方法
             if (window.localStore && typeof window.localStore.clearAll === 'function') {
                 try { window.localStore.clearAll(); } catch (e) { console.warn('localStore.clearAll failed', e); }
+            } else {
+                // fallback: attempt to clear caches and unregister service workers directly
+                (async () => {
+                    try {
+                        if (typeof localStorage !== 'undefined') try { localStorage.clear(); } catch (e) { }
+                        if (typeof caches !== 'undefined' && caches && typeof caches.keys === 'function') {
+                            const keys = await caches.keys();
+                            await Promise.all(keys.map(k => caches.delete(k)));
+                        }
+                        if (typeof navigator !== 'undefined' && navigator.serviceWorker && typeof navigator.serviceWorker.getRegistrations === 'function') {
+                            const regs = await navigator.serviceWorker.getRegistrations();
+                            await Promise.all(regs.map(r => r.unregister()));
+                        }
+                    } catch (e) { console.warn('clearCache fallback failed', e); }
+                })();
             }
             // 清除一般 localStorage（注意：若想保留其他網站設定，改為刪除特定鍵）
             try { window.localStorage.clear(); } catch (e) { console.warn('localStorage.clear failed', e); }
@@ -2865,6 +2916,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         audioCtx2d.beginPath();
                         audioCtx2d.strokeStyle = "white";
                         audioCtx2d.lineWidth = (j % mark.slice == 0 ? 3 : 2);
+                        audioCtx2d.setLineDash(j % mark.slice == 0 && j !== 0 ? [8, 8] : []);
                         audioCtx2d.moveTo(x, audioCanvas.height / (j % mark.slice == 0 ? 8 : 1.8));
                         audioCtx2d.lineTo(x, audioCanvas.height);
                         audioCtx2d.stroke();

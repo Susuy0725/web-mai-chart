@@ -56,6 +56,37 @@ import * as main from './main.js';
         }
     }
 
+    // 清除所有快取：localStorage 特定鍵、CacheStorage 所有 cache、以及嘗試取消註冊 service workers
+    async function clearAll() {
+        try {
+            // 刪除特定存放鍵
+            try { localStorage.removeItem(STORAGE_KEY); } catch (e) { }
+            // 也刪除整個 localStorage（使用者要求清除全部時）
+            try { localStorage.clear(); } catch (e) { }
+
+            // 清空 CacheStorage（如果可用）
+            if (typeof caches !== 'undefined' && caches && typeof caches.keys === 'function') {
+                try {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(k => caches.delete(k)));
+                } catch (e) { console.warn('Failed to clear CacheStorage', e); }
+            }
+
+            // 取消註冊所有 Service Workers（如果有）
+            if (typeof navigator !== 'undefined' && navigator.serviceWorker && typeof navigator.serviceWorker.getRegistrations === 'function') {
+                try {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map(r => r.unregister()));
+                } catch (e) { console.warn('Failed to unregister service workers', e); }
+            }
+
+            return true;
+        } catch (e) {
+            console.error('localStorage.clearAll failed', e);
+            return false;
+        }
+    }
+
     function mergeIntoAppSettings(stored) {
         try {
             if (!stored || typeof stored !== 'object') return;
@@ -81,7 +112,8 @@ import * as main from './main.js';
         saveSettings,
         loadSettings,
         clearSettings,
-        _mergeIntoAppSettings: mergeIntoAppSettings
+        _mergeIntoAppSettings: mergeIntoAppSettings,
+        clearAll
     };
 
     // On DOMContentLoaded, attempt to load & merge stored settings
