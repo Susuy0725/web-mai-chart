@@ -2818,15 +2818,7 @@ document.addEventListener('DOMContentLoaded', function () {
     controls.b10.addEventListener('click', () => seek(-10));
     controls.b5.addEventListener('click', () => seek(-5));
     controls.f5.addEventListener('click', () => seek(5));
-    controls.f10.addEventListener('click', () => {
-        const wasPaused = play.pause;
-        play.pause = true; // Temporarily pause for seeking
-        seek(10);
-        play.pause = play.btnPause; // Restore state
-        if (!play.pause && wasPaused) {
-            bgm.play().catch(e => console.error("BGM play error:", e));
-        }
-    });
+    controls.f10.addEventListener('click', () => seek(10));
 
     controls.zoomIn.addEventListener('click', function (e) {
         settings.audioZoom -= 50;
@@ -2914,23 +2906,28 @@ document.addEventListener('DOMContentLoaded', function () {
                         const x = ahw + (mark.time / 1000 + j * (60 / ((mark.slice / 4) * mark.bpm)) - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
                         if (x > audioCanvas.width || x < 0) continue;
                         audioCtx2d.beginPath();
-                        audioCtx2d.strokeStyle = "white";
-                        audioCtx2d.lineWidth = (j % mark.slice == 0 ? 3 : 2);
+                        audioCtx2d.strokeStyle = "#ffffffbf";
+                        audioCtx2d.lineWidth = (j === 0 ? 5 : 3);
                         audioCtx2d.setLineDash(j % mark.slice == 0 && j !== 0 ? [8, 8] : []);
-                        audioCtx2d.moveTo(x, audioCanvas.height / (j % mark.slice == 0 ? 8 : 1.8));
+                        audioCtx2d.moveTo(x, audioCanvas.height / (j % mark.slice == 0 ? 5 : 1.5));
                         audioCtx2d.lineTo(x, audioCanvas.height);
                         audioCtx2d.stroke();
                     }
                     break;
                 }
                 case "bpm": {
-                    const x = ahw + (mark.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
-                    audioCtx2d.beginPath();
-                    audioCtx2d.strokeStyle = "#FFF200";
-                    audioCtx2d.lineWidth = 5;
-                    audioCtx2d.moveTo(x, 0);
-                    audioCtx2d.lineTo(x, audioCanvas.height);
-                    audioCtx2d.stroke();
+                    audioCtx2d.setLineDash([]);
+                    const checkA = (currentTimelineValue - settings.musicDelay) * sampleRate / zoom > audioCanvas.width / 2;
+                    for (let j = 0; j < (mark.repeat === undefined ? 100 : mark.repeat); j++) {
+                        let x = ahw + ((mark.time + (240000 / mark.bpm) * (j - (checkA ? 50 : 0))) / 1000 - (currentTimelineValue % (checkA ? 240 / mark.bpm : Infinity)) + settings.musicDelay) * sampleRate / zoom;
+                        if (x > audioCanvas.width || x < 0) continue;
+                        audioCtx2d.beginPath();
+                        audioCtx2d.strokeStyle =j === 0 ? "#ded300ff" : "#fff874bf";
+                        audioCtx2d.lineWidth = j === 0 ? 3 : 2;
+                        audioCtx2d.moveTo(x, 0);
+                        audioCtx2d.lineTo(x, audioCanvas.height);
+                        audioCtx2d.stroke();
+                    }
                     break;
                 }
             }
@@ -2938,6 +2935,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let slideOnAudioCount = 0;
 
         if (!settings.disableNotePreviewAtAudio) {
+            audioCtx2d.setLineDash([]);
             notes.forEach(note => {
                 const x = ahw + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
                 const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;

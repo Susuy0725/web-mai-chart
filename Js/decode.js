@@ -151,6 +151,7 @@ export function simai_decode(_data) {
 
     // 基本 note 解析（依據逗號分隔，每筆 note 記錄原始 pos 與時間）
     let sliceRepeat = 0;
+    let bpmRepeat = 0;
 
     for (let i = 0; i < dataTemp.length; i++) {
         let data = dataTemp[i];
@@ -167,23 +168,19 @@ export function simai_decode(_data) {
                     break;
                 }
             }
-            if (isNaN(bpm)) {
-                bpm = 60;
-                console.error("Invaild BPM!")
-            }
-            if (lastbpm !== bpm) {
-                marks.push({ bpm, time: timeSum, type: "bpm" });
-                marks.push({ slice, bpm, time: timeSum, type: "slice" });
-                lastbpm = bpm;
-            }
-            dataTemp[i] = data;
 
             // 解析切分設定：用大括號包住的數字，例如 "{2}"
             while (data.includes("{") && data.includes("}")) {
                 slice = parseFloat(data.slice(data.lastIndexOf("{") + 1, data.indexOf("}")));
                 data = data.slice(data.indexOf("}") + 1);
             }
-            if (lastslice !== slice) {
+
+            if (isNaN(bpm)) {
+                bpm = 60;
+                console.error("Invaild BPM!")
+            }
+
+            if (lastslice !== slice || lastbpm !== bpm) {
                 if (sliceRepeat > 1) {
                     // find last slice mark and set repeat count
                     marks.findLast(m => m.type === "slice").repeat = sliceRepeat;
@@ -191,6 +188,16 @@ export function simai_decode(_data) {
                 marks.push({ slice, bpm, time: timeSum, type: "slice" });
                 lastslice = slice;
                 sliceRepeat = 0;
+            }
+            dataTemp[i] = data;
+
+            if (lastbpm !== bpm) {
+                const lastBpmMark = marks.findLastIndex(m => m.type === "bpm" && m.bpm !== bpm);
+                if (lastBpmMark > -1) marks[lastBpmMark].repeat = Math.floor((timeSum - marks[lastBpmMark]?.time) / (lastbpm * 1000 / 240));
+                marks.push({ bpm, time: timeSum, type: "bpm" });
+                marks.push({ slice, bpm, time: timeSum, type: "slice" });
+                lastbpm = bpm;
+                //bpmRepeat = timeSum;
             }
             dataTemp[i] = data;
 

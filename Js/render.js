@@ -6,6 +6,9 @@ import { settings, noteImages } from "./main.js";
 
 const speedFactor = 0.525;
 
+const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.65 }; // Make const
+const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 }; // Make const
+
 // Helper: check if an HTMLImageElement is fully loaded and usable
 function isImageReady(img) {
     try {
@@ -206,11 +209,12 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             ctx.textAlign = "left";
             ctx.letterSpacing = "0px";
             ctx.font = "bold " + Math.floor(hbw * 0.13) + "px combo"
-            ctx.strokeText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.1, hh + hbw * 0.06);
-            ctx.fillText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.1, hh + hbw * 0.06);
+            ctx.strokeText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.085, hh + hbw * 0.06);
+            ctx.fillText(`${((trueScore / 10000) % 1).toFixed(4).slice(1, 6)}`, hw - hbw * 0.085, hh + hbw * 0.06);
+            const lastScoreL = ctx.measureText(`${((trueScore / 10000) % 1).toFixed(4).slice(2, 6)}`).width;
             ctx.font = "bold " + Math.floor(hbw * 0.1) + "px combo"
-            ctx.strokeText(`%`, hw + hbw * 0.3, hh + hbw * 0.06);
-            ctx.fillText(`%`, hw + hbw * 0.3, hh + hbw * 0.06);
+            ctx.strokeText(`%`, hw - hbw * 0.045 + lastScoreL, hh + hbw * 0.06);
+            ctx.fillText(`%`, hw - hbw * 0.045 + lastScoreL, hh + hbw * 0.06);
             ctx.textAlign = "right";
             ctx.letterSpacing = Math.floor(hbw * 0.01) + "px";
             ctx.font = "bold " + Math.floor(hbw * 0.18) + "px combo"
@@ -243,10 +247,6 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             sc.shadowBlur = 4;
             sc.drawImage(images.sensor, 0, 0, targetW, targetH);
             sc.restore();
-            // optionally draw sensor_text
-            if (!currentSettings.disableSensorWhenPlaying || play.pause) {
-                sc.drawImage(images.sensor_text, 0, 0, targetW, targetH);
-            }
             // draw outline on top
             sc.translate(targetW / 2, targetH / 2);
             const outline = 1.015;
@@ -275,9 +275,31 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         }
     }
     ctx.restore();
+    
+    // testing Touch text render
+    if (!currentSettings.disableSensorWhenPlaying || play.pause) {
+        ctx.save();
+        // 1 - 8
+        ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+        ctx.textAlign = "center";
+        
+        ctx.font = hbw * 0.15 + "px monospace";
+        ['A', 'B', 'D', 'E'].forEach((key) => {
+            const angleOffset = touchAngleOffset[key];
+            const disToMid = touchDisToMid[key];
+            for (let pos = 1; pos <= 8; pos++) {
+                const ang = (pos - 0.5 - angleOffset) / 4 * Math.PI;
+                const np = calAng(ang);
+                ctx.fillText(key + pos, np.x * disToMid * hbw + hw, np.y * disToMid * hbw + hh + hbw * 0.04);
+            }
+        });
+        ctx.fillText("C", hw, hh + hbw * 0.04);
+        
+        ctx.restore();
+    }
 
     if (play.pause && currentSettings.disablePreview) return;
-
+    
     // slide render
     if (currentSettings.showSlide) {
         const __t_slide_start = perfEnabled ? performance.now() : 0;
@@ -438,8 +460,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         tbuf2.push({ note, t: _t });
     }
     const aniTouch = (x) => 1 - Math.pow(1 - x, 3);
-    const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 };
-    const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 };
+
     for (let i = 0; i < tbuf2.length; i++) {
         const { note, t: _t } = tbuf2[i];
         if (_t > currentSettings.effectDecayTime + (note.touchTime ?? 0)) continue;
@@ -1374,7 +1395,6 @@ export function getTouchAng(val_a, offset = 0, touchType) {
 export function path(type, startNp, endNp, hw, hh, hbw, calAng) {
     startNp = parseInt(startNp); // ensure int
     endNp = parseInt(endNp);   // ensure int
-    const touchDisToMid = { "A": 1, "B": 0.475, "C": 0, "D": 1, "E": 0.675 }; // Make const
     const notePositionLocal = EIGHT_POSITIONS_ANG; // Use pre-calculated
 
     const pathRec = new PathRecorder(); // Renamed to avoid conflict with window.path
@@ -1647,8 +1667,6 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     let s = noteBaseSize * 1.1;
     let currentSize = Math.max(sizeFactor * s, 0); // sizeFactor seems to be a base, not multiplier here. Original: size = size * s;
 
-    const touchDisToMid = { "A": 0.85, "B": 0.475, "C": 0, "D": 0.85, "E": 0.675 }; // Make const
-    const touchAngleOffset = { "A": 0, "B": 0, "C": 0, "D": 0.5, "E": 0.5 }; // Make const
     let ang = (pos - 0.5 - (touchAngleOffset[type] || 0)) / 4 * Math.PI;
     let np = calAng(ang);
 
@@ -1797,22 +1815,24 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
         const barBaseLength = currentSize * (2.65 + distance + 0.32);
 
         if (t_progress_hold >= 0) {
+            const ee = 0.28;
             for (let i = 0; i < 4; i++) {
                 let disPercent = Math.max(0, progressSegments[i]);
                 disPercent = Math.min(0.25, disPercent) / 0.25;
-                let barLength = Math.min(disPercent, 0.7) * barBaseLength * Math.SQRT2;
+                let barLength = Math.min(((disPercent - ee) * 1.25 + ee), 0.82) * barBaseLength * Math.SQRT2;
                 const k = effectiveDistance - currentSize * 2.65;
 
                 ctx.save();
                 // === Transform 核心 ===
+                ctx.lineCap = 'butt';
                 ctx.translate(centerX, centerY);
                 ctx.rotate(Math.PI / 2 - angles[i]);
                 ctx.translate(k, k);
 
                 ctx.beginPath();
-                ctx.arc(0 - k / 2, 0 - k / 2, -k / 2, -Math.PI * 0.75, (Math.min(disPercent, 0.3) / 0.3) * (Math.PI / 4) - Math.PI * 0.75);
-                if (disPercent > 0.3) ctx.lineTo(barLength, 0);
-                if (disPercent > 0.7) ctx.arc(0 - k * 1.5, k * -0.5, -k / 2, -Math.PI * 0.5, ((Math.max(disPercent, 0.7) - 0.7) / 0.3) * (Math.PI / 4) - Math.PI * 0.5);
+                ctx.arc(0 - k / 2, 0 - k / 2, -k / 2, -Math.PI * 0.75, (Math.min(disPercent, ee) / ee) * (Math.PI / 4) - Math.PI * 0.75);
+                if (disPercent > ee) ctx.lineTo(barLength, 0);
+                if (disPercent > 1 - ee) ctx.arc(0 - k * 1.5, k * -0.5, -k / 2, -Math.PI * 0.5, ((Math.max(disPercent, (1 - ee)) - (1 - ee)) / ee) * (Math.PI / 4) - Math.PI * 0.5);
 
                 ctx.strokeStyle = colors[i];
                 ctx.stroke();
@@ -1837,7 +1857,7 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
         ctx.rotate(rot);
         // draw relative to origin (0,0) after transform
         drawTouchElement(0, 0, false, i);
-        drawTouchElement(0, 0, true, i);
+        if (currentSettings.useImgSkin) drawTouchElement(0, 0, true, i);
         ctx.restore();
     }
 
