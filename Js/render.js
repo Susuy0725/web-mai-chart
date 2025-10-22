@@ -279,11 +279,10 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     // testing Touch text render
     if (!currentSettings.disableSensorWhenPlaying || play.pause) {
         ctx.save();
-        // 1 - 8
-        ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
         ctx.textAlign = "center";
         
-        ctx.font = hbw * 0.15 + "px monospace";
+        ctx.font = hbw * 0.127 + "px combo";
         ['A', 'B', 'D', 'E'].forEach((key) => {
             const angleOffset = touchAngleOffset[key];
             const disToMid = touchDisToMid[key];

@@ -120,6 +120,50 @@ const imgsToCreate = [
         'SlideSkins'],
 ];
 
+if (defaultSettings.debug) {
+    const debugConsole = document.createElement('div');
+    debugConsole.style.position = 'fixed';
+    debugConsole.style.bottom = '0';
+    debugConsole.style.right = '0';
+    debugConsole.style.width = '50%';
+    debugConsole.style.height = '100px';
+    debugConsole.style.overflow = 'auto';
+    debugConsole.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    debugConsole.style.color = 'white';
+    debugConsole.style.zIndex = '9999';
+    debugConsole.touchAction = 'none';
+    debugConsole.style.userSelect = 'none';
+    debugConsole.style.fontSize = '12px';
+    debugConsole.style.fontFamily = 'monospace';
+    debugConsole.overflowY = 'scroll';
+    document.body.appendChild(debugConsole);
+
+    // from https://stackoverflow.com/questions/19846078/how-to-read-from-chromes-console-in-javascript
+    console.stdlog = console.log.bind(console);
+    console.stdwarn = console.warn.bind(console);
+    console.stderror = console.error.bind(console);
+    console.log = function () {
+        console.stdlog.apply(console, arguments);
+        const text = document.createElement('div');
+        text.textContent = Array.from(arguments).join(' ');
+        debugConsole.appendChild(text);
+    }
+    console.warn = function () {
+        console.stdwarn.apply(console, arguments);
+        const text = document.createElement('div');
+        text.style.color = 'yellow';
+        text.textContent = Array.from(arguments).join(' ');
+        debugConsole.appendChild(text);
+    }
+    console.error = function () {
+        console.stderror.apply(console, arguments);
+        const text = document.createElement('div');
+        text.style.color = 'red';
+        text.textContent = Array.from(arguments).join(' ');
+        debugConsole.appendChild(text);
+    }
+}
+
 // Export a separate settings object (clone) so runtime changes don't mutate defaultSettings
 export let settings = JSON.parse(JSON.stringify(defaultSettings)); // deep clone
 
@@ -618,15 +662,33 @@ async function triggerSave(data) {
     if (directoryHandle && maidataFileHandle && 'createWritable' in maidataFileHandle) {
         try {
             const writable = await maidataFileHandle.createWritable();
+            console.log("create ok");
             await writable.write(text);
+            console.log("write ok");
             await writable.close();
             console.log('已儲存到：', maidataFileHandle.name);
-            showNotification(`已儲存到：${maidataFileHandle.name}`); // <-- 在成功儲存後顯示通知
+            showNotification(`已儲存到：${maidataFileHandle.name}`);
             return;
         } catch (err) {
-            console.error("寫回檔案失敗，改下載模式：", err);
-            // fall-through to blob-download
-            showNotification('儲存失敗，將嘗試下載。'); // <-- 儲存失敗時顯示通知
+            console.error("寫回檔案失敗：", err);
+
+            // 如果是 InvalidStateError，嘗試重新獲取 handle 並重試一次
+            if (err.name === 'InvalidStateError' && directoryHandle) {
+                try {
+                    const fileName = maidataFileHandle.name || 'maidata';
+                    maidataFileHandle = await window.showSaveFilePicker({ suggestedName: fileName, startIn: directoryHandle });
+                    const writable = await maidataFileHandle.createWritable();
+                    await writable.write(text);
+                    await writable.close();
+                    console.log('重試成功，已儲存到：', maidataFileHandle.name);
+                    showNotification(`已儲存到：${maidataFileHandle.name}`);
+                    return;
+                } catch (retryErr) {
+                    console.error("重試失敗：", retryErr);
+                }
+            }
+
+            showNotification('儲存失敗，將嘗試下載。');
         }
     }
 
@@ -804,7 +866,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const bgVideo = document.getElementById('backgroundVideo');
     const bgImg = document.getElementById('bgImg');
     const debugBtn = document.createElement('div');
-    const resyncBtn = document.getElementById('resync');
+    const speed1x = document.getElementById('1xSpeed');
+    const speedAdd = document.getElementById('+0.25xSpeed');
+    const speedMinus = document.getElementById('-0.25xSpeed');
     const fullscreenBtn = document.getElementById('fullscreen');
 
     if (settings.debug) {
@@ -2922,7 +2986,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         let x = ahw + ((mark.time + (240000 / mark.bpm) * (j - (checkA ? 50 : 0))) / 1000 - (currentTimelineValue % (checkA ? 240 / mark.bpm : Infinity)) + settings.musicDelay) * sampleRate / zoom;
                         if (x > audioCanvas.width || x < 0) continue;
                         audioCtx2d.beginPath();
-                        audioCtx2d.strokeStyle =j === 0 ? "#ded300ff" : "#fff874bf";
+                        audioCtx2d.strokeStyle = j === 0 ? "#ded300ff" : "#fff874bf";
                         audioCtx2d.lineWidth = j === 0 ? 3 : 2;
                         audioCtx2d.moveTo(x, 0);
                         audioCtx2d.lineTo(x, audioCanvas.height);
@@ -3256,9 +3320,54 @@ document.addEventListener('DOMContentLoaded', function () {
         requestAnimationFrame(update);
     }
 
-    resyncBtn.addEventListener('click', function () {
-        //settings.deviceAudioOffset = bgm.currentTime - currentTimelineValue;
-        currentTimelineValue += (bgm.currentTime - currentTimelineValue);
+    speed1x.addEventListener('click', function () {
+        play.playbackSpeed = 1;
+        if (bgm) {
+            if (play.playbackSpeed > 0) {
+                bgm.playbackRate = play.playbackSpeed;
+                if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = play.playbackSpeed; } catch (e) { }
+            } else {
+                play.playbackSpeed = 1;
+                bgm.playbackRate = 1;
+                if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = 1; } catch (e) { }
+            }
+        }
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+        bgm.currentTime = currentTimelineValue;
+    });
+
+    speedAdd.addEventListener('click', function () {
+        play.playbackSpeed += 0.25;
+        if (play.playbackSpeed > 2) play.playbackSpeed = 2;
+        if (bgm) {
+            if (play.playbackSpeed > 0) {
+                bgm.playbackRate = play.playbackSpeed;
+                if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = play.playbackSpeed; } catch (e) { }
+            } else {
+                play.playbackSpeed = 1;
+                bgm.playbackRate = 1;
+                if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = 1; } catch (e) { }
+            }
+        }
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+        bgm.currentTime = currentTimelineValue;
+    });
+
+    speedMinus.addEventListener('click', function () {
+        play.playbackSpeed -= 0.25;
+        if (play.playbackSpeed < 0.25) play.playbackSpeed = 0.25;
+        if (bgm) {
+            if (play.playbackSpeed > 0) {
+                bgm.playbackRate = play.playbackSpeed;
+                if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = play.playbackSpeed; } catch (e) { }
+            } else {
+                play.playbackSpeed = 1;
+                bgm.playbackRate = 1;
+                if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = 1; } catch (e) { }
+            }
+        }
+        startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
+        bgm.currentTime = currentTimelineValue;
     });
 
     fullscreenBtn.addEventListener('click', function () {
