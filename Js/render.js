@@ -275,13 +275,13 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         }
     }
     ctx.restore();
-    
+
     // testing Touch text render
     if (!currentSettings.disableSensorWhenPlaying || play.pause) {
         ctx.save();
         ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
         ctx.textAlign = "center";
-        
+
         ctx.font = hbw * 0.127 + "px combo";
         ['A', 'B', 'D', 'E'].forEach((key) => {
             const angleOffset = touchAngleOffset[key];
@@ -293,12 +293,12 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             }
         });
         ctx.fillText("C", hw, hh + hbw * 0.04);
-        
+
         ctx.restore();
     }
 
     if (play.pause && currentSettings.disablePreview) return;
-    
+
     // slide render
     if (currentSettings.showSlide) {
         const __t_slide_start = perfEnabled ? performance.now() : 0;
@@ -337,7 +337,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawSlidePath(nang, nang2, note.slideType, color, (_t - note.delay) / note.slideTime, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, false);
                 currentSlideNumbersOnScreen++;
             } else {
-                drawSlidePath(nang, nang2, note.slideType, color, 0 - _t * (currentSettings.speed * speedFactor) / (currentSettings.distanceToMid - 1) - currentSettings.slideSpeed, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, true);
+                drawSlidePath(nang, nang2, note.slideType, color, 0 - Math.max(_t, -1 - currentSettings.slideSpeed) * (currentSettings.speed * speedFactor) / (currentSettings.distanceToMid - 1) - Math.max(currentSettings.slideSpeed, 0), ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, true);
                 currentSlideNumbersOnScreen++;
             }
         }
@@ -357,7 +357,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         // only push notes that are within the active window for rendering or effect
         if (
             _t < (currentSettings.distanceToMid - 2) / (currentSettings.speed * speedFactor) ||
-            (_t > currentSettings.effectDecayTime + (note.holdTime ?? 0) && (triggered[note._id] || _t > currentSettings.effectDecayTime + (note.holdTime ?? 0) + 3))
+            (_t > currentSettings.effectDecayTime * (1 + (note.break ?? 0) * 0.5) + (note.holdTime ?? 0) && (triggered[note._id] || _t > currentSettings.effectDecayTime * (1 + (note.break ?? 0) * 0.5) + (note.holdTime ?? 0) + 3))
         ) continue;
         tbuf.push({ note, t: _t });
     }
@@ -423,7 +423,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize, note);
             }
         }
-        if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.holdTime ?? 0)) {
+        if (_t >= 0 && _t <= currentSettings.effectDecayTime * (1 + (note.break ?? 0)) + (note.holdTime ?? 0)) {
             let nang = (typeof note.pos === 'string' ? parseInt(note.pos[0]) : note.pos) - 1;
             nang = nang % 8;
             nang = nang < 0 ? 0 : nang;
@@ -435,8 +435,8 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 if (_t <= note.holdTime) drawHoldEffect(currentX, currentY, _t, color, ctx, hbw, currentSettings, noteBaseSize, note);
                 drawHoldEndEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
             } else {
-                drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
-                drawStarEffect(currentX, currentY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true, note);
+                if (!note.break) drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
+                drawStarEffect(currentX, currentY, _t / (1 + (note.break ?? 0) * 0.5) / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true, note);
             }
         }
     }
@@ -745,38 +745,95 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
         ctx.closePath();
 
         ctx.fillStyle = color;
+        ctx.strokeStyle = color;
         ctx.fill();
         ctx.restore();
     }
 
-    /*function drawDiamond(ctx, cx, cy, r, color, fill, rotation = 0) {
-        ctx.save();
+    function drawBreakRoundedStar(ctx, cx, cy, r, color, shadowColor, rotation = 0, cornerRadius = 8, alpha = 1) {
+        const points = 5;
+        const rot = -Math.PI / 2;                  // 让第一个点指向正上方
+        const step = Math.PI / points;             // 36°
 
-        // 將座標原點移動到中心
-        ctx.translate(cx, cy);
-        // 旋轉
-        ctx.rotate(rotation);
-        // 回到以中心為原點的座標系
-        ctx.beginPath();
+        // 先计算所有顶点（交替外半径 / 内半径）
+        const verts = [];
+        const smolVerts = [];
+        for (let i = 0; i < points * 2; i++) {
+            const radius = (i % 2 === 0) ? r : r * 0.5;  // 内半径 = 外半径的一半
+            const angle = rot + i * step + rotation;
+            verts.push({
+                x: Math.cos(angle) * radius + cx,
+                y: Math.sin(angle) * radius + cy
+            });
+
+            smolVerts.push({
+                x: Math.cos(angle) * radius / 2 + cx,
+                y: Math.sin(angle) * radius / 2 + cy
+            });
+        }
+
+        // Improved rounded polygon drawing: clamp cornerRadius per-vertex to avoid spikes
+        function dist(a, b) {
+            return Math.hypot(a.x - b.x, a.y - b.y);
+        }
+
+        function drawRoundedPolygon(vertices, baseRadius) {
+            const n = vertices.length;
+            if (n === 0) return;
+            ctx.beginPath();
+
+            // compute first vertex's local radius
+            const last = vertices[n - 1];
+            const first = vertices[0];
+            const second = vertices[1 % n];
+            const firstLocal = Math.min(baseRadius, dist(last, first) / 2, dist(first, second) / 2);
+
+            // move to start point offset toward first from last
+            const vlen = dist(last, first) || 1;
+            ctx.moveTo(last.x + (first.x - last.x) * (firstLocal / vlen), last.y + (first.y - last.y) * (firstLocal / vlen));
+
+            for (let i = 0; i < n; i++) {
+                const prev = vertices[(i - 1 + n) % n];
+                const curr = vertices[i];
+                const next = vertices[(i + 1) % n];
+
+                const prevDist = dist(prev, curr) || 1;
+                const nextDist = dist(curr, next) || 1;
+                const localR = Math.min(baseRadius, prevDist / 2, nextDist / 2);
+
+                // point before curr along edge from curr to prev
+                //const beforeX = curr.x + (prev.x - curr.x) * (localR / prevDist);
+                //const beforeY = curr.y + (prev.y - curr.y) * (localR / prevDist);
+                //ctx.lineTo(beforeX, beforeY);
+
+                // arc to point after curr along edge to next
+                const afterX = curr.x + (next.x - curr.x) * (localR / nextDist);
+                const afterY = curr.y + (next.y - curr.y) * (localR / nextDist);
+                ctx.arcTo(curr.x, curr.y, afterX, afterY, localR);
+            }
+            ctx.closePath();
+        }
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        // outer shape: fill then stroke
+        drawRoundedPolygon(verts, cornerRadius);
         ctx.fillStyle = color;
         ctx.strokeStyle = color;
+        ctx.lineWidth = r * 0.07;
+        ctx.stroke();
+        ctx.shadowBlur = r * 0.08;
+        ctx.shadowColor = shadowColor;
+        for (let i = 0; i < 3; i++) ctx.stroke();
 
-        if (!fill) ctx.lineWidth = r * 0.2;
-
-        // 繪製菱形路徑（以原點為中心）
-        ctx.moveTo(0, -r);
-        ctx.quadraticCurveTo(r * 0.25, -r * 0.25, r, 0);
-        ctx.quadraticCurveTo(r * 0.25, r * 0.25, 0, r);
-        ctx.quadraticCurveTo(-r * 0.25, r * 0.25, -r, 0);
-        ctx.quadraticCurveTo(-r * 0.25, -r * 0.25, 0, -r);
-
-        ctx.closePath();
-
-        if (fill) ctx.fill();
-        else ctx.stroke();
-
+        // inner small shape: use a smaller corner radius to avoid overlap
+        const innerRadius = Math.max(0, Math.min(cornerRadius * 0.6, r * 0.35));
+        drawRoundedPolygon(smolVerts, innerRadius);
+        ctx.stroke();
+        for (let i = 0; i < 3; i++) ctx.stroke();
         ctx.restore();
-    }*/
+    }
+
 
     // 使用快取的單位菱形路徑進行繪製，以減少垃圾回收與重複 Path2D 建立
     function drawDiamondUsingCache(ctx, cx, cy, r, color, fill, rotation = 0) {
@@ -799,55 +856,102 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
     let s = noteBaseSize;
     const baseAngle = Math.PI / 8; // 初始角度
     const count = 8; // 總共 8 顆星星
-
-    for (let i = 0; i < count; i++) {
-        const ang = calAng(baseAngle + i * Math.PI / 4); // 每隔 22.5°
-        const offset = (ani1(sizeFactor) + 2) * s * 0.75;
-        const radius = s * ani1(1 - sizeFactor) * 0.4;
-        const isFill = (i % 2 !== 0); // 偶數空心，奇數實心
-
-        if (isFill && useFiveStar) {
-            drawRoundedStar(
-                ctx,
-                x + offset * 1.1 * ang.x,
-                y + offset * 1.1 * ang.y,
-                radius * 1.5,
-                color,
-                baseAngle + i * Math.PI / 4,
-                radius * 0.2
-            );
-        } else {
-            drawDiamondUsingCache(
+    if (note.break) {
+        console.log(sizeFactor);
+        const radius = s * ani1(sizeFactor);
+        drawBreakRoundedStar(
+            ctx,
+            x,
+            y,
+            radius * 2.5,
+            '#FFFFC2',
+            '#F7FB7A',
+            baseAngle,
+            radius * 0.416,
+            1 - sizeFactor
+        );
+        for (let i = 0; i < 2; i++) {
+            let localAngle = baseAngle + i * Math.PI;
+            const ang = calAng(localAngle - Math.PI * ani1(sizeFactor));
+            const offset = (ani1(sizeFactor) + 2) * s * -0.75;
+            drawBreakRoundedStar(
                 ctx,
                 x + offset * ang.x,
                 y + offset * ang.y,
-                radius + isFill * radius * 0.15,
-                color,
-                isFill,
-                baseAngle + i * Math.PI / 4
+                radius,
+                '#FFFFC2',
+                '#F7FB7A',
+                baseAngle,
+                radius * 0.15,
+                1 - sizeFactor
             );
         }
+        for (let i = 0; i < 2; i++) {
+            let localAngle = baseAngle + (i + 0.5) * Math.PI;
+            const ang = calAng(localAngle + Math.PI * ani1(sizeFactor));
+            const offset = (ani1(sizeFactor) + 2) * s * -0.75;
+            drawBreakRoundedStar(
+                ctx,
+                x + offset * ang.x,
+                y + offset * ang.y,
+                radius * 1.5,
+                '#FFFFC2',
+                '#F7FB7A',
+                baseAngle,
+                radius * 0.225,
+                1 - sizeFactor
+            );
+        }
+    } else {
+        for (let i = 0; i < count; i++) {
+            const ang = calAng(baseAngle + i * Math.PI / 4); // 每隔 22.5°
+            const offset = (ani1(sizeFactor) + 2) * s * 0.75;
+            const radius = s * ani1(1 - sizeFactor) * 0.4;
+            const isFill = (i % 2 !== 0); // 偶數空心，奇數實心
 
-        if (!isFill) {
-            drawRoundedStar(
-                ctx,
-                x + ang.x * 0.1 * hbw,
-                y + ang.y * 0.1 * hbw,
-                (radius + !isFill * radius * 0.15) * 0.75,
-                color,
-                baseAngle + i * Math.PI / 4,
-                radius * 0.15
-            );
-        } else {
-            drawDiamondUsingCache(
-                ctx,
-                x + ang.x * 0.1 * hbw,
-                y + ang.y * 0.1 * hbw,
-                (radius + !isFill * radius * 0.15) * 0.5,
-                color,
-                !isFill,
-                baseAngle + i * Math.PI / 4
-            );
+            if (isFill && useFiveStar) {
+                drawRoundedStar(
+                    ctx,
+                    x + offset * 1.1 * ang.x,
+                    y + offset * 1.1 * ang.y,
+                    radius * 1.5,
+                    color,
+                    baseAngle + i * Math.PI / 4,
+                    radius * 0.2
+                );
+            } else {
+                drawDiamondUsingCache(
+                    ctx,
+                    x + offset * ang.x,
+                    y + offset * ang.y,
+                    radius + isFill * radius * 0.15,
+                    color,
+                    isFill,
+                    baseAngle + i * Math.PI / 4
+                );
+            }
+
+            if (!isFill) {
+                drawRoundedStar(
+                    ctx,
+                    x + ang.x * 0.1 * hbw,
+                    y + ang.y * 0.1 * hbw,
+                    (radius + !isFill * radius * 0.15) * 0.75,
+                    color,
+                    baseAngle + i * Math.PI / 4,
+                    radius * 0.15
+                );
+            } else {
+                drawDiamondUsingCache(
+                    ctx,
+                    x + ang.x * 0.1 * hbw,
+                    y + ang.y * 0.1 * hbw,
+                    (radius + !isFill * radius * 0.15) * 0.5,
+                    color,
+                    !isFill,
+                    baseAngle + i * Math.PI / 4
+                );
+            }
         }
     }
 }
