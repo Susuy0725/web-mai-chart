@@ -259,7 +259,6 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         }
     } else {
         if (!isImageReady(images.sensor)) {
-            console.warn('Sensor image not ready');
             return;
         }
         ctx.shadowColor = 'black';
@@ -279,20 +278,21 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
     // testing Touch text render
     if (!currentSettings.disableSensorWhenPlaying || play.pause) {
         ctx.save();
+        ctx.textBaseline = "middle";
         ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
         ctx.textAlign = "center";
 
-        ctx.font = hbw * 0.127 + "px combo";
+        ctx.font = "bold " + hbw * 0.127 + "px suse";
         ['A', 'B', 'D', 'E'].forEach((key) => {
             const angleOffset = touchAngleOffset[key];
             const disToMid = touchDisToMid[key];
             for (let pos = 1; pos <= 8; pos++) {
                 const ang = (pos - 0.5 - angleOffset) / 4 * Math.PI;
                 const np = calAng(ang);
-                ctx.fillText(key + pos, np.x * disToMid * hbw + hw, np.y * disToMid * hbw + hh + hbw * 0.04);
+                ctx.fillText(key + pos, np.x * disToMid * hbw + hw, np.y * disToMid * hbw + hh);
             }
         });
-        ctx.fillText("C", hw, hh + hbw * 0.04);
+        ctx.fillText("C", hw, hh);
 
         ctx.restore();
     }
@@ -433,7 +433,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             const currentY = hh + hbw * np.y;
             if (note.holdTime) {
                 if (_t <= note.holdTime) drawHoldEffect(currentX, currentY, _t, color, ctx, hbw, currentSettings, noteBaseSize, note);
-                drawHoldEndEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
+                if (_t > note.holdTime) drawHoldEndEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
             } else {
                 if (!note.break) drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
                 drawStarEffect(currentX, currentY, _t / (1 + (note.break ?? 0) * 0.25) / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true, note);
@@ -478,7 +478,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             const centerY = hh + np.y * (touchDisToMid[note.touch] || 0) * hbw;
             if (note.touchTime) {
                 if (_t <= note.touchTime) drawHoldEffect(centerX, centerY, _t, color, ctx, hbw, currentSettings, noteBaseSize, note);
-                drawHoldEndEffect(centerX, centerY, (_t - note.touchTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
+                if (_t > note.touchTime) drawHoldEndEffect(centerX, centerY, (_t - note.touchTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
             } else {
                 drawSimpleEffect(centerX, centerY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
                 drawStarEffect(centerX, centerY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, false, note);
@@ -624,12 +624,12 @@ export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSett
         return Math.log(99 * x + 1) / Math.log(100);
     }
 
-    sizeFactor = Math.min(Math.max(sizeFactor, 0), 1);
+    const cap_sizeFactor = Math.min(Math.max(sizeFactor, 0), 1);
     let s = noteBaseSize; // Use passed base size
-    let currentSize = s * (ani1(sizeFactor) * 1.75);
+    let currentSize = s * (ani1(cap_sizeFactor) * 1.75);
     let localColor = ctx.createRadialGradient(x, y, 0, x, y, currentSize);
     localColor.addColorStop(0, '#FCFF0A00');
-    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(sizeFactor)));
+    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(cap_sizeFactor)));
 
     ctx.shadowColor = "#00000000";
     ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
@@ -638,6 +638,16 @@ export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSett
     ctx.arc(x, y, currentSize, 0, 2 * Math.PI);
     ctx.closePath();
     ctx.fill();
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI / 8);
+    for (let i = 0; i < 4; i++) {
+        ctx.drawImage(noteImages.star_eff, -s * cap_sizeFactor * 2.75, - s * (1 - cap_sizeFactor) * 0.75, s * 2.75, s * (1 - cap_sizeFactor) * 1.75);
+        // ctx.drawImage(noteImages.star_eff, -s , - s , s, s);
+        ctx.rotate(Math.PI / 2);
+    }
+    ctx.restore();
 }
 
 export function drawHoldEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize, note = undefined) {
@@ -1958,7 +1968,7 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
         ctx.rotate(rot);
         // draw relative to origin (0,0) after transform
         drawTouchElement(0, 0, false, i);
-        if (currentSettings.useImgSkin) drawTouchElement(0, 0, true, i);
+        if (!currentSettings.useImgSkin || holdtime > 0) drawTouchElement(0, 0, true, i);
         ctx.restore();
     }
 

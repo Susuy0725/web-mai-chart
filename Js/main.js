@@ -49,6 +49,9 @@ const imgsToCreate = [
     ['sensor',
         'svg',
         ''],
+    ['star_eff',
+        'svg',
+        ''],
     ['sensor_text',
         'svg',
         ''],
@@ -182,9 +185,9 @@ export function updateBgDarknessCss() {
         // ignore
     }
 
-    // Save a blob/file as bg.<ext> into the provided directoryHandle (File System Access API)
 }
 
+// Save a blob/file as bg.<ext> into the provided directoryHandle (File System Access API)
 async function saveBgToDirectory(blobOrFile, directoryHandle) {
     if (!directoryHandle) return false;
     try {
@@ -413,8 +416,6 @@ let startTime = 0;
 let maxTime = 1000;
 let sfxReady = false, inSettings = false;
 let currentTimelineValue = 0;
-
-console.log(settings.noteSkin, noteSkin[settings.noteSkin]);
 
 // Export a mutable object that will be populated asynchronously.
 export const noteImages = {};
