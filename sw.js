@@ -7,12 +7,16 @@ const CACHE_NAME = `web-mai-chart-cache-${CACHE_VERSION}`;
 // Adjust list to include important static assets used by the app
 const PRECACHE_URLS = [
   './',
+  './Sounds/',
+  './Skins/',
   './index.html',
   './Styles/main.css',
   './Js/main.js',
   './Js/render.js',
   './Fonts/Inter.ttf',
-  './Fonts/Handlee-Regular.ttf',
+  './Fonts/ChironGoRoundTC-VariableFont_wght.ttf',
+  './Fonts/GoogleSansCode-Medium.ttf',
+  './Fonts/SUSE-VariableFont_wght.ttf',
   './Fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf'
 ];
 

@@ -933,3 +933,56 @@ body.layout-minimized #bgMask {
     transform: rotateY(0deg);
     transition: transform 0.3s ease, opacity 0.3s ease;
 }
+
+/* Loading overlay styles */
+#loading-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.45);
+    z-index: 2000;
+    transition: opacity 180ms ease, visibility 180ms ease;
+}
+
+#loading-overlay.hide {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.loading-box {
+    background: rgba(30,30,30,0.95);
+    color: #fff;
+    padding: 16px 18px;
+    border-radius: 8px;
+    min-width: 240px;
+    max-width: 80%;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+}
+
+#loading-message {
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.loading-progress {
+    height: 10px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.loading-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg,#4dd0e1,#00bcd4);
+    transition: width 200ms ease;
+}
+
+.loading-progress[aria-hidden="true"] { display: none; }

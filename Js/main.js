@@ -472,15 +472,24 @@ let soundBuffers = {};
 
 async function loadAllSounds(list) {
     const buffers = {};
+    let active = 0;
     const loadPromises = Object.entries(list).map(async ([key, url]) => {
+        active++;
         try {
+            showLoading(`下載音效：${url}`);
             const resp = await fetch('Sounds/' + url);
             if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.statusText}`);
+            updateLoading(30);
             const arrayBuffer = await resp.arrayBuffer();
+            updateLoading(70);
             buffers[key] = await audioCtx.decodeAudioData(arrayBuffer);
+            updateLoading(100);
         } catch (error) {
             console.error(`Error loading sound ${key} (${url}):`, error);
             buffers[key] = null;
+        } finally {
+            active--;
+            hideLoading();
         }
     });
     await Promise.all(loadPromises);
@@ -542,6 +551,130 @@ if (!soundQueueInterval) {
     });
 }
 // --- 新增結束 ---
+
+// --- Loading overlay API ---
+let _loadingCount = 0; // number of concurrent loading tasks
+function _getLoadingElements() {
+    const overlay = document.getElementById('loading-overlay');
+    const msg = document.getElementById('loading-message');
+    const progress = document.getElementById('loading-progress');
+    const bar = progress ? progress.querySelector('.loading-progress-bar') : null;
+    return { overlay, msg, progress, bar };
+}
+
+export function showLoading(message = '載入中...', { determinate = false, progress = null } = {}) {
+    try {
+        _loadingCount++;
+        const { overlay, msg, progress, bar } = _getLoadingElements();
+        if (!overlay || !msg) return;
+        msg.textContent = message;
+        if (progress != null && bar) {
+            progress.setAttribute('aria-hidden', 'false');
+            bar.style.width = Math.max(0, Math.min(100, progress)) + '%';
+        } else if (determinate && progress && bar) {
+            progress.setAttribute('aria-hidden', 'false');
+            // leave bar width as-is until updated
+        } else if (progress && bar) {
+            progress.setAttribute('aria-hidden', 'true');
+        }
+        overlay.classList.remove('hide');
+    } catch (e) { console.warn('showLoading error', e); }
+}
+
+export function updateLoading(messageOrProgress) {
+    try {
+        const { overlay, msg, progress, bar } = _getLoadingElements();
+        if (!overlay || !msg) return;
+        if (typeof messageOrProgress === 'string') msg.textContent = messageOrProgress;
+        else if (typeof messageOrProgress === 'number' && bar) {
+            progress.setAttribute('aria-hidden', 'false');
+            bar.style.width = Math.max(0, Math.min(100, messageOrProgress)) + '%';
+        }
+    } catch (e) { console.warn('updateLoading error', e); }
+}
+
+export function hideLoading(force = false) {
+    try {
+        if (force) _loadingCount = 0; else _loadingCount = Math.max(0, _loadingCount - 1);
+        if (_loadingCount > 0 && !force) return; // still have active tasks
+        const { overlay, progress, bar } = _getLoadingElements();
+        if (!overlay) return;
+        overlay.classList.add('hide');
+        if (progress && bar) {
+            progress.setAttribute('aria-hidden', 'true');
+            bar.style.width = '0%';
+        }
+    } catch (e) { console.warn('hideLoading error', e); }
+}
+// --- end loading overlay API ---
+
+// Download a conservative set of resources into the cache for offline use.
+// This function is conservative (app shell + fonts + sounds + current skin images listed in imgsToCreate)
+// and reports progress via the existing loading overlay API.
+export async function downloadOffline() {
+    const CACHE_NAME = 'web-mai-chart-cache-v1';
+    try {
+        // app shell
+        const core = [
+            './', './index.html', './Styles/main.css', './Js/main.js', './Js/render.js'
+        ];
+
+        // fonts (conservative list)
+        const fonts = [
+            './Fonts/Inter.ttf',
+            './Fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf',
+        ];
+
+        // sounds derived from soundFiles if available
+        let sounds = [];
+        try { sounds = Object.values(soundFiles || {}).map(u => './Sounds/' + u); } catch (e) { sounds = []; }
+
+        // skins: map imgsToCreate for the currently selected noteSkin
+        const skins = [];
+        try {
+            const skinName = (noteSkin && noteSkin[settings.noteSkin]) ? noteSkin[settings.noteSkin] : noteSkin[0];
+            if (skinName && Array.isArray(imgsToCreate)) {
+                imgsToCreate.forEach(([id, filetype, notetype]) => {
+                    const path = './Skins/' + skinName + (notetype ? '/' + notetype : '') + '/' + id + '.' + filetype;
+                    skins.push(path);
+                });
+            }
+        } catch (e) { /* ignore */ }
+
+        const toCache = Array.from(new Set([...core, ...fonts, ...sounds, ...skins]));
+        if (toCache.length === 0) {
+            showNotification('沒有可快取的資源。');
+            return;
+        }
+
+        showLoading('下載離線資源 - 準備中...', { determinate: true, progress: 0 });
+        const cache = await caches.open(CACHE_NAME);
+
+        for (let i = 0; i < toCache.length; i++) {
+            const url = toCache[i];
+            try {
+                updateLoading(`下載離線資源：${i + 1}/${toCache.length} — ${url}`);
+                const resp = await fetch(url, { cache: 'no-cache' });
+                if (resp && resp.ok) {
+                    await cache.put(url, resp.clone());
+                } else {
+                    console.warn('fetch failed for', url, resp && resp.status);
+                }
+            } catch (e) {
+                console.warn('cache put failed for', url, e);
+            }
+            const pct = Math.round(((i + 1) / toCache.length) * 100);
+            updateLoading(pct);
+        }
+
+        hideLoading();
+        showNotification('主要資源已快取完成。部分資源會在首次使用時自動快取。');
+    } catch (err) {
+        hideLoading(true);
+        console.error('downloadOffline error', err);
+        showNotification('下載離線資源失敗：' + (err && err.message));
+    }
+}
 
 loadAllSounds(soundFiles).then(buffers => {
     soundBuffers = buffers;
@@ -996,7 +1129,9 @@ document.addEventListener('DOMContentLoaded', function () {
             const zipUrl = params.get('zip')?.replace(/"/g, "");
             if (!zipUrl) return;
             showNotification('發現 zip 參數，嘗試下載並解壓...');
+            showLoading(`下載 ZIP：${zipUrl}`);
             const z = await loadZipFromUrl(zipUrl);
+            hideLoading();
             const pseudoFiles = [];
             for (const f of z.files) {
                 if (f.text != null) {
@@ -1108,6 +1243,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         } catch (e) {
             console.error('zip param handling error', e);
+            hideLoading(true);
             showNotification('處理 zip 參數失敗');
         }
     })();
@@ -1760,6 +1896,11 @@ document.addEventListener('DOMContentLoaded', function () {
             diffDisplay.innerText = 'Difficulty: ' + diffName[parseInt(target.dataset.diff, 10) - 1] + (data['lv_' + parseInt(target.dataset.diff, 10)] ? (", LV: " + data['lv_' + parseInt(target.dataset.diff, 10)]) : "");
             // 在 dropdownList 的 click handler 裡面：
             try { bgVideo.pause(); } catch (e) { }
+        } else if (target.dataset.action === 'download-offline') {
+            // user requested to prefetch common resources for offline use
+            try {
+                await downloadOffline();
+            } catch (e) { console.warn('downloadOffline failed', e); }
         } else if (target.dataset.action === 'save-file') {
             triggerSave(data);
         } else if (target.dataset.action === 'undo') {

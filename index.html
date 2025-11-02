@@ -62,6 +62,15 @@
 </script>
 
 <body>
+    <!-- Loading overlay: shows current download action and optional progress -->
+    <div id="loading-overlay" class="hide">
+        <div class="loading-box">
+            <div id="loading-message">載入中...</div>
+            <div id="loading-progress" class="loading-progress" aria-hidden="true">
+                <div class="loading-progress-bar" style="width:0%"></div>
+            </div>
+        </div>
+    </div>
     <div class="icons-container">
         <div id="fullscreen">
             <span class="icon-minimize">fullscreen</span>
@@ -132,6 +141,7 @@
             <li data-action="open-folder">開啟資料夾</li>
             <li data-action="open-maidata">開啟 Maidata</li>
             <li data-action="open-audio">開啟音檔</li>
+                <li data-action="download-offline">下載離線資源</li>
             <li data-action="save-file">儲存</li>
         </ul>
         <ul class="diff-menu dropdown-content hide">
