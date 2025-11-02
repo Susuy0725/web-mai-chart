@@ -1,67 +1,74 @@
-const CACHE_VERSION = 'v2';
-const CACHE_NAME = `wmc-cache-${CACHE_VERSION}`;
+// Consolidated service worker for web-mai-chart
+// Precache important assets (fonts, core scripts) and provide a simple runtime
 
-// assets to cache on install - include fonts and key static assets
+const CACHE_VERSION = 'v1';
+const CACHE_NAME = `web-mai-chart-cache-${CACHE_VERSION}`;
+
+// Adjust list to include important static assets used by the app
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
-  '/Styles/main.css',
-  '/Js/main.js',
-  '/Js/render.js',
-  '/Fonts/Inter.ttf',
-  '/Fonts/Handlee-Regular.ttf',
-  '/Fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf'
+  './',
+  './index.html',
+  './Styles/main.css',
+  './Js/main.js',
+  './Js/render.js',
+  './Fonts/Inter.ttf',
+  './Fonts/Handlee-Regular.ttf',
+  './Fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf'
 ];
 
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(PRECACHE_URLS.map(url => new Request(url, { cache: 'reload' }))).catch(err => {
+    caches.open(CACHE_NAME).then(cache =>
+      cache.addAll(PRECACHE_URLS.map(url => new Request(url, { cache: 'reload' }))).catch(err => {
         console.warn('Some resources failed to pre-cache:', err);
-      });
-    })
+      })
+    )
   );
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-    )).then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)));
+    if (self.clients && self.clients.claim) await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // only handle same-origin requests
-  if (url.origin !== location.origin) return;
+  // Only handle same-origin GET requests
+  if (event.request.method !== 'GET' || url.origin !== location.origin) return;
 
-  // For font requests, use cache-first strategy
+  // Font files: cache-first strategy (fast and offline-friendly)
   if (url.pathname.startsWith('/Fonts/') || url.pathname.endsWith('.ttf') || url.pathname.endsWith('.woff') || url.pathname.endsWith('.woff2')) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(cache =>
-        cache.match(event.request).then(resp => resp || fetch(event.request).then(fetchResp => {
-          // store a copy in cache
-          try { cache.put(event.request, fetchResp.clone()); } catch (e) { /* ignore */ }
-          return fetchResp;
-        }).catch(() => resp))
-      )
-    );
+    event.respondWith(caches.open(CACHE_NAME).then(cache =>
+      cache.match(event.request).then(resp => resp || fetch(event.request).then(fetchResp => {
+        try { cache.put(event.request, fetchResp.clone()); } catch (e) { /* ignore */ }
+        return fetchResp;
+      }).catch(() => resp))
+    ));
     return;
   }
 
-  // For other requests, try network first then fallback to cache
-  event.respondWith(
-    fetch(event.request).then(networkResp => {
-      // update cache for future
+  // Other requests: network-first, fallback to cache
+  event.respondWith((async () => {
+    try {
+      const networkResp = await fetch(event.request);
       if (event.request.method === 'GET') {
-        caches.open(CACHE_NAME).then(cache => {
-          try { cache.put(event.request, networkResp.clone()); } catch (e) { /* ignore */ }
-        });
+        try { const cache = await caches.open(CACHE_NAME); cache.put(event.request, networkResp.clone()); } catch (e) { }
       }
-      return networkResp.clone();
-    }).catch(() => caches.match(event.request).then(resp => resp || caches.match('/index.html')))
-  );
+      return networkResp;
+    } catch (err) {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+      // fallback to index.html for navigation requests
+      if (event.request.mode === 'navigate') {
+        const fallback = await caches.match('/index.html');
+        if (fallback) return fallback;
+      }
+      throw err;
+    }
+  })());
 });

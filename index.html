@@ -24,7 +24,7 @@
         // Register service worker to cache fonts and assets for faster repeat loads
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
-                navigator.serviceWorker.register('/sw.js').then(function (reg) {
+                navigator.serviceWorker.register('./sw.js').then(function (reg) {
                     console.log('Service worker registered.', reg.scope);
                 }).catch(function (err) {
                     console.warn('Service worker registration failed:', err);
@@ -34,7 +34,7 @@
     </script>
 </head>
 <script>
-    let masterExample = ``;
+    let masterExample = `1b`;
     /*
     ||test using
     (180){16}

@@ -357,7 +357,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         // only push notes that are within the active window for rendering or effect
         if (
             _t < (currentSettings.distanceToMid - 2) / (currentSettings.speed * speedFactor) ||
-            (_t > currentSettings.effectDecayTime * (1 + (note.break ?? 0) * 0.5) + (note.holdTime ?? 0) && (triggered[note._id] || _t > currentSettings.effectDecayTime * (1 + (note.break ?? 0) * 0.5) + (note.holdTime ?? 0) + 3))
+            (_t > currentSettings.effectDecayTime * (1 + (note.break ?? 0) * 0.25) + (note.holdTime ?? 0) && (triggered[note._id] || _t > currentSettings.effectDecayTime * (1 + (note.break ?? 0) * 0.25) + (note.holdTime ?? 0) + 3))
         ) continue;
         tbuf.push({ note, t: _t });
     }
@@ -423,7 +423,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawTap(currentX, currentY, currentSize, color, note.ex ?? false, ctx, hbw, currentSettings, noteBaseSize, note);
             }
         }
-        if (_t >= 0 && _t <= currentSettings.effectDecayTime * (1 + (note.break ?? 0)) + (note.holdTime ?? 0)) {
+        if (_t >= 0 && _t <= currentSettings.effectDecayTime * (1 + (note.break ?? 0) * 0.25) + (note.holdTime ?? 0)) {
             let nang = (typeof note.pos === 'string' ? parseInt(note.pos[0]) : note.pos) - 1;
             nang = nang % 8;
             nang = nang < 0 ? 0 : nang;
@@ -436,7 +436,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 drawHoldEndEffect(currentX, currentY, (_t - note.holdTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
             } else {
                 if (!note.break) drawSimpleEffect(currentX, currentY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
-                drawStarEffect(currentX, currentY, _t / (1 + (note.break ?? 0) * 0.5) / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true, note);
+                drawStarEffect(currentX, currentY, _t / (1 + (note.break ?? 0) * 0.25) / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, true, note);
             }
         }
     }
@@ -697,7 +697,8 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
     const calAng = function (ang) { return { 'x': Math.sin(ang) * -1, 'y': Math.cos(ang) } };
 
     function ani1(x) {
-        return Math.log(99 * x + 1) / Math.log(100);
+        let a = Math.log(99 * x + 1) / Math.log(100);
+        return x >= 1 ? 1 : (x <= 0 ? 0 : a);
     }
 
     function drawRoundedStar(ctx, cx, cy, r, color, rotation = 0, cornerRadius = 8) {
@@ -824,13 +825,12 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
         ctx.stroke();
         ctx.shadowBlur = r * 0.08;
         ctx.shadowColor = shadowColor;
-        for (let i = 0; i < 3; i++) ctx.stroke();
+        ctx.stroke();
 
         // inner small shape: use a smaller corner radius to avoid overlap
         const innerRadius = Math.max(0, Math.min(cornerRadius * 0.6, r * 0.35));
         drawRoundedPolygon(smolVerts, innerRadius);
         ctx.stroke();
-        for (let i = 0; i < 3; i++) ctx.stroke();
         ctx.restore();
     }
 
@@ -857,23 +857,22 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
     const baseAngle = Math.PI / 8; // 初始角度
     const count = 8; // 總共 8 顆星星
     if (note.break) {
-        console.log(sizeFactor);
         const radius = s * ani1(sizeFactor);
         drawBreakRoundedStar(
             ctx,
             x,
             y,
-            radius * 2.5,
+            radius * 2,
             '#FFFFC2',
             '#F7FB7A',
             baseAngle,
-            radius * 0.416,
+            radius * 0.3328,
             1 - sizeFactor
         );
+        const offset = (ani1(sizeFactor) + 1.25) * Math.sin(sizeFactor * Math.PI * 0.75) * s * -1.15;
         for (let i = 0; i < 2; i++) {
             let localAngle = baseAngle + i * Math.PI;
             const ang = calAng(localAngle - Math.PI * ani1(sizeFactor));
-            const offset = (ani1(sizeFactor) + 2) * s * -0.75;
             drawBreakRoundedStar(
                 ctx,
                 x + offset * ang.x,
@@ -883,13 +882,12 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
                 '#F7FB7A',
                 baseAngle,
                 radius * 0.15,
-                1 - sizeFactor
+                Math.max(1 - sizeFactor * 1.25, 0)
             );
         }
         for (let i = 0; i < 2; i++) {
             let localAngle = baseAngle + (i + 0.5) * Math.PI;
             const ang = calAng(localAngle + Math.PI * ani1(sizeFactor));
-            const offset = (ani1(sizeFactor) + 2) * s * -0.75;
             drawBreakRoundedStar(
                 ctx,
                 x + offset * ang.x,
@@ -899,7 +897,7 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
                 '#F7FB7A',
                 baseAngle,
                 radius * 0.225,
-                1 - sizeFactor
+                Math.max(1 - sizeFactor * 1.25, 0)
             );
         }
     } else {

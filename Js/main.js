@@ -7,7 +7,7 @@ export const defaultSettings = {
     'distanceToMid': 0.3,
     'roundStroke': true,
     'noteSize': 0.09,
-    'speed': 6,
+    'speed': 5.5,
     'pinkStar': false,
     'touchSpeed': 2,
     'slideSpeed': 0,
@@ -22,12 +22,12 @@ export const defaultSettings = {
     'disableSensorWhenPlaying': true,
     'lineWidthFactor': 0.8,
     'noNoteArc': false,
-    'middleDisplay': 2,
+    'middleDisplay': 2, // 0 none, 1 combo, 2 score (0.00 - 101.00)
     'maxSlideOnScreenCount': 200,
     'showFpsCounter': false,
     'audioZoom': 200,
     'showPerfBreakdown': false,
-    'backgroundDarkness': 0.5,
+    'backgroundDarkness': 0.7,
     'showBgMask': true,
     'useImgSkin': true,
     'mainColor': '#444e5d',
@@ -703,6 +703,36 @@ async function triggerSave(data) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showNotification('檔案已下載！'); // <-- 在下載後顯示通知
+
+    // 如果瀏覽器支援 showOpenFilePicker，提示使用者選取剛下載的檔案以便未來可以直接覆寫
+    // 注意：只有在使用者互動（例如按下儲存）觸發時才會開啟檔案選擇器，並且需在 secure context
+    (async function offerOpenForOverwrite() {
+        try {
+            if (typeof window.showOpenFilePicker === 'function') {
+                const ok = confirm('要選取剛剛下載的 maidata 檔案以便日後直接覆寫嗎？(若要覆寫，請選取該檔案)');
+                if (!ok) return;
+                try {
+                    const handles = await window.showOpenFilePicker({
+                        multiple: false,
+                        types: [{ description: 'Maidata', accept: { 'text/plain': ['.txt', '.maidata'] } }],
+                        excludeAcceptAllOption: false
+                    });
+                    if (handles && handles.length > 0) {
+                        maidataFileHandle = handles[0];
+                        try {
+                            if (typeof maidataFileHandle.requestPermission === 'function') {
+                                await maidataFileHandle.requestPermission({ mode: 'readwrite' });
+                            }
+                        } catch (permErr) { /* ignore */ }
+                        showNotification('已指定檔案，未來儲存會嘗試直接覆寫該檔案');
+                    }
+                } catch (pickerErr) {
+                    console.warn('選取檔案被取消或失敗', pickerErr);
+                    showNotification('未指定覆寫檔案');
+                }
+            }
+        } catch (e) { console.warn('offerOpenForOverwrite error', e); }
+    })();
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -811,7 +841,18 @@ document.addEventListener('DOMContentLoaded', function () {
             removeEventListener(name, cb) { if (!listeners[name]) return; listeners[name] = listeners[name].filter(f => f !== cb); },
             load() { if (bgmEl && bgmEl.src) fetchAndDecode(bgmEl.src); },
             play() {
-                if (!fullAudioBuffer) return Promise.reject(new Error('No audio loaded'));
+                if (!fullAudioBuffer) {
+                    if (bgmEl && bgmEl.src) {
+                        const k = setInterval(() => {
+                            if (fullAudioBuffer) {
+                                this.play();
+                                setTimeout(() => { clearInterval(k); }, 100);
+                            }
+                        }, 100);
+                    } else {
+                        return Promise.reject(new Error('No audio loaded'));
+                    }
+                }
                 return ensureAudioUnlocked().then(() => {
                     // stop any existing source and capture offset
                     stopSource(true);
@@ -3474,6 +3515,3 @@ async function getImgs() {
     console.log('Images loaded:', images);
     return images;
 }
-
-// Start loading in background; populate `noteImages` when ready.
-//getImgs().catch(err => console.error('getImgs failed:', err));
