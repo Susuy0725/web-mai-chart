@@ -904,7 +904,7 @@ body.layout-minimized #bgMask {
 
 .settings-bookmark-sidebar .bookmark-btn.active {
     font-weight: 600;
-    box-shadow: 8px 0 4px -4px var(--main-color) inset;
+    box-shadow: 8px 0 0 -4px var(--main-color) inset;
 }
 
 .settings-bookmark-content {

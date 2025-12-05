@@ -643,7 +643,7 @@ export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSett
     ctx.translate(x, y);
     ctx.rotate(Math.PI / 8);
     for (let i = 0; i < 4; i++) {
-        ctx.drawImage(noteImages.star_eff, -s * cap_sizeFactor * 2.75, - s * (1 - cap_sizeFactor) * 0.75, s * 2.75, s * (1 - cap_sizeFactor) * 1.75);
+        ctx.drawImage(noteImages.star_eff, -s * (0.75 - cap_sizeFactor) * 2.75, - s * (0.75 - cap_sizeFactor) * 0.75, s * 2.75, s * (1 - cap_sizeFactor) * 1.75);
         // ctx.drawImage(noteImages.star_eff, -s , - s , s, s);
         ctx.rotate(Math.PI / 2);
     }

@@ -31,13 +31,12 @@ export const defaultSettings = {
     'showBgMask': true,
     'useImgSkin': true,
     'mainColor': '#444e5d',
-    'playMode': false,
     'debug': false,
     'hires': true,
     'disablePreview': false,
     'disablePreviewAtAudio': false,
     'deviceAudioOffset': 0,
-    'noteSkin': 1,// 0 default ,1 Deluxe
+    'noteSkin': 1, // 0 default ,1 Deluxe
     'disableSyntaxErrorNotify': true,
     'hideBgAndVideoWhenPaused': true,
 };
@@ -616,13 +615,20 @@ export async function downloadOffline() {
     try {
         // app shell
         const core = [
-            './', './index.html', './Styles/main.css', './Js/main.js', './Js/render.js'
+            './', './index.html',
+            './Styles/main.css',
+            './Js/main.js',
+            './Js/render.js',
+            './Js/decode.js',
         ];
 
         // fonts (conservative list)
         const fonts = [
             './Fonts/Inter.ttf',
             './Fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf',
+            './Fonts/Arimo-Bold.ttf',
+            './Fonts/ChironGoRoundTC-VariableFont_wght.ttf',
+            './Fonts/SUSE-VariableFont_wght.ttf',
         ];
 
         // sounds derived from soundFiles if available
@@ -779,18 +785,52 @@ async function triggerSave(data) {
     // 1. 序列化文字    
     function serializeMaidata(dataObj) {
         const lines = [];
-        for (const key in dataObj) {
-            // 忽略沒有內容的難度
-            if ((key.includes("des_") || key.includes("lv_") || key.includes("inote_")) && !dataObj[key]) continue;
+
+        // Preferred metadata order first
+        const metaOrder = ['artist', 'title', 'first', 'des', 'wholebpm', 'bpm'];
+        for (const k of metaOrder) {
+            if (Object.prototype.hasOwnProperty.call(dataObj, k)) {
+                const v = dataObj[k];
+                lines.push(`&${k}=${v ?? ''}`);
+            }
+        }
+
+        // Then any other non-difficulty keys (preserve insertion order for remaining keys)
+        for (const key of Object.keys(dataObj)) {
+            if (metaOrder.includes(key)) continue;
+            if (/^(des_|lv_|inote_)/.test(key)) continue; // skip difficulty keys for now
             lines.push(`&${key}=${dataObj[key] ?? ''}`);
-            console.log(key);
-        };
+        }
+
+        // Separate metadata from per-difficulty blocks with an empty line if any difficulty exists
+        let addedDiff = false;
+        for (let i = 1; i <= 7; i++) {
+            const lvk = `lv_${i}`;
+            const desk = `des_${i}`;
+            const inok = `inote_${i}`;
+            const lv = dataObj[lvk];
+            const desV = dataObj[desk];
+            const inV = dataObj[inok];
+
+            // Skip empty difficulty blocks (keep original behavior)
+            if ((lv === undefined || lv === '' || lv === null) && (desV === undefined || desV === '' || desV === null) && (inV === undefined || inV === '' || inV === null)) {
+                continue;
+            }
+
+            if (!addedDiff) {
+                lines.push('');
+                addedDiff = true;
+            }
+
+            if (!(lv === undefined || lv === '' || lv === null)) lines.push(`&${lvk}=${lv}`);
+            if (!(desV === undefined || desV === '' || desV === null)) lines.push(`&${desk}=${desV}`);
+            if (!(inV === undefined || inV === '' || inV === null)) lines.push(`&${inok}=${inV}`);
+        }
+
         return lines.join('\n');
     }
 
     const text = serializeMaidata(data);
-
-    console.log(text);
 
     // 2. 如果已經有 File System Access Handlers
     if (directoryHandle && maidataFileHandle && 'createWritable' in maidataFileHandle) {
@@ -1540,10 +1580,132 @@ document.addEventListener('DOMContentLoaded', function () {
             // 先隱藏選單
             allDropdowns.forEach(menu => menu.classList.add('hide'));
 
+            // 回退檔案選擇器：建立一個可重用的 fallback 函式
+            function openFilePickerFallback() {
+                // Creates a hidden file input and processes selected files similarly to the existing fallback
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.multiple = true;
+                fileInput.accept = '*';
+                fileInput.style.display = 'none';
+                document.body.appendChild(fileInput);
+
+                fileInput.addEventListener('change', async (ev) => {
+                    const files = Array.from(ev.target.files || []);
+                    if (files.length === 0) {
+                        showNotification('未選取任何檔案');
+                        fileInput.remove();
+                        return;
+                    }
+
+                    // Reuse existing processing logic from the old fallback branch
+                    try {
+                        abortBgAndVid();
+
+                        let foundMaidata = null;
+                        let foundAudio = null;
+                        let foundPV = null;
+
+                        for (const f of files) {
+                            const name = (f.name || '').toLowerCase();
+                            if (!foundMaidata && (name.startsWith('maidata') || name.endsWith('.txt') || name.includes('maidata.'))) {
+                                foundMaidata = f;
+                            }
+                            if (!foundAudio && ((f.type && f.type.startsWith('audio/')) || name.startsWith('track.') || name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg'))) {
+                                foundAudio = f;
+                            }
+                            if (!foundPV && name.startsWith('pv.')) {
+                                foundPV = f;
+                            }
+                            if (foundMaidata && foundAudio && foundPV) break;
+                        }
+
+                        if (foundAudio) {
+                            const reader = new FileReader();
+                            reader.onload = function (e2) {
+                                audioCtx.decodeAudioData(e2.target.result)
+                                    .then(buffer => {
+                                        fullAudioBuffer = buffer;
+                                        const objectURL = URL.createObjectURL(foundAudio);
+                                        bgm.src = objectURL;
+                                        bgm.load();
+                                    })
+                                    .catch(error => console.error('解碼音訊資料時發生錯誤:', error));
+                            };
+                            reader.onerror = function (err) { console.error('讀取音訊檔失敗:', err); };
+                            reader.readAsArrayBuffer(foundAudio);
+                        }
+
+                        if (foundMaidata) {
+                            const reader2 = new FileReader();
+                            reader2.onload = function (e3) {
+                                maidata = e3.target.result;
+                                data = parseMaidataToJson(maidata);
+                                settings.musicDelay = parseFloat(data.first ?? '0');
+                                editor.value = getNowDiff(settings.nowDiff);
+                                currentTimelineValue = 0;
+                                controls.timeline.value = 0;
+                                updateTimelineVisual(0);
+                                startTime = Date.now();
+                                processChartData();
+                                diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : '');
+                            };
+                            reader2.readAsText(foundMaidata);
+                        } else if (foundAudio && !foundMaidata) {
+                            maidata = 'first=0\ninote=//EASY\n';
+                            data = parseMaidataToJson(maidata);
+                            settings.musicDelay = parseFloat(data.first ?? '0');
+                            editor.value = getNowDiff(settings.nowDiff);
+                            currentTimelineValue = 0;
+                            controls.timeline.value = 0;
+                            updateTimelineVisual(0);
+                            startTime = Date.now();
+                            processChartData();
+                            diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : '');
+                            showNotification('已載入音訊檔案，並為其創建了一個新的空譜面（回退模式）');
+                        } else {
+                            showNotification('未在所選檔案中找到音訊或譜面檔。請手動選取');
+                        }
+
+                        // PV
+                        try {
+                            const bgVideoEl = document.getElementById('backgroundVideo');
+                            if (foundPV && bgVideoEl) {
+                                if (bgVideoEl.src) try { URL.revokeObjectURL(bgVideoEl.src); } catch (e) { }
+                                const pvUrl = URL.createObjectURL(foundPV);
+                                bgVideoEl.src = pvUrl;
+                                bgVideoEl.load();
+                                try { bgVideoEl.play().catch(() => { bgVideoEl.muted = true; bgVideoEl.play().catch(() => { }); }); } catch (e) { }
+                                bgVideoEl.style.display = '';
+                            }
+                        } catch (e) { console.error('回退模式：載入 PV 檔案時發生錯誤', e); }
+
+                        // try to find bg.* and set as background
+                        try {
+                            const bgImgEl = document.getElementById('bgImg');
+                            const bgFile = files.find(f => { const n = (f.name || '').toLowerCase(); return n.startsWith('bg.') || n === 'bg'; });
+                            if (bgFile && bgImgEl) {
+                                if (bgImgEl.src) try { URL.revokeObjectURL(bgImgEl.src); } catch (e) { }
+                                bgImgEl.src = URL.createObjectURL(bgFile);
+                                bgImgEl.style.display = '';
+                            }
+                        } catch (e) { console.warn('set bg from fallback files failed', e); }
+
+                    } catch (e) {
+                        console.error('fallback file handler error', e);
+                    } finally {
+                        fileInput.remove();
+                    }
+                });
+
+                // Trigger the file picker
+                fileInput.click();
+            }
+
             if ('showDirectoryPicker' in window) {
                 (async () => {
                     try {
-                        directoryHandle = await window.showDirectoryPicker();
+                        directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
                         maidataFileHandle = null;
                         audioFileHandle = null;
                         let pvFileHandle = null;
@@ -1723,144 +1885,22 @@ document.addEventListener('DOMContentLoaded', function () {
                             showNotification("在選擇的資料夾中找不到有效的音訊或譜面檔案。");
                         }
                     } catch (err) {
+                        // If the user cancelled the directory picker, fall back to file input picker
+                        if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError' || err.name === 'NotFoundError')) {
+                            console.log('Directory picker aborted or permission denied by user:', err.name, err.message, err.code);
+                            try { showNotification('已取消開啟資料夾，改以檔案選取'); } catch (e) { }
+                            openFilePickerFallback();
+                            try { openFilePickerFallback(); } catch (e) { console.warn('fallback picker failed', e); }
+                            return;
+                        }
                         console.error("開啟資料夾失敗:", err);
-                        // 如果選擇資料夾失敗，也要確保音訊停止並清除
-                        play.pauseBoth(controls.play);
+                        try { play.pauseBoth(controls.play); } catch (e) { }
                         showNotification("開啟資料夾失敗。");
                     }
                 })();
             } else {
-                // 回退方案：iOS Safari 等不支援 showDirectoryPicker 時，使用多選檔案輸入
-                // 讓使用者一次選取可能包含音訊與 maidata 的檔案
-                const fileInput = document.createElement('input');
-                fileInput.type = 'file';
-                fileInput.multiple = true;
-                fileInput.accept = '*';
-                fileInput.style.display = 'none';
-                document.body.appendChild(fileInput);
-
-                fileInput.addEventListener('change', async (ev) => {
-                    const files = Array.from(ev.target.files || []);
-                    if (files.length === 0) {
-                        showNotification('未選取任何檔案');
-                        fileInput.remove();
-                        return;
-                    }
-
-                    abortBgAndVid();
-
-                    // 嘗試在所選檔案中尋找 maidata 與 audio
-                    let foundMaidata = null;
-                    let foundAudio = null;
-                    let foundPV = null;
-
-                    for (const f of files) {
-                        const name = (f.name || '').toLowerCase();
-                        if (!foundMaidata && (name.startsWith('maidata') || name.endsWith('.txt') || name.includes('maidata.'))) {
-                            foundMaidata = f;
-                        }
-                        if (!foundAudio && (f.type && f.type.startsWith('audio/') || name.startsWith('track.') || name.endsWith('.mp3') || name.endsWith('.wav') || name.endsWith('.ogg'))) {
-                            foundAudio = f;
-                        }
-                        // 檢查 pv.* 檔案
-                        if (!foundPV && name.startsWith('pv.')) {
-                            foundPV = f;
-                        }
-                        // 只有在 maidata, audio 與 pv 都找到時才跳出，避免漏掉 PV
-                        if (foundMaidata && foundAudio && foundPV) break;
-                    }
-
-                    // 處理音訊檔
-                    if (foundAudio) {
-                        const audioFile = foundAudio;
-                        const reader = new FileReader();
-                        reader.onload = function (e2) {
-                            audioCtx.decodeAudioData(e2.target.result)
-                                .then(buffer => {
-                                    fullAudioBuffer = buffer;
-                                    const objectURL = URL.createObjectURL(audioFile);
-                                    bgm.src = objectURL;
-                                    bgm.load();
-                                    console.log("回退模式：音訊檔已載入");
-                                })
-                                .catch(error => console.error("解碼音訊資料時發生錯誤:", error));
-                        };
-                        reader.onerror = function (err) {
-                            console.error('讀取音訊檔失敗:', err);
-                        };
-                        reader.readAsArrayBuffer(audioFile);
-                    }
-
-                    // 處理 maidata
-                    if (foundMaidata) {
-                        const maidataFile = foundMaidata;
-                        const reader2 = new FileReader();
-                        reader2.onload = function (e3) {
-                            maidata = e3.target.result;
-                            data = parseMaidataToJson(maidata);
-                            settings.musicDelay = parseFloat(data.first ?? "0");
-                            editor.value = getNowDiff(settings.nowDiff);
-                            currentTimelineValue = 0;
-                            controls.timeline.value = 0;
-                            updateTimelineVisual(0);
-                            startTime = Date.now();
-                            processChartData();
-                            diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : "");
-                            //showNotification("回退模式：Maidata 檔案已載入");
-                        };
-                        reader2.readAsText(maidataFile);
-                    } else if (foundAudio && !foundMaidata) {
-                        // 有音訊但沒有譜面，建立空的 maidata
-                        maidata = "first=0\ninote=//EASY\n";
-                        data = parseMaidataToJson(maidata);
-                        settings.musicDelay = parseFloat(data.first ?? "0");
-                        editor.value = getNowDiff(settings.nowDiff);
-                        currentTimelineValue = 0;
-                        controls.timeline.value = 0;
-                        updateTimelineVisual(0);
-                        startTime = Date.now();
-                        processChartData();
-                        diffDisplay.innerText = 'Difficulty: ' + diffName[settings.nowDiff - 1] + (data['lv_' + settings.nowDiff] ? (", LV: " + data['lv_' + settings.nowDiff]) : "");
-                        showNotification("已載入音訊檔案，並為其創建了一個新的空譜面（回退模式）");
-                    } else {
-                        showNotification('未在所選檔案中找到音訊或譜面檔。請手動選取');
-                    }
-
-                    // 如果找到 PV 檔案，載入至 #backgroundVideo
-                    try {
-                        const bgVideoEl = document.getElementById('backgroundVideo');
-                        if (foundPV && bgVideoEl) {
-                            if (bgVideoEl.src) try { URL.revokeObjectURL(bgVideoEl.src); } catch (e) { }
-                            const pvUrl = URL.createObjectURL(foundPV);
-                            bgVideoEl.src = pvUrl;
-                            bgVideoEl.load();
-                            bgVideoEl.play().catch(e => { try { bgVideoEl.muted = true; bgVideoEl.play().catch(() => { }); } catch (e) { } });
-                            bgVideoEl.style.display = '';
-                            console.log('回退模式：已載入 PV 檔案。');
-                        }
-                    } catch (e) {
-                        console.error('回退模式：載入 PV 檔案時發生錯誤', e);
-                    }
-
-                    fileInput.remove();
-                    // 嘗試從所選檔案中尋找 bg.* 圖片並載入到 #bgImg
-                    try {
-                        const bgImgEl = document.getElementById('bgImg');
-                        const bgFile = files.find(f => {
-                            const n = (f.name || '').toLowerCase();
-                            return n.startsWith('bg.') || n === 'bg';
-                        });
-                        if (bgFile && bgImgEl) {
-                            if (bgImgEl.src) try { URL.revokeObjectURL(bgImgEl.src); } catch (e) { }
-                            bgImgEl.src = URL.createObjectURL(bgFile);
-                            bgImgEl.style.display = '';
-                        }
-                    } catch (e) { console.warn('set bg from fallback files failed', e); }
-                });
-
-                // 觸發選檔（必須在使用者互動觸發中呼叫，這個分支本身在點擊事件中）
-                fileInput.click();
-                // 不再顯示原本的提示，改用實際回退流程
+                // If showDirectoryPicker is not supported, use the fallback file picker
+                openFilePickerFallback();
             }
         } else if (target.dataset.action === 'open-audio') {
             handleFileUpload('audio/*', (files) => { // <--- 將參數名稱改為 `files`
@@ -2540,7 +2580,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         } else {
                             opt.value = option; opt.textContent = option;
                         }
-                        console.log('dropdown option', opt.value, currentValue);
                         if (opt.value == currentValue) opt.selected = true;
                         input.appendChild(opt);
                     });
@@ -3127,6 +3166,7 @@ document.addEventListener('DOMContentLoaded', function () {
         audioCtx2d.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
         audioCtx2d.strokeStyle = "#00000060";
         audioCtx2d.lineWidth = 1;
+        const aw = audioCanvas.width;
         const ahw = audioCanvas.width / 2;
         let sampleRate = 44100;
 
@@ -3151,7 +3191,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 case "slice": {
                     for (let j = 0; j < mark.repeat; j++) {
                         const x = ahw + (mark.time / 1000 + j * (60 / ((mark.slice / 4) * mark.bpm)) - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
-                        if (x > audioCanvas.width || x < 0) continue;
+                        if (x > aw || x < 0) continue;
                         audioCtx2d.beginPath();
                         audioCtx2d.strokeStyle = "#ffffffbf";
                         audioCtx2d.lineWidth = (j === 0 ? 5 : 3);
@@ -3164,16 +3204,24 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 case "bpm": {
                     audioCtx2d.setLineDash([]);
-                    const checkA = (currentTimelineValue - settings.musicDelay) * sampleRate / zoom > audioCanvas.width / 2;
-                    for (let j = 0; j < (mark.repeat === undefined ? 100 : mark.repeat); j++) {
-                        let x = ahw + ((mark.time + (240000 / mark.bpm) * (j - (checkA ? 50 : 0))) / 1000 - (currentTimelineValue % (checkA ? 240 / mark.bpm : Infinity)) + settings.musicDelay) * sampleRate / zoom;
-                        if (x > audioCanvas.width || x < 0) continue;
+                    const checkA = (currentTimelineValue - settings.musicDelay - mark.time / 1000) * sampleRate / zoom > ahw && (mark.repeat === undefined || mark.repeat === null);
+                    const l = Math.floor(aw / ((240 / mark.bpm) * sampleRate / zoom)) + 1;
+                    const fl = Math.floor(l / 2);
+                    //const endp = 
+                    for (let j = 0; j < ((mark.repeat === undefined || mark.repeat === null) ? l : mark.repeat); j++) {
+                        let x = ahw + (
+                            ((checkA ? mark.time % (240000 / mark.bpm) : mark.time) + (240000 / mark.bpm) * (j - (checkA ? fl : 0))) / 1000
+                            - (currentTimelineValue % (checkA ? (240 / mark.bpm) : Infinity))
+                            + settings.musicDelay) * sampleRate / zoom;
+
+                        if ((x > aw || x < 0)/* && (x > endp)*/) continue;
                         audioCtx2d.beginPath();
                         audioCtx2d.strokeStyle = j === 0 ? "#ded300ff" : "#fff874bf";
                         audioCtx2d.lineWidth = j === 0 ? 3 : 2;
                         audioCtx2d.moveTo(x, 0);
                         audioCtx2d.lineTo(x, audioCanvas.height);
                         audioCtx2d.stroke();
+                        audioCtx2d.closePath();
                     }
                     break;
                 }
@@ -3566,8 +3614,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    debugBtn.addEventListener('click', function () {
-
+    debugBtn.addEventListener('click', async function () {
+        try {
+            const test = await window.showDirectoryPicker({ mode: 'readwrite' });
+            console.log('Directory picked:', test);
+        } catch (err) {
+            console.error('Error picking directory:', err);
+        }
     });
 
     function debugText() {

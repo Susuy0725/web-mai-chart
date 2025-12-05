@@ -151,7 +151,6 @@ export function simai_decode(_data) {
 
     // 基本 note 解析（依據逗號分隔，每筆 note 記錄原始 pos 與時間）
     let sliceRepeat = 0;
-    let bpmRepeat = 0;
 
     for (let i = 0; i < dataTemp.length; i++) {
         let data = dataTemp[i];
@@ -193,7 +192,10 @@ export function simai_decode(_data) {
 
             if (lastbpm !== bpm) {
                 const lastBpmMark = marks.findLastIndex(m => m.type === "bpm" && m.bpm !== bpm);
-                if (lastBpmMark > -1) marks[lastBpmMark].repeat = Math.floor((timeSum - marks[lastBpmMark]?.time) / (lastbpm * 1000 / 240));
+                if (lastBpmMark > -1) {
+                    marks[lastBpmMark].repeat = Math.floor((timeSum - marks[lastBpmMark].time) / (240000 / lastbpm));
+                    if (marks[lastBpmMark].repeat === 0) marks[lastBpmMark].repeat = 1;
+                }
                 marks.push({ bpm, time: timeSum, type: "bpm" });
                 marks.push({ slice, bpm, time: timeSum, type: "slice" });
                 lastbpm = bpm;
@@ -305,7 +307,7 @@ export function simai_decode(_data) {
                     // parseParameter returns seconds; convert to milliseconds for existing callers
                     tempNote[i].holdTime = result.duration * 1000;
                 } catch (error) {
-                    console.error(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
+                    console.info(`at index: ${i}, data: ${JSON.stringify(tempNote[i])}`, error);
                     tempNote[i].invalid = true;
                     throw new Error(error.message);
                 }
