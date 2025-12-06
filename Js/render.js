@@ -469,7 +469,7 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             drawTouch(note.pos, 0.85, color, note.touch,
                 aniTouch(_t < 0 ? _t * - currentSettings.touchSpeed : 0),
                 (1 - (_t / (-1 / currentSettings.touchSpeed))) * 4,
-                note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note);
+                note.touchTime, _t, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note, tbuf2, _t);
         }
         if (_t >= 0 && _t <= currentSettings.effectDecayTime + (note.touchTime ?? 0)) {
             let ang = (note.pos - 0.5 - (touchAngleOffset[note.touch] || 0)) / 4 * Math.PI;
@@ -1416,6 +1416,7 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         // 計算從哪個 index 開始繪製，以避免大量不必要的迴圈
         const approxStartIndex = Math.max(0, Math.floor((_t_arrow * totalLen) / spacing) - 1);
         let b = (fin - 1) * bIncrementPer;
+        let wCount = 10;
         for (let i = fin - 1; i >= approxStartIndex; i -= 1 + wSlide * 0.25) {
             const lenAlong = (i + 0.5) * spacing * (1 - wSlide * 0.035);
             // 只有當在剩餘進度區段，才繪製
@@ -1429,15 +1430,27 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
                 currentCtx.translate(x, y);
                 currentCtx.rotate(angle);
                 if (wSlide) {
-                    currentCtx.beginPath();
-                    currentCtx.moveTo(arrowSize * 0.55, 0);
-                    currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * -0.4 - b);
-                    currentCtx.lineTo(0 - b / 2 + wSlide * arrowSize * 0.05, arrowSize * -0.4 - b + wSlide * arrowSize * 0.12);
-                    currentCtx.lineTo(arrowSize * 0.2, 0);
-                    currentCtx.lineTo(0 - b / 2 + wSlide * arrowSize * 0.05, arrowSize * 0.4 + b - wSlide * arrowSize * 0.12);
-                    currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * 0.4 + b);
-                    currentCtx.closePath();
-                    currentCtx.fill();
+                    if (settings.useImgSkin) {
+                        if ((wCount > 10 || wCount < 0)) return;
+                        const wImg = noteImages[(note.break ? 'wifi_break_' : (note.isDoubleSlide ? 'wifi_each_' : 'wifi_')) + wCount];
+                        if (!isImageReady(wImg)) return;
+                        currentCtx.shadowColor = "#00000000";
+                        currentCtx.rotate(-Math.PI * 0.38);
+                        currentCtx.drawImage(wImg,
+                            -bIncrementPer * wCount * 1.2 - arrowSize * 0.7, -arrowSize * 0.25 * wCount - arrowSize * 0.5, arrowSize * wImg.width * 0.012, arrowSize * wImg.height * 0.012
+                        );
+                        wCount--;
+                    } else {
+                        currentCtx.beginPath();
+                        currentCtx.moveTo(arrowSize * 0.55, 0);
+                        currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * -0.4 - b);
+                        currentCtx.lineTo(0 - b / 2 + wSlide * arrowSize * 0.05, arrowSize * -0.4 - b + wSlide * arrowSize * 0.12);
+                        currentCtx.lineTo(arrowSize * 0.2, 0);
+                        currentCtx.lineTo(0 - b / 2 + wSlide * arrowSize * 0.05, arrowSize * 0.4 + b - wSlide * arrowSize * 0.12);
+                        currentCtx.lineTo(arrowSize * 0.35 - b / 2, arrowSize * 0.4 + b);
+                        currentCtx.closePath();
+                        currentCtx.fill();
+                    }
                 } else {
                     if (settings.useImgSkin) {
                         if (!noteImages.slide) return;
@@ -1807,7 +1820,7 @@ export function drawHold(x, y, sizeFactor, color, ex, ang, l, ctx, hbw, currentS
     ctx.restore();
 }
 
-export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note = undefined) {
+export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdtime, t_touch, ctx, hw, hh, hbw, currentSettings, calAng, noteBaseSize, note = undefined, tbuf2 = [], _t) {
     opacity = Math.min(Math.max(opacity, 0), 1); // Clamp opacity
 
     let localColor = hexWithAlpha(color, opacity);
@@ -1869,9 +1882,9 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
 
             const color4 = [
                 `rgba(250,73,4,${opacity})`,
-                `rgba(0,141,244,${opacity})`,
                 `rgba(245, 238, 0, ${opacity})`,
                 `rgba(17, 167, 105, ${opacity})`,
+                `rgba(0,141,244,${opacity})`,
             ];
 
             ctx.beginPath();
@@ -1997,6 +2010,23 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     }
     ctx.shadowBlur = s * 0.2;
     ctx.shadowColor = `rgba(0, 0, 0, ${opacity})`;
+
+    const pp = tbuf2.filter(v => v.note.pos == pos && v.note.touch == type && v.t < 0);
+    if (pp.length > 1 && pp.findIndex(v => v.note.time < note.time) === -1) {
+        if (currentSettings.useImgSkin) {
+            if (!isImageReady(noteImages.touch_border_2)) return;
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.globalAlpha = opacity;
+            ctx.drawImage(noteImages.touch_border_2, -currentSize * 3.5, -currentSize * 3.5, currentSize * 7, currentSize * 7);
+            if (pp.length > 2) {
+                ctx.drawImage(noteImages.touch_border_3, -currentSize * 3.75, -currentSize * 3.75, currentSize * 7.5, currentSize * 7.5);
+            }
+            ctx.restore();
+        } else {
+
+        }
+    }
     // Draw 4 rotated copies (0, 90, 180, 270 degrees)
     for (let i = 0; i < 4; i++) {
         const rot = i * (Math.PI / 2);
