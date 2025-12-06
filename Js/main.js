@@ -3107,12 +3107,12 @@ document.addEventListener('DOMContentLoaded', function () {
     controls.f10.addEventListener('click', () => seek(10));
 
     controls.zoomIn.addEventListener('click', function (e) {
-        settings.audioZoom -= 50;
-        settings.audioZoom = Math.max(settings.audioZoom, 50)
+        settings.audioZoom -= 20;
+        settings.audioZoom = Math.max(settings.audioZoom, 10)
     });
 
     controls.zoomOut.addEventListener('click', function (e) {
-        settings.audioZoom += 50;
+        settings.audioZoom += 20;
         settings.audioZoom = Math.min(settings.audioZoom, 750)
     });
 
@@ -3156,15 +3156,17 @@ document.addEventListener('DOMContentLoaded', function () {
     let frameTime = 0, lastLoop = new Date(), thisLoop;
 
     function drawAudioWaveform() {
-        const zoom = settings.audioZoom;
+        // Guard against non-finite zoom values to avoid NaN in gradient math
+        const zoomRaw = Number(settings.audioZoom);
+        const zoom = Math.max(1, isFinite(zoomRaw) ? zoomRaw : 200);
         const audioCanvas = document.getElementById("audioRender");
         if (!audioCanvas) return;
         const audioCtx2d = audioCanvas.getContext("2d");
 
-        audioCanvas.lineJoin = settings.roundStroke ? 'round' : 'butt';
+        audioCanvas.lineJoin = 'butt';
 
         audioCtx2d.clearRect(0, 0, audioCanvas.width, audioCanvas.height);
-        audioCtx2d.strokeStyle = "#00000060";
+        audioCtx2d.strokeStyle = "#ffffff25";
         audioCtx2d.lineWidth = 1;
         const aw = audioCanvas.width;
         const ahw = audioCanvas.width / 2;
@@ -3172,7 +3174,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (fullAudioBuffer && bgm) {
             const pcmData = fullAudioBuffer.getChannelData(0);
-            sampleRate = fullAudioBuffer.sampleRate;
+            sampleRate = isFinite(fullAudioBuffer.sampleRate) && fullAudioBuffer.sampleRate > 0 ? fullAudioBuffer.sampleRate : 44100;
 
             for (let i = -ahw; i < ahw; i++) {
                 const data = pcmData[(Math.floor(i + currentTimelineValue * sampleRate / zoom)) * zoom];
@@ -3208,7 +3210,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     const l = Math.floor(aw / ((240 / mark.bpm) * sampleRate / zoom)) + 1;
                     const fl = Math.floor(l / 2);
                     //const endp = 
-                    for (let j = 0; j < ((mark.repeat === undefined || mark.repeat === null) ? l : mark.repeat); j++) {
+                    for (let j = 0; j < ((mark.repeat === undefined || mark.repeat === null) ? l + 1 : mark.repeat); j++) {
                         let x = ahw + (
                             ((checkA ? mark.time % (240000 / mark.bpm) : mark.time) + (240000 / mark.bpm) * (j - (checkA ? fl : 0))) / 1000
                             - (currentTimelineValue % (checkA ? (240 / mark.bpm) : Infinity))
@@ -3234,11 +3236,13 @@ document.addEventListener('DOMContentLoaded', function () {
             notes.forEach(note => {
                 const x = ahw + (note.time / 1000 - currentTimelineValue + settings.musicDelay) * sampleRate / zoom;
                 const y = (parseInt(note.pos) % 9 - 0.5) / 8 * audioCanvas.height;
-                if (x > audioCanvas.width || x < 0 - ((note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) return;
+                if (x > audioCanvas.width || x < 0 - ((note.hanabi ?? 0) * 0.3 + (note.slideTime ?? 0) + (note.holdTime ?? 0) + (note.delay ?? 0) + (note.touchTime ?? 0)) * sampleRate / zoom) return;
                 audioCtx2d.strokeStyle = note.break ? '#FF6C0C' : (note.isDoubleTapHold || note.isDoubleTouch || note.isDoubleSlide ? "#FFD900" : (note.star || note.touch || note.slide ? '#0089F4' : "#FF569B"));
                 audioCtx2d.lineWidth = 3;
                 audioCtx2d.beginPath();
                 if (note.touch) {
+                    // Build gradient only when coordinates are finite
+                    let d = null;
                     if (note.touchTime != null) {
                         audioCtx2d.lineWidth = 6;
                         const colorMap = ['#FA4904', '#F5EE00', '#11A769', '#008DF4'];
@@ -3251,20 +3255,50 @@ document.addEventListener('DOMContentLoaded', function () {
                             audioCtx2d.closePath();
                             audioCtx2d.stroke();
                         }
+                        if (note.hanabi) {
+                            if (isFinite(x) && isFinite(zoom) && isFinite(sampleRate)) {
+                                d = audioCtx2d.createLinearGradient(x + note.touchTime * sampleRate / zoom, 0, x + (note.touchTime + 0.3) * sampleRate / zoom, 0);
+                                d.addColorStop(0, '#ff2525');
+                                d.addColorStop(0.25, '#f8ff25a5');
+                                d.addColorStop(0.5, '#30ff2566');
+                                d.addColorStop(0.75, '#257cff34');
+                                d.addColorStop(1, '#ff25f000');
+                            }
+                            if (d) {
+                                audioCtx2d.fillStyle = d;
+                                audioCtx2d.fillRect(x + note.touchTime * sampleRate / zoom, 0, x + (note.touchTime + 0.3) * sampleRate / zoom, audioCanvas.height);
+                            }
+                        }
                     } else {
+                        if (note.hanabi) {
+                            if (isFinite(x) && isFinite(zoom) && isFinite(sampleRate)) {
+                                d = audioCtx2d.createLinearGradient(x, 0, x + sampleRate * 0.3 / zoom, 0);
+                                d.addColorStop(0, '#ff2525');
+                                d.addColorStop(0.25, '#f8ff25a5');
+                                d.addColorStop(0.5, '#30ff2566');
+                                d.addColorStop(0.75, '#257cff34');
+                                d.addColorStop(1, '#ff25f000');
+                            }
+                            if (d) {
+                                audioCtx2d.fillStyle = d;
+                                audioCtx2d.fillRect(x, 0, sampleRate * 0.3 / zoom, audioCanvas.height);
+                            }
+                        }
                         audioCtx2d.rect(x - 3, y - 3, 6, 6);
                     }
                 } else if (note.slide) {
                     if (slideOnAudioCount > settings.maxSlideOnScreenCount) return;
                     audioCtx2d.lineWidth = 6;
-                    audioCtx2d.setLineDash([8, 8]);
+                    audioCtx2d.setLineDash([6, 6]);
+                    audioCtx2d.font = "20px Arial";
                     const startY = (parseInt(note.chain ? notes[note.chainTarget].slideHead : note.slideHead) % 9 - 0.5) / 8 * audioCanvas.height;
+                    //audioCtx2d.fillText(`${note.chainTarget}`, x + 20, startY+10);
                     audioCtx2d.moveTo(x + note.delay * sampleRate / zoom, startY);
                     audioCtx2d.lineTo(x + (note.slideTime + note.delay) * sampleRate / zoom, startY);
                     slideOnAudioCount++;
                 } else if (note.star) {
-                    const outerRadius = 5, innerRadius = 2, numPoints = 5;
-                    for (let i = 0; i < numPoints * 2; i++) {
+                    const outerRadius = 5, innerRadius = 2.5, numPoints = 5;
+                    for (let i = 0; i < numPoints * 2 + 2; i++) {
                         const radius = i % 2 === 0 ? outerRadius : innerRadius;
                         const angle = Math.PI / numPoints * i - Math.PI / 2;
                         const currentX = x + radius * Math.cos(angle);
@@ -3276,16 +3310,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (note.holdTime != null) {
                         audioCtx2d.lineWidth = 6;
                         audioCtx2d.moveTo(x, y);
-                        audioCtx2d.lineTo(x + note.holdTime * sampleRate / zoom, y);
+                        audioCtx2d.lineTo(x + Math.max(note.holdTime * sampleRate / zoom, 5), y);
                     } else {
                         audioCtx2d.arc(x, y, 4, 0, 2 * Math.PI);
                     }
                 }
+
                 if (!(note.touch && note.touchTime != null)) {
-                    audioCtx2d.closePath();
+                    //audioCtx2d.closePath();
                     audioCtx2d.stroke();
-                    audioCtx2d.setLineDash([]);
                 }
+                audioCtx2d.setLineDash([]);
             });
         }
 

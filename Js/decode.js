@@ -534,6 +534,7 @@ export function simai_decode(_data) {
 
                     let newNote = {
                         ...base,
+                        UUID: crypto.randomUUID(),
                         time: tempNote[i].time,
                         slide: true,
                         slideHead: headIndex,
@@ -546,23 +547,28 @@ export function simai_decode(_data) {
                         // 若原本 sp.slideInfo[j] 有其他不想保留的欄位，這裡就只挑必要的塞
                     };
                     delete newNote.duration;
-
+                    
                     if (isNaN(newNote.pos) && newNote.pos) {
                         throw new Error("slide position isn't a number");
                     }
-
+                    
                     // 把 newNote 推到 tempData 裡
                     tempData.push(newNote);
-
+                    
                     // 同步更新 sp.slideInfo[j] 回質算好的 base（如果需要後續再用）
                     //sp.slideInfo[j] = base;
                 }
-
+                
                 // --- 4. 一次性把 tempData 全部插入 tempNote，就不用一筆筆 splice 了 ---
                 if (tempData.length > 0) {
                     // i 是原本外面那個迴圈的索引
                     // 把「從 i+1 開始」一次插入所有 newNote
                     tempNote.splice(i + 1, 0, ...tempData);
+
+                    for (let k = 0; k < tempData.length; k++) {
+                        const e = tempNote[i + 1 + k];
+                        e.chainTarget = tempNote[e.chainTarget].UUID;
+                    }
                 }
 
                 // --- 5. 處理原本要刪除的情況，再調整外層的 i 指標 ---
@@ -574,6 +580,7 @@ export function simai_decode(_data) {
                 // 原本最後要 i += sp.data.length - 1，這裡改成：
                 i += slideCount; // 直接跳過整組 slide 段
             }
+
 
             for (let flag in flags) {
                 if ((data.pos ?? '').includes(flag)) {
@@ -620,6 +627,10 @@ export function simai_decode(_data) {
                 else tapCounts++;
             }
             e._id = i;
+
+            if (e.chainTarget && typeof e.chainTarget === "string") {
+                e.chainTarget = tempNote.find(n => n.UUID === e.chainTarget)._id;
+            }
         }
     });
 

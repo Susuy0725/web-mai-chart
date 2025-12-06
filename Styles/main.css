@@ -86,7 +86,6 @@ body {
 #render,
 #audioRender {
     touch-action: none;
-
 }
 
 #render {
@@ -108,7 +107,7 @@ body {
     transition: width ease 0.5s, transform 0.3s, opacity 0.3s ease;
     transform: rotateX(0deg);
     transform-origin: 0% calc(100% + 80px);
-    background: #99999980;
+    background: #3e3e3edd;
 }
 
 .preview-control {
