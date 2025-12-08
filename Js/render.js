@@ -1850,22 +1850,29 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
         }
 
         if (holdtime && holdtime > 0) {
-            // strCh logic
-            /*const corners = [
-                { x_offset: 1, y_offset: -1, fill: `rgba(250,73,4,${opacity})` },
-                { x_offset: -1, y_offset: -1, fill: `rgba(0,141,244,${opacity})` },
-                { x_offset: 1, y_offset: 1, fill: `rgba(245,238,0,${opacity})` },
-                { x_offset: -1, y_offset: 1, fill: `rgba(17,167,105,${opacity})` }
-            ];
-            corners.forEach(corner => {
+            if (currentSettings.useImgSkin) {
+                // use canvas built-in alpha handling for image opacity
+                if (!(noteImages.touch && noteImages.touch_each && noteImages.touch_point_each && noteImages.touch_point)) return;
+                const touchImg = noteImages['touchhold_' + (stage + 1) % 4];
+                ctx.globalAlpha = opacity;
+                ctx.drawImage(touchImg, cx - currentSize * 1.5, cy - currentSize * 0.8 + effectiveDistance * 1.25, currentSize * 3, currentSize * 2);
+                if (stage === 3) ctx.drawImage(noteImages[note.isDoubleTouch ? 'touch_point_each' : 'touch_point'], cx - currentSize * 0.5, cy - currentSize * 0.5, currentSize, currentSize);
+            } else {
+                const color4 = [
+                    `rgba(250,73,4,${opacity})`,
+                    `rgba(245, 238, 0, ${opacity})`,
+                    `rgba(17, 167, 105, ${opacity})`,
+                    `rgba(0,141,244,${opacity})`,
+                ];
+
                 ctx.beginPath();
                 // Recalculate points based on cx, cy, effectiveDistance, and currentSize
-                const point1x = cx + effectiveDistance * corner.x_offset;
-                const point1y = cy + effectiveDistance * corner.y_offset;
-                const point2x = cx + effectiveDistance * corner.x_offset;
-                const point2y = cy + (effectiveDistance + currentSize * Math.SQRT2) * corner.y_offset; // Approx
-                const point3x = cx + (effectiveDistance + currentSize * Math.SQRT2) * corner.x_offset; // Approx
-                const point3y = cy + effectiveDistance * corner.y_offset;
+                const point1x = cx + effectiveDistance * 1;
+                const point1y = cy + effectiveDistance * -1;
+                const point2x = cx + effectiveDistance * 1;
+                const point2y = cy + (effectiveDistance + currentSize * Math.SQRT2) * -1; // Approx
+                const point3x = cx + (effectiveDistance + currentSize * Math.SQRT2) * 1; // Approx
+                const point3y = cy + effectiveDistance * -1;
 
                 ctx.moveTo(point1x, point1y);
                 ctx.lineTo(point2x, point2y); // These points define triangles/quads for corners
@@ -1873,43 +1880,15 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
                 ctx.closePath();
 
                 if (isFill) {
-                    ctx.fillStyle = corner.fill;
+                    ctx.fillStyle = color4[stage];
                     ctx.fill();
-                    ctx.strokeStyle = corner.fill; // Match stroke to fill for filled parts
+                    ctx.strokeStyle = color4[stage]; // Match stroke to fill for filled parts
                 }
                 ctx.stroke();
-            });*/
 
-            const color4 = [
-                `rgba(250,73,4,${opacity})`,
-                `rgba(245, 238, 0, ${opacity})`,
-                `rgba(17, 167, 105, ${opacity})`,
-                `rgba(0,141,244,${opacity})`,
-            ];
-
-            ctx.beginPath();
-            // Recalculate points based on cx, cy, effectiveDistance, and currentSize
-            const point1x = cx + effectiveDistance * 1;
-            const point1y = cy + effectiveDistance * -1;
-            const point2x = cx + effectiveDistance * 1;
-            const point2y = cy + (effectiveDistance + currentSize * Math.SQRT2) * -1; // Approx
-            const point3x = cx + (effectiveDistance + currentSize * Math.SQRT2) * 1; // Approx
-            const point3y = cy + effectiveDistance * -1;
-
-            ctx.moveTo(point1x, point1y);
-            ctx.lineTo(point2x, point2y); // These points define triangles/quads for corners
-            ctx.lineTo(point3x, point3y); // Adjust geometry for exact original shape
-            ctx.closePath();
-
-            if (isFill) {
-                ctx.fillStyle = color4[stage];
-                ctx.fill();
-                ctx.strokeStyle = color4[stage]; // Match stroke to fill for filled parts
+                if (isFill) ctx.strokeStyle = innerStrokeStyle; // Reset for center arc
+                if (stage === 3) _arc(cx, cy, currentSize * 0.15, ctx);
             }
-            ctx.stroke();
-
-            if (isFill) ctx.strokeStyle = innerStrokeStyle; // Reset for center arc
-            if (stage === 3) _arc(cx, cy, currentSize * 0.15, ctx);
 
         } else { // str logic (non-hold)
             if (currentSettings.useImgSkin) {
@@ -1929,24 +1908,6 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
                 ctx.lineTo(cx + currentSize * zs, cy - armLength - effectiveDistance * 0.25);
                 ctx.lineTo(cx - currentSize * zs, cy - armLength - effectiveDistance * 0.25);
                 ctx.closePath(); ctx.stroke();
-                /*// Left Triangle
-                ctx.beginPath();
-                ctx.moveTo(cx - effectiveDistance * 1.25, cy);
-                ctx.lineTo(cx - armLength - effectiveDistance * 0.25, cy - currentSize * zs);
-                ctx.lineTo(cx - armLength - effectiveDistance * 0.25, cy + currentSize * zs);
-                ctx.closePath(); ctx.stroke();
-                // Bottom Triangle
-                ctx.beginPath();
-                ctx.moveTo(cx, cy + effectiveDistance * 1.25);
-                ctx.lineTo(cx + currentSize * zs, cy + armLength + effectiveDistance * 0.25);
-                ctx.lineTo(cx - currentSize * zs, cy + armLength + effectiveDistance * 0.25);
-                ctx.closePath(); ctx.stroke();
-                // Right Triangle
-                ctx.beginPath();
-                ctx.moveTo(cx + effectiveDistance * 1.25, cy);
-                ctx.lineTo(cx + armLength + effectiveDistance * 0.25, cy - currentSize * zs);
-                ctx.lineTo(cx + armLength + effectiveDistance * 0.25, cy + currentSize * zs);
-                ctx.closePath(); ctx.stroke();*/
 
                 if (stage === 3) _arc(cx, cy, currentSize * 0.15, ctx);
             }
@@ -2011,15 +1972,15 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     ctx.shadowBlur = s * 0.2;
     ctx.shadowColor = `rgba(0, 0, 0, ${opacity})`;
 
-    const pp = tbuf2.filter(v => v.note.pos == pos && v.note.touch == type && v.t < 0);
-    if (pp.length > 1 && pp.findIndex(v => v.note.time < note.time) === -1) {
+    const filtered = tbuf2.filter(v => v.note.pos == pos && v.note.touch == type && v.t < 0);
+    if (filtered.length > 1 && filtered.findIndex(v => v.note.time < note.time) === -1) {
         if (currentSettings.useImgSkin) {
             if (!isImageReady(noteImages.touch_border_2)) return;
             ctx.save();
             ctx.translate(centerX, centerY);
             ctx.globalAlpha = opacity;
             ctx.drawImage(noteImages.touch_border_2, -currentSize * 3.5, -currentSize * 3.5, currentSize * 7, currentSize * 7);
-            if (pp.length > 2) {
+            if (filtered.length > 2) {
                 ctx.drawImage(noteImages.touch_border_3, -currentSize * 3.75, -currentSize * 3.75, currentSize * 7.5, currentSize * 7.5);
             }
             ctx.restore();
@@ -2029,7 +1990,7 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     }
     // Draw 4 rotated copies (0, 90, 180, 270 degrees)
     for (let i = 0; i < 4; i++) {
-        const rot = i * (Math.PI / 2);
+        const rot = i * (Math.PI / 2) + (currentSettings.useImgSkin && holdtime && holdtime > 0 ? -Math.PI / 4 : 0);
         ctx.save();
         ctx.translate(centerX, centerY);
         ctx.rotate(rot);

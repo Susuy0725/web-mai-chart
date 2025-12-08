@@ -222,9 +222,21 @@ const imgsToCreate = [
     ['touch_border_2',
         'png',
         'TouchSkins'],
-        ['touch_border_3',
+    ['touch_border_3',
         'png',
         'TouchSkins'],
+    ['touchhold_0',
+        'png',
+        'TouchHoldSkins'],
+    ['touchhold_1',
+        'png',
+        'TouchHoldSkins'],
+    ['touchhold_2',
+        'png',
+        'TouchHoldSkins'],
+    ['touchhold_3',
+        'png',
+        'TouchHoldSkins'],
 ];
 
 if (defaultSettings.debug) {
@@ -1190,6 +1202,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const speedAdd = document.getElementById('+0.25xSpeed');
     const speedMinus = document.getElementById('-0.25xSpeed');
     const fullscreenBtn = document.getElementById('fullscreen');
+    const lockProgressBtn = document.getElementById('lockProgress');
 
     if (settings.debug) {
         const a = document.getElementsByClassName('actions')[0];
@@ -3270,13 +3283,60 @@ document.addEventListener('DOMContentLoaded', function () {
     let filterStrength = 20;
     let frameTime = 0, lastLoop = new Date(), thisLoop;
 
+    // --- drawAudioWaveform caches & helpers ---
+    let _cachedAudioCanvas = null;
+    let _cachedAudioCtx2d = null;
+    let _cachedTouchGrad = null;
+    let _cachedTouchGradZoom = NaN;
+    const _cachedStarPathMap = new Map();
+    let _drawAudioFrameCounter = 0;
+    let _drawAudioTimeSum = 0;
+
+    function getStarPath(outerRadius = 5, innerRadius = 2.5, numPoints = 5) {
+        const key = `${outerRadius}_${innerRadius}_${numPoints}`;
+        if (_cachedStarPathMap.has(key)) return _cachedStarPathMap.get(key);
+        const p = new Path2D();
+        for (let i = 0; i < numPoints * 2 + 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = Math.PI / numPoints * i - Math.PI / 2;
+            const currentX = radius * Math.cos(angle);
+            const currentY = radius * Math.sin(angle);
+            if (i === 0) p.moveTo(currentX, currentY);
+            else p.lineTo(currentX, currentY);
+        }
+        _cachedStarPathMap.set(key, p);
+        return p;
+    }
+
+    function ensureTouchGradient(ctx, zoom, height) {
+        const z = isFinite(zoom) ? zoom : 200;
+        // Recreate gradient when zoom changes or canvas height changes
+        if (!_cachedTouchGrad || _cachedTouchGradZoom !== z || !_cachedAudioCanvas || (_cachedAudioCanvas && _cachedAudioCanvas.height !== height)) {
+            try {
+                _cachedTouchGrad = ctx.createLinearGradient(0, 0, -z * 100, height || (ctx.canvas && ctx.canvas.height) || 100);
+                _cachedTouchGrad.addColorStop(0, '#ff3874');
+                _cachedTouchGrad.addColorStop(1, 'rgba(255, 191, 81, 0)');
+                _cachedTouchGradZoom = z;
+            } catch (e) {
+                _cachedTouchGrad = null;
+                _cachedTouchGradZoom = NaN;
+            }
+        }
+        return _cachedTouchGrad;
+    }
+
     function drawAudioWaveform() {
-        // Guard against non-finite zoom values to avoid NaN in gradient math
+        const t0 = performance.now();
+        // Guard and cache DOM/context
         const zoomRaw = Number(settings.audioZoom);
         const zoom = Math.max(1, isFinite(zoomRaw) ? zoomRaw : 200);
         const audioCanvas = document.getElementById("audioRender");
         if (!audioCanvas) return;
-        const audioCtx2d = audioCanvas.getContext("2d");
+        if (_cachedAudioCanvas !== audioCanvas) {
+            _cachedAudioCanvas = audioCanvas;
+            _cachedAudioCtx2d = null;
+        }
+        const audioCtx2d = _cachedAudioCtx2d || (_cachedAudioCtx2d = audioCanvas.getContext("2d"));
 
         audioCanvas.lineJoin = 'butt';
 
@@ -3284,19 +3344,27 @@ document.addEventListener('DOMContentLoaded', function () {
         audioCtx2d.strokeStyle = "#ffffff25";
         audioCtx2d.lineWidth = 1;
         const aw = audioCanvas.width;
-        const ahw = audioCanvas.width / 2;
+        const ah = audioCanvas.height;
+        const ahw = Math.floor(aw / 2);
         let sampleRate = 44100;
 
         if (fullAudioBuffer && bgm) {
             const pcmData = fullAudioBuffer.getChannelData(0);
             sampleRate = isFinite(fullAudioBuffer.sampleRate) && fullAudioBuffer.sampleRate > 0 ? fullAudioBuffer.sampleRate : 44100;
 
-            for (let i = -ahw; i < ahw; i++) {
-                const data = pcmData[(Math.floor(i + currentTimelineValue * sampleRate / zoom)) * zoom];
+            // Map each canvas pixel to an audio sample index (centered at currentTimelineValue)
+            const samplesPerPixel = sampleRate / zoom;
+            //const centerSample = Math.floor(currentTimelineValue * samplesPerPixel) * zoom;
+            const downSample = 2;
+            for (let px = 0; px < aw; px++) {
+                const i = px - ahw;
+                // const data = pcmData[(Math.floor(i + currentTimelineValue * sampleRate / zoom)) * zoom];
+                const sampleIdx = Math.floor((i + currentTimelineValue * samplesPerPixel) / downSample) * downSample * zoom;
+                const data = (sampleIdx >= 0 && sampleIdx < pcmData.length) ? pcmData[sampleIdx] : 0;
                 audioCtx2d.beginPath();
-                const y = (data + 1) * audioCanvas.height / 2;
-                const x = i + ahw;
-                audioCtx2d.moveTo(x, audioCanvas.height - y);
+                const y = (data + 1) * ah / 2;
+                const x = px;
+                audioCtx2d.moveTo(x, ah - y);
                 audioCtx2d.lineTo(x, y + 1);
                 audioCtx2d.stroke();
             }
@@ -3413,14 +3481,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     slideOnAudioCount++;
                 } else if (note.star) {
                     const outerRadius = 5, innerRadius = 2.5, numPoints = 5;
-                    for (let i = 0; i < numPoints * 2 + 2; i++) {
-                        const radius = i % 2 === 0 ? outerRadius : innerRadius;
-                        const angle = Math.PI / numPoints * i - Math.PI / 2;
-                        const currentX = x + radius * Math.cos(angle);
-                        const currentY = y + radius * Math.sin(angle);
-                        if (i === 0) audioCtx2d.moveTo(currentX, currentY);
-                        else audioCtx2d.lineTo(currentX, currentY);
+                    const path = getStarPath(outerRadius, innerRadius, numPoints);
+                    audioCtx2d.save();
+                    audioCtx2d.translate(x, y);
+                    try { audioCtx2d.stroke(path); } catch (e) { /* fallback to manual path */
+                        for (let i = 0; i < numPoints * 2 + 2; i++) {
+                            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                            const angle = Math.PI / numPoints * i - Math.PI / 2;
+                            const currentX = x + radius * Math.cos(angle);
+                            const currentY = y + radius * Math.sin(angle);
+                            if (i === 0) audioCtx2d.moveTo(currentX, currentY);
+                            else audioCtx2d.lineTo(currentX, currentY);
+                        }
                     }
+                    audioCtx2d.restore();
                 } else {
                     if (note.holdTime != null) {
                         audioCtx2d.lineWidth = 6;
@@ -3445,6 +3519,19 @@ document.addEventListener('DOMContentLoaded', function () {
         audioCtx2d.moveTo(ahw, 0);
         audioCtx2d.lineTo(ahw, audioCanvas.height);
         audioCtx2d.stroke();
+
+        // Benchmark sampling: accumulate draw times and occasionally log average
+        try {
+            const t1 = performance.now();
+            _drawAudioFrameCounter++;
+            _drawAudioTimeSum += (t1 - t0);
+            if (_drawAudioFrameCounter >= 120) {
+                const avg = _drawAudioTimeSum / _drawAudioFrameCounter;
+                if (settings.debug) console.log(`drawAudioWaveform avg ms (${_drawAudioFrameCounter} frames): ${avg.toFixed(2)}`);
+                _drawAudioFrameCounter = 0;
+                _drawAudioTimeSum = 0;
+            }
+        } catch (e) { /* ignore */ }
     }
 
     // Cache measurement divs per-textarea to avoid repeated DOM creation and style reads
@@ -3773,6 +3860,18 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    lockProgressBtn.addEventListener('click', function () {
+        const isMinimized = document.body.classList.contains('layout-minimized');
+        if (isMinimized) {
+            settings.lockProgress = !settings.lockProgress;
+            showNotification(`Progress lock ${settings.lockProgress ? 'enabled' : 'disabled'}.`);
+        } else {
+            showNotification('Progress lock can only be toggled in fullscreen mode.');
+        }
+        lockProgressBtn.querySelector('.icon-minimize').style.display = settings.lockProgress ? 'none' : 'flex';
+        lockProgressBtn.querySelector('.icon-maximize').style.display = settings.lockProgress ? 'flex' : 'none';
+    });
+
     function debugText() {
 
     }
@@ -3811,12 +3910,15 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!document.body.classList.contains('layout-minimized')) return;
 
             const distanceFromBottom = window.innerHeight - e.clientY;
-
-            if (distanceFromBottom <= BOTTOM_THRESHOLD) {
+            if (settings.lockProgress) {
+                controlsEl.classList.remove('show-on-hover');
+            }
+            if (distanceFromBottom <= BOTTOM_THRESHOLD && !settings.lockProgress) {
                 showControls();
             } else {
                 scheduleHideControls();
             }
+
         });
 
         // Also hide when mouse leaves the window

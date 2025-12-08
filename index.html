@@ -36,7 +36,7 @@
     </script>
 </head>
 <script>
-    let masterExample = ``;
+    let masterExample = `Ch[4:1]`;
     /*
     ||test using
     (180){16}
@@ -75,11 +75,15 @@
         <div id="fullscreen">
             <span class="icon-minimize">fullscreen</span>
         </div>
-        <div id="1xSpeed">
-            <span class="icon-minimize">1x_mobiledata</span>
+        <div id="lockProgress">
+            <span class="icon-minimize">lock_open_right</span>
+            <span class="icon-maximize" style="display: none;">lock</span>
         </div>
         <div id="-0.25xSpeed">
             <span class="icon-minimize">fast_rewind</span>
+        </div>
+        <div id="1xSpeed">
+            <span class="icon-minimize">1x_mobiledata</span>
         </div>
         <div id="+0.25xSpeed">
             <span class="icon-minimize">fast_forward</span>
@@ -141,7 +145,7 @@
             <li data-action="open-folder">開啟資料夾</li>
             <li data-action="open-maidata">開啟 Maidata</li>
             <li data-action="open-audio">開啟音檔</li>
-                <li data-action="download-offline">下載離線資源</li>
+            <li data-action="download-offline">下載離線資源</li>
             <li data-action="save-file">儲存</li>
         </ul>
         <ul class="diff-menu dropdown-content hide">
