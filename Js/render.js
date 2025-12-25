@@ -1469,19 +1469,26 @@ export function drawSlidePath(startNp, endNp, type, color, t_progress, ctx, hw, 
         }
         if (!fading) {
             const k = (note.chain && !note.firstOne) ? (_t_arrow_progress > 0) + 0 : Math.min(_t_arrow_progress * note.slideTime / note.delay + 1, 1);
-
+            const st = pathObject.getPointAtLength(0);
             const p = pathObject.getPointAtLength(_t_arrow * totalLen);
             currentCtx.save();
             currentCtx.translate(p.x, p.y);
-            currentCtx.rotate(p.angle - Math.PI * 49 / 40);
-
+            currentCtx.rotate(p.angle - Math.PI * 50 / 39);
+            drawStar(0, 0, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, note);
+            currentCtx.restore();
+            if (wSlide) {
+                function b(ang) {
+                    currentCtx.save();
+                    currentCtx.translate(st.x + totalLen * Math.cos(ang) * _t_arrow * Math.sqrt(2 + Math.sqrt(2)) / 2, st.y + totalLen * Math.sin(ang) * _t_arrow * Math.sqrt(2 + Math.sqrt(2)) / 2);
+                    drawStar(0, 0, k * 1.5, color, false, ang - Math.PI * 50 / 39, currentCtx, hbw, currentSettings, calAng, s, k, note);
+                    currentCtx.restore();
+                }
+                b(st.angle + Math.PI / 8);
+                b(st.angle - Math.PI / 8);
+            }
             //ctx.font = "bold 24px Segoe UI"; // Smaller font
             //ctx.fillStyle = "black";
             //ctx.fillText(`${slidePosDiff(startNp, endNp)}`, 0, 50);
-            drawStar(0, 0, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, note);
-            if (wSlide) drawStar(bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, 0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, note);
-            if (wSlide) drawStar(0 - bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) * 1.15, bIncrementPer * _t_arrow * (totalLen / spacing - 2 * wSlide) / 1.5, k * 1.5, color, false, 0, currentCtx, hbw, currentSettings, calAng, s, k, note);
-            currentCtx.restore();
         }
     }
 
@@ -1889,7 +1896,6 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
                 if (isFill) ctx.strokeStyle = innerStrokeStyle; // Reset for center arc
                 if (stage === 3) _arc(cx, cy, currentSize * 0.15, ctx);
             }
-
         } else { // str logic (non-hold)
             if (currentSettings.useImgSkin) {
                 // use canvas built-in alpha handling for image opacity
@@ -1967,7 +1973,23 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     if (holdtime && holdtime > 0) {
         ctx.shadowColor = `rgba(255, 255, 255)`;
         ctx.shadowBlur = s * 0.4;
-        strPrg(t_touch / holdtime);
+        if (currentSettings.useImgSkin) {
+            if (!isImageReady(noteImages.touchhold_border)) return;
+            if (t_touch / holdtime >= 0) {
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, currentSize * 2.8, -Math.PI / 2, t_touch / holdtime * Math.PI * 2 - Math.PI / 2);
+                //ctx.lineTo(Math.sin(t_touch / holdtime * Math.PI * 2) * currentSize * 2.8, -Math.cos(t_touch / holdtime * Math.PI * 2) * currentSize * 2.8);
+                ctx.closePath();
+                ctx.clip();
+                ctx.drawImage(noteImages.touchhold_border, -currentSize * 2.8, -currentSize * 2.8, currentSize * 5.6, currentSize * 5.6);
+                ctx.restore();
+            }
+        } else {
+            strPrg(t_touch / holdtime);
+        }
     }
     ctx.shadowBlur = s * 0.2;
     ctx.shadowColor = `rgba(0, 0, 0, ${opacity})`;
@@ -1975,13 +1997,13 @@ export function drawTouch(pos, sizeFactor, color, type, distance, opacity, holdt
     const filtered = tbuf2.filter(v => v.note.pos == pos && v.note.touch == type && v.t < 0);
     if (filtered.length > 1 && filtered.findIndex(v => v.note.time < note.time) === -1) {
         if (currentSettings.useImgSkin) {
-            if (!isImageReady(noteImages.touch_border_2)) return;
+            if (!(isImageReady(noteImages.touch_border_2) && isImageReady(noteImages.touch_border_3) && isImageReady(noteImages.touch_border_2_each) && isImageReady(noteImages.touch_border_3_each))) return;
             ctx.save();
             ctx.translate(centerX, centerY);
             ctx.globalAlpha = opacity;
-            ctx.drawImage(noteImages.touch_border_2, -currentSize * 3.5, -currentSize * 3.5, currentSize * 7, currentSize * 7);
+            ctx.drawImage(noteImages['touch_border_2' + (note.isDoubleTouch ? '_each' : '')], -currentSize * 3.5, -currentSize * 3.5, currentSize * 7, currentSize * 7);
             if (filtered.length > 2) {
-                ctx.drawImage(noteImages.touch_border_3, -currentSize * 3.75, -currentSize * 3.75, currentSize * 7.5, currentSize * 7.5);
+                ctx.drawImage(noteImages['touch_border_3' + (note.isDoubleTouch ? '_each' : '')], -currentSize * 3.75, -currentSize * 3.75, currentSize * 7.5, currentSize * 7.5);
             }
             ctx.restore();
         } else {
