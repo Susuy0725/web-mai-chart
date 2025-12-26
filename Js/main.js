@@ -39,6 +39,7 @@ export const defaultSettings = {
     'noteSkin': 1, // 0 default ,1 Deluxe
     'disableSyntaxErrorNotify': true,
     'hideBgAndVideoWhenPaused': true,
+    'showHanabiEffect': false, // testing
 };
 
 const imgsToCreate = [
@@ -246,6 +247,9 @@ const imgsToCreate = [
     ['touchhold_border',
         'png',
         'TouchHoldSkins'],
+];
+const effects = [
+    'ColorBall.png'
 ];
 
 if (defaultSettings.debug) {
@@ -459,6 +463,12 @@ export function loadimgs() {
                 img.src = `Skins/${noteSkin[settings.noteSkin]}/${notetype == "" ? "" : (notetype + "/")}${id}.${filetype}`;
                 imgsContainer.appendChild(img);
                 // Also populate the exported noteImages map for other modules to use
+            });
+            effects.forEach((filename) => {
+                const img = document.createElement('img');
+                img.id = "img_" + filename.split('.')[0];
+                img.src = `Skins/Effects/${filename}`;
+                imgsContainer.appendChild(img);
             });
             getImgs().catch(err => console.error('getImgs failed:', err));
         }
@@ -3964,6 +3974,12 @@ async function getImgs() {
             const el = document.getElementById("img_" + dom[0]);
             if (el) { images[dom[0]] = el; }
             else { console.warn(`Image element #${dom[0]} not found.`); }
+        });
+        Object.entries(effects).forEach(([i, filename]) => {
+            let dom = filename.split('.'); 
+            const el = document.getElementById("img_" + dom[0]);
+            if (el) { images[dom[0]] = el; }
+            else { console.warn(`Image effect element #${dom[0]} not found.`); }
         });
     } catch (e) {
         console.error('Error getting images:', e);

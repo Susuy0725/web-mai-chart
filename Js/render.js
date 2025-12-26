@@ -479,9 +479,11 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
             if (note.touchTime) {
                 if (_t <= note.touchTime) drawHoldEffect(centerX, centerY, _t, color, ctx, hbw, currentSettings, noteBaseSize, note);
                 if (_t > note.touchTime) drawHoldEndEffect(centerX, centerY, (_t - note.touchTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
+                if (_t > note.touchTime && note.hanabi && currentSettings.showHanabiEffect) drawHanabiEffect(centerX, centerY, (_t - note.touchTime) / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
             } else {
                 drawSimpleEffect(centerX, centerY, _t / currentSettings.effectDecayTime * 2, color, ctx, hbw, currentSettings, noteBaseSize, note);
                 drawStarEffect(centerX, centerY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, false, note);
+                if (note.hanabi && currentSettings.showHanabiEffect) drawHanabiEffect(centerX, centerY, _t / currentSettings.effectDecayTime, color, ctx, hbw, currentSettings, noteBaseSize, false, note);
             }
         }
     }
@@ -652,6 +654,7 @@ export function drawHoldEndEffect(x, y, sizeFactor, color, ctx, hbw, currentSett
 
 export function drawHanabiEffect(x, y, sizeFactor, color, ctx, hbw, currentSettings, noteBaseSize, note = undefined) {
     if (!currentSettings.showEffect) return;
+    if (isImageReady('ColorBall')) return;
 
     function ani(x) {
         return 1 - Math.pow(x, 2);
@@ -662,28 +665,16 @@ export function drawHanabiEffect(x, y, sizeFactor, color, ctx, hbw, currentSetti
     }
 
     const cap_sizeFactor = Math.min(Math.max(sizeFactor, 0), 1);
-    let s = noteBaseSize; // Use passed base size
-    let currentSize = s * (ani1(cap_sizeFactor) * 1.75);
-    let localColor = ctx.createRadialGradient(x, y, 0, x, y, currentSize);
-    localColor.addColorStop(0, '#FCFF0A00');
-    localColor.addColorStop(1, hexWithAlpha('#FCFF0A', 0.75 * ani(cap_sizeFactor)));
+    let s = noteBaseSize;
 
     ctx.shadowColor = "#00000000";
-    ctx.lineWidth = currentSize * 0.75 * currentSettings.lineWidthFactor;
-    ctx.fillStyle = localColor;
-    ctx.beginPath();
-    ctx.arc(x, y, currentSize, 0, 2 * Math.PI);
-    ctx.closePath();
-    ctx.fill();
-
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(Math.PI / 8);
-    for (let i = 0; i < 4; i++) {
-        ctx.drawImage(noteImages.star_eff, -s * (0.75 - cap_sizeFactor) * 2.75, - s * (0.75 - cap_sizeFactor) * 0.75, s * 2.75, s * (1 - cap_sizeFactor) * 1.75);
-        // ctx.drawImage(noteImages.star_eff, -s , - s , s, s);
-        ctx.rotate(Math.PI / 2);
-    }
+    ctx.drawImage(noteImages.ColorBall,
+        -s * 4,
+        - s * 4,
+        s * 8,
+        s * 8);
     ctx.restore();
 }
 
