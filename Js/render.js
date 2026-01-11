@@ -402,8 +402,8 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
                 }, note);
             }
             if (note.star) {
-                if (note.doubleSlide && !currentSettings.useImgSkin) drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang + 1.2) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note);
-                drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note);
+                if (note.doubleSlide && !currentSettings.useImgSkin) drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang + 1.2) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note, _t);
+                drawStar(currentX, currentY, currentSize, color, note.ex ?? false, (nang) / -4 * Math.PI, ctx, hbw, currentSettings, calAng, noteBaseSize, undefined, note, _t);
             } else if (note.holdTime != null) {
                 note.holdTime = note.holdTime == 0 ? 1E-64 : note.holdTime;
                 let holdLength = 0;
@@ -664,17 +664,24 @@ export function drawHanabiEffect(x, y, sizeFactor, color, ctx, hbw, currentSetti
         return Math.log(99 * x + 1) / Math.log(100);
     }
 
-    const cap_sizeFactor = Math.min(Math.max(sizeFactor, 0), 1);
     let s = noteBaseSize;
-
-    ctx.shadowColor = "#00000000";
+    let s1 = ani1(sizeFactor) * s * 2;
     ctx.save();
+    ctx.shadowColor = "#00000000";
+    ctx.globalAlpha = 1 - Math.min(Math.max(sizeFactor * 2, 0), 1);
+    ctx.globalCompositeOperation = 'lighter';
     ctx.translate(x, y);
     ctx.drawImage(noteImages.ColorBall,
-        -s * 4,
-        - s * 4,
-        s * 8,
-        s * 8);
+        -s * 6,
+        - s * 6,
+        s * 12,
+        s * 12);
+    ctx.globalAlpha = 1 - Math.min(Math.max(sizeFactor, 0), 1);
+    ctx.drawImage(noteImages.ColorBall,
+        -s1 * 2,
+        - s1 * 2,
+        s1 * 4,
+        s1 * 4);
     ctx.restore();
 }
 
@@ -993,9 +1000,11 @@ export function drawStarEffect(x, y, sizeFactor, color, ctx, hbw, currentSetting
 }
 
 // 移除了未使用的參數 (hbw, currentSettings, calAng)
-export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSettings, calAng, noteBaseSize, alpha = 1, note = undefined) {
+export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSettings, calAng, noteBaseSize, alpha = 1, note = undefined, _time = 0) {
     // 角度調整可以保留，這屬於視覺效果的一部分
     const currentSize = Math.max(sizeFactor * noteBaseSize, 0);
+    if (currentSettings.starRotate) ang += (1 / (note.ltime ?? 0)) * _time * Math.PI * -10; // 讓星星隨時間旋轉
+    console.log(note.ltime);
 
     if (currentSize < 1E-5) return; // 避免繪製過小的星星
 
@@ -1003,7 +1012,7 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
 
     if (currentSettings.useImgSkin) {
         // Draw using image skin
-        const imgStar = noteImages[(note.break ? 'star_break' : ((note.isDoubleTapHold || note.isDoubleSlide) ? 'star_each' : 'star')) + (note.doubleSlide ? '_double' : '')];
+        const imgStar = noteImages[(note.break ? 'star_break' : ((note.isDoubleTapHold || note.isDoubleSlide) ? 'star_each' : (currentSettings.pinkStar ? 'star_pink' : 'star'))) + (note.doubleSlide ? '_double' : '')];
         if (!isImageReady(imgStar)) return;
         ctx.translate(x, y);
         ctx.rotate((ang * 0.192 + 0.125) * Math.PI);
@@ -1312,10 +1321,10 @@ export class PathRecorder {
             y: seg.p1.y + (seg.p2.y - seg.p1.y) * t,
             angle: seg.ang,
         };
-
+        /*
         if (this._pointCache) this._pointCache.set(cacheKey, result);
-
-        return result;
+    
+        return result;*/
     }
 
     /**

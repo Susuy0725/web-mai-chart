@@ -233,28 +233,77 @@ body.layout-minimized .icons-container {
     font-size: 20px;
     color: white;
     box-shadow: 0 1px 3px #00000080;
+    box-sizing: border-box;
     border-radius: 5px;
     display: flex;
     align-items: center;
+    align-self: center;
     justify-content: center;
     overflow: hidden;
     transition: all 200ms ease;
-}
-
-/* Prevent flexbox from shrinking/expanding icons and preserve their box size */
-.icons-container>div {
-    box-sizing: border-box;
-    flex: 0 0 auto; /* do not grow or shrink; size determined by width/height */
+    flex: 0 0 auto;
+    /* do not grow or shrink; size determined by width/height */
     min-width: 30px;
     min-height: 30px;
-    max-width: 40px; /* small allowance if you want slightly larger clickable area */
+    max-width: 40px;
+    /* small allowance if you want slightly larger clickable area */
     max-height: 40px;
-    align-self: center;
 }
 
 .icons-container>div:hover {
     background: #444;
     box-shadow: 0 1px 2px #00000080, 0 0 1px #0000005e inset;
+}
+
+.icons-container>div>.show-on-hover {
+    position: relative;
+    right: 5px;
+    /* Keep element in flow but hidden so transforms can animate */
+    display: flex;
+    opacity: 0;
+    visibility: hidden;
+    transform: rotateX(90deg);
+    transform-origin: top center;
+    transition: transform 200ms ease, opacity 200ms ease;
+    pointer-events: none;
+    width: 0;
+}
+
+.icons-container>div:hover>.show-on-hover {
+    width: 20px;
+    transform: rotateX(0deg);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.icons-container>div>.hide-on-hover {
+    font-family: sans-tc, suse, sans-serif;
+    font-size: 14px;
+    position: relative;
+    left: 5px;
+    /* Keep element in flow but hidden so transforms can animate */
+    width: 40px;
+    display: flex;
+    opacity: 1;
+    visibility: visible;
+    transform: rotateX(0deg);
+    transform-origin: bottom center;
+    transition: transform 200ms ease, opacity 200ms ease;
+    pointer-events: auto;
+    text-align: center;
+}
+
+.icons-container>div:hover>.hide-on-hover {
+    width: 0;
+    transform: rotateX(90deg);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+#\31 xSpeed {
+    width: 40px;
 }
 
 #hideContorls:active,
@@ -819,13 +868,14 @@ body.layout-minimized #bgImg {
 
 #bgImg {
     position: absolute;
-    top: 30px;
     left: 0;
-    width: 50%;
-    height: calc(100% - 30px);
     transition: width ease 0.5s, background ease 0.5s;
     z-index: -12;
-    object-fit: scale-down;
+    width: 50%;
+    top: 30px;
+    height: calc(100% - 30px);
+    object-fit: contain;
+    object-position: left center;
 }
 
 body.layout-minimized #bgMask {
@@ -940,7 +990,7 @@ body.layout-minimized #bgMask {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0,0,0,0.45);
+    background: rgba(0, 0, 0, 0.45);
     z-index: 2000;
     transition: opacity 180ms ease, visibility 180ms ease;
 }
@@ -952,13 +1002,13 @@ body.layout-minimized #bgMask {
 }
 
 .loading-box {
-    background: rgba(30,30,30,0.95);
+    background: rgba(30, 30, 30, 0.95);
     color: #fff;
     padding: 16px 18px;
     border-radius: 8px;
     min-width: 240px;
     max-width: 80%;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -972,7 +1022,7 @@ body.layout-minimized #bgMask {
 
 .loading-progress {
     height: 10px;
-    background: rgba(255,255,255,0.12);
+    background: rgba(255, 255, 255, 0.12);
     border-radius: 6px;
     overflow: hidden;
 }
@@ -980,8 +1030,10 @@ body.layout-minimized #bgMask {
 .loading-progress-bar {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg,#4dd0e1,#00bcd4);
+    background: linear-gradient(90deg, #4dd0e1, #00bcd4);
     transition: width 200ms ease;
 }
 
-.loading-progress[aria-hidden="true"] { display: none; }
+.loading-progress[aria-hidden="true"] {
+    display: none;
+}

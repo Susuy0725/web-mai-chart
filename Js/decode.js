@@ -443,6 +443,7 @@ export function simai_decode(_data) {
                     }
                     tempNote[i].pos = sp.head;
                     tempNote[i].star = true;
+                    tempNote[i].ltime = sp.slideInfo[sp.slideInfo.length - 1].duration;
                 }
 
                 if (!sp.data[0]) {
@@ -564,7 +565,7 @@ export function simai_decode(_data) {
                     // i 是原本外面那個迴圈的索引
                     // 把「從 i+1 開始」一次插入所有 newNote
                     tempNote.splice(i + 1, 0, ...tempData);
-
+                    
                     for (let k = 0; k < tempData.length; k++) {
                         const e = tempNote[i + 1 + k];
                         e.chainTarget = tempNote[e.chainTarget].UUID;

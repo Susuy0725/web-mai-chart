@@ -9,6 +9,7 @@ export const defaultSettings = {
     'noteSize': 0.09,
     'speed': 5.5,
     'pinkStar': false,
+    'starRotate': true,
     'touchSpeed': 2,
     'slideSpeed': 0,
     'holdEndNoSound': false,
@@ -94,6 +95,9 @@ const imgsToCreate = [
     ['star',
         'png',
         'StarSkins'],
+    ['star_pink',
+        'png',
+        'StarSkins'],
     ['star_ex',
         'png',
         'StarSkins'],
@@ -104,6 +108,9 @@ const imgsToCreate = [
         'png',
         'StarSkins'],
     ['star_double',
+        'png',
+        'StarSkins'],
+    ['star_pink_double',
         'png',
         'StarSkins'],
     ['star_break_double',
@@ -495,30 +502,33 @@ let soundSettings = {
 const defaultSoundSettings = JSON.parse(JSON.stringify(soundSettings));
 let maidata; // Chart data
 
-const settingsConfig = {
+const settingsFormConfig = {
     game: [
         { target: settings, key: 'musicDelay', label: '譜面偏移 (音樂延遲)', type: 'number', step: 0.01, min: -20, max: 20 },
-        { target: play, key: 'playbackSpeed', label: '回放速度', type: 'number', step: 0.01, min: 0.01, max: 4 },
         { target: settings, key: 'backgroundDarkness', label: '背景暗度', type: 'number', step: 0.05, min: 0, max: 1 },
+        { target: play, key: 'playbackSpeed', label: '回放速度', type: 'number', step: 0.01, min: 0.01, max: 4 },
         { target: settings, key: 'followText', label: '文本跟隨', type: 'boolean' },
-        { target: settings, key: 'speed', label: 'Tap/Hold 速度倍率', type: 'number', step: 0.1 },
+        { target: settings, key: 'speed', label: 'Tap/Hold 速度', type: 'number', step: 0.1 },
+        { target: settings, key: 'slideSpeed', label: 'Slide 速度', type: 'number', step: 0.1 },
+        { target: settings, key: 'touchSpeed', label: 'Touch 速度', type: 'number', step: 0.1 },
         { target: settings, key: 'pinkStar', label: '粉紅色星星', type: 'boolean' },
-        { target: settings, key: 'slideSpeed', label: 'Slide 速度倍率', type: 'number', step: 0.1 },
-        { target: settings, key: 'touchSpeed', label: 'Touch 速度倍率', type: 'number', step: 0.1 },
+        { target: settings, key: 'starRotate', label: '星星旋轉', type: 'boolean' },
         { target: settings, key: 'middleDisplay', label: '中央顯示', type: 'dropdown', options: ['無', 'COMBO', '分數(累加)'], value: [0, 1, 2] },
-        { target: settings, key: 'roundStroke', label: '圓滑邊緣', type: 'boolean' },
-        { target: settings, key: 'showEffect', label: '顯示簡單效果', type: 'boolean' },
         { target: settings, key: 'holdEndNoSound', label: 'Hold 結尾無音效', type: 'boolean' },
+    ],
+    display: [
+        { target: settings, key: 'showSlide', label: '顯示 Slide 軌跡', type: 'boolean' },
+        { target: settings, key: 'disableSensorWhenPlaying', label: '播放時隱藏 Touch 位置文本', type: 'boolean' },
         { target: settings, key: 'distanceToMid', label: 'Note 出現位置 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: settings, key: 'noteSize', label: 'Note 大小 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: settings, key: 'lineWidthFactor', label: 'Note 粗細 (不影響 Touch) (0-1)', type: 'number', step: 0.01, min: 0, max: 2 },
-        { target: settings, key: 'showSlide', label: '顯示 Slide 軌跡', type: 'boolean' },
-        { target: settings, key: 'disableSensorWhenPlaying', label: '播放時隱藏 Touch 位置文本', type: 'boolean' },
-        { target: settings, key: 'noNoteArc', label: '不顯示音符弧線', type: 'boolean' },
+        { target: settings, key: 'showEffect', label: '顯示簡單效果', type: 'boolean' },
         { target: settings, key: 'effectDecayTime', label: '效果持續時間', type: 'number', step: 0.01 },
-        { target: settings, key: 'deviceAudioOffset', label: '設備音訊延遲 (毫秒)', type: 'number', step: 1, min: -1000, max: 1000 },
+        { target: settings, key: 'noNoteArc', label: '不顯示音符弧線', type: 'boolean' },
+        { target: settings, key: 'roundStroke', label: '圓滑邊緣', type: 'boolean' },
     ],
     sound: [
+        { target: settings, key: 'deviceAudioOffset', label: '設備音訊延遲 (毫秒)', type: 'number', step: 1, min: -1000, max: 1000 },
         { target: soundSettings, key: 'sfxs', label: '啟用打擊音效', type: 'boolean' },
         { target: soundSettings, key: 'answer', label: '啟用 Answer 音效', type: 'boolean' },
         { target: soundSettings, key: 'music', label: '啟用音樂', type: 'boolean' },
@@ -543,7 +553,12 @@ const settingsConfig = {
         { target: settings, key: 'disableSyntaxErrorNotify', label: '不要顯示語法錯誤訊息', type: 'boolean' },
         { target: settings, key: 'hideBgAndVideoWhenPaused', label: '當暫停時不要顯示BG和影片', type: 'boolean' },
     ]
-};
+}, settingsGroupConfig = [
+    { key: 'game', title: '基本' },
+    { key: 'sound', title: '音效' },
+    { key: 'display', title: '顯示' },
+    { key: 'other', title: '其他' }
+];
 
 let notes = [{}], notesData = {}, marks = {};
 let triggered = [];
@@ -1054,7 +1069,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const customMenu = document.getElementById("customMenu");
     const editor = document.getElementById("editor");
     const timeDisplay = document.getElementById("nowTrackTime");
+    const speedDisplay = document.getElementById("nowSpeed");
     const bgmEl = document.getElementById("bgm");
+
     // WebAudio-based bgm wrapper to replace <audio> playback while preserving the original API used across the codebase
     const bgm = (function () {
         const listeners = {};
@@ -1230,6 +1247,8 @@ document.addEventListener('DOMContentLoaded', function () {
         debugBtn.innerHTML = '<span>Log Debug Info</span>';
         if (a) a.appendChild(debugBtn);
     }
+
+    speedDisplay.innerText = play.playbackSpeed.toFixed(2) + 'x';
     // --- Prevent native gestures: pinch-zoom, pull-to-refresh, and left-edge swipe ---
     (function preventNativeGestures() {
         let touchStartX = 0, touchStartY = 0;
@@ -2756,9 +2775,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const content = document.createElement('div');
         content.className = 'settings-bookmark-content';
 
-        const groups = [{ key: 'game', title: '基本' }, { key: 'sound', title: '音效' }, { key: 'other', title: '其他' }];
-
-        groups.forEach((g, idx) => {
+        settingsGroupConfig.forEach((g, idx) => {
             const btn = document.createElement('div');
             btn.className = 'bookmark-btn' + (idx === 0 ? ' active' : '');
             btn.textContent = g.title;
@@ -2773,7 +2790,7 @@ document.addEventListener('DOMContentLoaded', function () {
             pane.appendChild(h3);
 
             try {
-                const cfgs = settingsConfig[g.key] || [];
+                const cfgs = settingsFormConfig[g.key] || [];
                 cfgs.forEach(cfg => createField(cfg, g.key, pane));
             } catch (e) { console.warn('generateSettingsForm: missing settingsConfig for', g.key); }
 
@@ -2852,7 +2869,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (save) {
             try {
                 ['game', 'sound', 'other'].forEach(groupKey => {
-                    settingsConfig[groupKey].forEach(config => {
+                    settingsFormConfig[groupKey].forEach(config => {
                         const input = document.getElementById(`setting-${groupKey}-${config.key}`);
                         if (!input) return;
 
@@ -3193,7 +3210,9 @@ document.addEventListener('DOMContentLoaded', function () {
             bgm.currentTime = currentTimelineValue;
             // ensure audio context unlocked before playing (iOS requirement)
             ensureAudioUnlocked().then(() => {
-                bgm.play().catch(e => console.error('BGM play failed:', e));
+                bgm.play().catch(e => {
+                    if (e.message !== "No audio loaded") console.error('BGM play failed:', e);
+                });
             }).catch(e => { console.warn('ensureAudioUnlocked failed:', e); bgm.play().catch(() => { }); });
             if (bgVideo && bgVideo.src) {
                 try { bgVideo.currentTime = currentTimelineValue; } catch (e) { }
@@ -3821,6 +3840,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
         bgm.currentTime = currentTimelineValue;
+
+        speedDisplay.innerText = play.playbackSpeed.toFixed(2) + 'x';
     });
 
     speedAdd.addEventListener('click', function () {
@@ -3838,6 +3859,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
         bgm.currentTime = currentTimelineValue;
+
+        speedDisplay.innerText = play.playbackSpeed.toFixed(2) + 'x';
     });
 
     speedMinus.addEventListener('click', function () {
@@ -3855,6 +3878,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
         bgm.currentTime = currentTimelineValue;
+
+        speedDisplay.innerText = play.playbackSpeed.toFixed(2) + 'x';
     });
 
     fullscreenBtn.addEventListener('click', function () {
@@ -3976,7 +4001,7 @@ async function getImgs() {
             else { console.warn(`Image element #${dom[0]} not found.`); }
         });
         Object.entries(effects).forEach(([i, filename]) => {
-            let dom = filename.split('.'); 
+            let dom = filename.split('.');
             const el = document.getElementById("img_" + dom[0]);
             if (el) { images[dom[0]] = el; }
             else { console.warn(`Image effect element #${dom[0]} not found.`); }
