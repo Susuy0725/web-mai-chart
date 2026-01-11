@@ -2,6 +2,8 @@ import { simai_decode } from "./decode.js";
 import * as render from "./render.js";
 import { loadZipFromUrl } from "./zipLoader.js";
 
+const viteDev = import.meta.env.MODE === 'development';
+
 export const defaultSettings = {
     'musicDelay': 0,
     'distanceToMid': 0.3,
@@ -3282,7 +3284,7 @@ document.addEventListener('DOMContentLoaded', function () {
         settings.audioZoom = Math.min(settings.audioZoom, 750)
     });
 
-    if (typeof masterExample !== 'undefined' && masterExample) {
+    if (typeof masterExample !== 'undefined' && masterExample && viteDev) {
         editor.value = masterExample;
         data["inote_" + settings.nowDiff] = masterExample;
         processChartData();
