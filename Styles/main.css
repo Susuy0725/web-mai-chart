@@ -480,10 +480,38 @@ body.layout-minimized .icons-container {
     min-width: 100px;
     font-size: 12px;
     border-radius: 3px;
+    position: relative;
 }
 
 #customMenu>div:hover {
     background: rgba(255, 255, 255, 0.188)
+}
+
+#customMenu>div.has-submenu::after {
+    content: '▶';
+    float: right;
+    font-size: 6px;
+    margin: 4px;
+    height: 100%;
+}
+
+#customMenu>div.has-submenu>.submenu {
+    display: none;
+}
+
+#customMenu>div.has-submenu:hover>.submenu {
+    display: block;
+    color: #fff;
+    position: absolute;
+    left: 100%;
+    background: #232323;
+    border: 1px solid #444;
+    border-radius: 6px;
+    box-shadow: 0px 2px 5px rgb(0 0 0 / 50%);
+    z-index: 101;
+    overflow-y: auto;
+    height: 190px;
+    transition: height 0.1s ease, top 60ms ease, left 60ms ease, opacity 300ms ease;
 }
 
 .imgs {

@@ -2,7 +2,14 @@ import { simai_decode } from "./decode.js";
 import * as render from "./render.js";
 import { loadZipFromUrl } from "./zipLoader.js";
 
-const viteDev = import.meta.env.MODE === 'development';
+let _vite;
+try {
+    import.meta.env.MODE === 'development';
+    _vite = true;
+} catch (e) {
+    _vite = false;
+}
+const viteDev = _vite;
 
 export const defaultSettings = {
     'musicDelay': 0,
