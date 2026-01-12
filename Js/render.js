@@ -197,12 +197,12 @@ export function renderGame(ctx, notesToRender, currentSettings, images, time, tr
         case 2:
             const trueScore = Math.round(Math.max(play.score, 0));
             // use gamma correction for more natural progression
-            ctx.fillStyle = adjustBrightness("#498BFF", (1 - settings.backgroundDarkness) ** 0.5);
+            ctx.fillStyle = adjustBrightness("#498BFF", (1 - settings.backgroundDarkness) ** 0.45);
             if (trueScore > 800000) {
-                ctx.fillStyle = adjustBrightness("#FF6353", (1 - settings.backgroundDarkness) ** 0.5);
+                ctx.fillStyle = adjustBrightness("#FF6353", (1 - settings.backgroundDarkness) ** 0.45);
             }
             if (trueScore > 1000000) {
-                ctx.fillStyle = adjustBrightness("#FFD559", (1 - settings.backgroundDarkness) ** 0.5);
+                ctx.fillStyle = adjustBrightness("#FFD559", (1 - settings.backgroundDarkness) ** 0.45);
             }
             ctx.strokeStyle = "white";
             ctx.lineWidth = Math.floor(hbw * 0.015);
@@ -1004,7 +1004,6 @@ export function drawStar(x, y, sizeFactor, color, ex, ang, ctx, hbw, currentSett
     // 角度調整可以保留，這屬於視覺效果的一部分
     const currentSize = Math.max(sizeFactor * noteBaseSize, 0);
     if (currentSettings.starRotate) ang += (1 / (note.ltime ?? 0)) * _time * Math.PI * -10; // 讓星星隨時間旋轉
-    console.log(note.ltime);
 
     if (currentSize < 1E-5) return; // 避免繪製過小的星星
 

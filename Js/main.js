@@ -50,6 +50,8 @@ export const defaultSettings = {
     'disableSyntaxErrorNotify': true,
     'hideBgAndVideoWhenPaused': true,
     'showHanabiEffect': false, // testing
+    'breakGlow': false, // unused
+    'language': 0,
 };
 
 const imgsToCreate = [
@@ -497,6 +499,7 @@ let soundSettings = {
     'answer': true,
     'sfxs': true,
     'music': true,
+    'masterVol': 1,
     'answerVol': 0.8,
     'judgeVol': 0.2,
     'judgeExVol': 0.1,
@@ -541,6 +544,7 @@ const settingsFormConfig = {
         { target: soundSettings, key: 'sfxs', label: '啟用打擊音效', type: 'boolean' },
         { target: soundSettings, key: 'answer', label: '啟用 Answer 音效', type: 'boolean' },
         { target: soundSettings, key: 'music', label: '啟用音樂', type: 'boolean' },
+        { target: soundSettings, key: 'masterVol', label: '主音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'musicVol', label: '音樂音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'answerVol', label: 'Answer 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
         { target: soundSettings, key: 'judgeVol', label: 'judge 音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
@@ -552,6 +556,7 @@ const settingsFormConfig = {
         { target: soundSettings, key: 'hanabiVol', label: '煙火音量 (0-1)', type: 'number', step: 0.01, min: 0, max: 1 },
     ],
     other: [
+        { target: settings, key: 'language', label: '語言', type: 'dropdown', options: ['Auto', '繁體中文（台灣）', 'English'], value: [0, 1, 2] },
         { target: settings, key: 'showFpsCounter', label: '顯示 FPS', type: 'boolean' },
         { target: settings, key: 'showPerfBreakdown', label: '啟用性能監控', type: 'boolean' },
         { target: settings, key: 'mainColor', label: '主色', type: 'color' },
@@ -561,6 +566,7 @@ const settingsFormConfig = {
         { target: settings, key: 'disablePreview', label: '禁用音符預覽', type: 'boolean' },
         { target: settings, key: 'disableSyntaxErrorNotify', label: '不要顯示語法錯誤訊息', type: 'boolean' },
         { target: settings, key: 'hideBgAndVideoWhenPaused', label: '當暫停時不要顯示BG和影片', type: 'boolean' },
+        { target: settings, key: 'maxSlideOnScreenCount', label: '最大顯示 Slide 條數', type: 'number', step: 1, min: 50, max: 1000 },
     ]
 }, settingsGroupConfig = [
     { key: 'game', title: '基本' },
@@ -686,7 +692,10 @@ function queueSound(name, volume = 0.1) {
     if (audioCtx.state === 'suspended') { audioCtx.resume(); }
     // schedule slightly in the future to avoid glitches
     const when = audioCtx.currentTime + 0.02;
-    soundQueue.push({ name, volume, when });
+    // Apply master volume (clamp 0..1)
+    const master = (typeof soundSettings.masterVol !== 'undefined') ? soundSettings.masterVol : 1;
+    const vol = Math.max(0, Math.min(1, (volume || 0) * master));
+    soundQueue.push({ name, volume: vol, when });
 }
 
 function processSoundQueue() {
@@ -1085,15 +1094,19 @@ document.addEventListener('DOMContentLoaded', function () {
     const bgm = (function () {
         const listeners = {};
         let source = null;
-        let startedAt = 0; // audioCtx.currentTime when started
-        let offset = 0; // seconds into buffer when started
+        let startedAt = 0;
+        let offset = 0;
         let playing = false;
         let _playbackRate = 1;
 
         const gainNode = audioCtx.createGain();
         gainNode.gain.value = 1;
+
+        // 【新增】建立一個 MediaStream 目的地，用來給錄影功能抓取聲音
+        const recordingDest = audioCtx.createMediaStreamDestination();
+        gainNode.connect(recordingDest); // 將聲音導向錄製流
+
         try {
-            // connect to analyser if available
             if (typeof analyser !== 'undefined' && analyser) {
                 gainNode.connect(analyser);
                 analyser.connect(audioCtx.destination);
@@ -1101,7 +1114,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 gainNode.connect(audioCtx.destination);
             }
         } catch (e) {
-            try { gainNode.connect(audioCtx.destination); } catch (e2) { /* ignore */ }
+            try { gainNode.connect(audioCtx.destination); } catch (e2) { }
         }
 
         function dispatch(evt) {
@@ -1237,7 +1250,9 @@ document.addEventListener('DOMContentLoaded', function () {
             get volume() { return gainNode.gain.value; },
             set volume(v) { try { gainNode.gain.setValueAtTime(Number(v) || 0, audioCtx.currentTime); } catch (e) { gainNode.gain.value = v; } },
             // expose element for advanced usages if needed
-            _element: bgmEl
+            _element: bgmEl,
+            // 【新增】暴露這個流給錄製函數使用
+            _captureStream: recordingDest.stream
         };
     })();
     const bgVideo = document.getElementById('backgroundVideo');
@@ -2606,7 +2621,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // When our WebAudio wrapper finishes decoding into fullAudioBuffer it will dispatch 'loadedmetadata'
     bgm.addEventListener('loadedmetadata', function () {
-        try { bgm.volume = soundSettings.musicVol * soundSettings.music; } catch (e) { /* ignore */ }
+        try { bgm.volume = soundSettings.musicVol * soundSettings.music * (soundSettings.masterVol ?? 1); } catch (e) { /* ignore */ }
         try {
             const audioDurationMs = (bgm.duration + 1) * 1000;
             maxTime = Math.max(maxTime, audioDurationMs);
@@ -2672,6 +2687,104 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         // --- 新增結束 ---
         return result;
+    }
+
+    document.querySelector('.record-button')?.addEventListener('click', function () {
+        allDropdowns.forEach(menu => menu.classList.add('hide'));
+        startRecordingProcess();
+    });
+
+    // Recording state variables
+    let _mediaRecorder = null;
+    let _recordedChunks = [];
+    let _recordingStream = null;
+    let _isRecording = false;
+
+    // Start/stop recording the main canvas. Toggles recording state.
+    function startRecordingProcess() {
+        const btn = document.querySelector('.record-button');
+        const span = btn ? btn.querySelector('span') : null;
+        const canvas = document.getElementById('render');
+        if (!canvas) {
+            try { showNotification('找不到 render 畫布，無法錄製'); } catch (e) { }
+            return;
+        }
+
+        // Toggle: start if not recording, stop if recording
+        if (!_isRecording) {
+            try {
+                const fps = 30;
+                let stream = canvas.captureStream ? canvas.captureStream(fps) : null;
+                if (!stream) {
+                    showNotification('此瀏覽器不支援錄製');
+                    return;
+                }
+
+                // --- 修改這裡：從 Web Audio 抓取軌道 ---
+                try {
+                    if (bgm && bgm._captureStream) {
+                        const audioTracks = bgm._captureStream.getAudioTracks();
+                        audioTracks.forEach(t => stream.addTrack(t));
+                        console.log('成功加入 Web Audio 軌道');
+                    }
+                } catch (e) {
+                    console.error('加入音軌失敗:', e);
+                }
+
+                _recordedChunks = [];
+                _recordingStream = stream;
+
+                // --- MIME 類型檢查與下載邏輯 (建議使用我上次提供的優化版) ---
+                const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+                let mimeType = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+                _mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+                _mediaRecorder.ondataavailable = (ev) => {
+                    if (ev.data && ev.data.size > 0) _recordedChunks.push(ev.data);
+                };
+
+                _mediaRecorder.onstop = () => {
+                    const blob = new Blob(_recordedChunks, { type: _mediaRecorder.mimeType });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `recording-${new Date().getTime()}.webm`;
+                    a.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                    showNotification('錄製完成並下載');
+                };
+
+                _mediaRecorder.start(100);
+                _isRecording = true;
+                if (span) span.textContent = '停止錄製';
+                if (btn) btn.classList.add('recording');
+                showNotification('開始錄製畫面');
+            } catch (e) {
+                console.error('startRecordingProcess start error', e);
+                showNotification('啟動錄製失敗：' + (e && e.message));
+            }
+        } else {
+            // stop
+            try {
+                if (_mediaRecorder && _mediaRecorder.state !== 'inactive') {
+                    _mediaRecorder.stop();
+                }
+            } catch (e) {
+                console.error('stop recording error', e);
+            }
+            try {
+                if (_recordingStream) {
+                    _recordingStream.getTracks().forEach(t => { try { t.stop(); } catch (e) { } });
+                }
+            } catch (e) {
+                console.error('stop recording stream error', e);
+            }
+            _isRecording = false;
+            if (span) span.textContent = '錄製';
+            if (btn) btn.classList.remove('recording');
+            showNotification('已停止錄製');
+        }
     }
 
     document.querySelector('.sett-menu-button').addEventListener('click', function () {
@@ -2895,7 +3008,22 @@ document.addEventListener('DOMContentLoaded', function () {
                             newValue = input.value;
                         } else if (config.type === 'dropdown') {
                             newValue = config.value ? config.value[input.selectedIndex] : input.value;
-                            console
+                            // Special handling: language dropdown should also update localStorage 'locale' and try to call global setLocale
+                            if (config.key === 'language') {
+                                let localeStr = 'auto';
+                                try {
+                                    if (newValue === 0 || newValue === '0') localeStr = 'auto';
+                                    else if (newValue === 1 || newValue === '1') localeStr = 'zh-TW';
+                                    else if (newValue === 2 || newValue === '2') localeStr = 'en';
+                                } catch (e) { localeStr = 'auto'; }
+                                try { localStorage.setItem('locale', localeStr); } catch (e) { }
+                                try {
+                                    const resolved = (localeStr === 'auto') ? (navigator.language || 'zh-TW') : localeStr;
+                                    if (window && typeof window.setLocale === 'function') {
+                                        window.setLocale(resolved);
+                                    }
+                                } catch (e) { /* ignore if i18n not present */ }
+                            }
                         } else {
                             newValue = input.value;
                         }
@@ -2912,7 +3040,7 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('settings-overlay').classList.add("hide");
         inSettings = false;
         if (bgm) {
-            bgm.volume = soundSettings.musicVol * soundSettings.music;
+            bgm.volume = soundSettings.musicVol * soundSettings.music * (soundSettings.masterVol ?? 1);
             if (isFinite(play.playbackSpeed) && play.playbackSpeed > 0) {
                 bgm.playbackRate = play.playbackSpeed;
                 if (bgVideo && bgVideo.src) try { bgVideo.playbackRate = play.playbackSpeed; } catch (e) { }
@@ -3159,7 +3287,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function onTimelineInteractionEnd(e) {
         if (settings.followText) editor.focus();
-        bgm.volume = soundSettings.musicVol * soundSettings.music;
+        bgm.volume = soundSettings.musicVol * soundSettings.music * (soundSettings.masterVol ?? 1);
         currentTimelineValue = parseFloat(e.target.value);
         startTime = Date.now() - (currentTimelineValue * 1000) / play.playbackSpeed;
         play.pause = play.btnPause;
@@ -3207,7 +3335,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     controls.play.addEventListener('click', function (e) {
-        bgm.volume = soundSettings.musicVol * soundSettings.music;
+        bgm.volume = soundSettings.musicVol * soundSettings.music * (soundSettings.masterVol ?? 1);
         play.btnPause = !play.btnPause;
         play.pause = play.btnPause;
         this.textContent = icons[0 + play.btnPause];
@@ -3353,23 +3481,6 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         _cachedStarPathMap.set(key, p);
         return p;
-    }
-
-    function ensureTouchGradient(ctx, zoom, height) {
-        const z = isFinite(zoom) ? zoom : 200;
-        // Recreate gradient when zoom changes or canvas height changes
-        if (!_cachedTouchGrad || _cachedTouchGradZoom !== z || !_cachedAudioCanvas || (_cachedAudioCanvas && _cachedAudioCanvas.height !== height)) {
-            try {
-                _cachedTouchGrad = ctx.createLinearGradient(0, 0, -z * 100, height || (ctx.canvas && ctx.canvas.height) || 100);
-                _cachedTouchGrad.addColorStop(0, '#ff3874');
-                _cachedTouchGrad.addColorStop(1, 'rgba(255, 191, 81, 0)');
-                _cachedTouchGradZoom = z;
-            } catch (e) {
-                _cachedTouchGrad = null;
-                _cachedTouchGradZoom = NaN;
-            }
-        }
-        return _cachedTouchGrad;
     }
 
     function drawAudioWaveform() {

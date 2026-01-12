@@ -170,12 +170,13 @@ body {
 .actions div {
     display: flex;
     margin-right: 2px;
-    padding: 0 6px;
+    padding: 0 12px;
     height: 100%;
     width: auto;
     min-width: 60px;
     background: #ffffff00;
     border-radius: 0px;
+    box-shadow: 0 0 3px #000000;
     transition: background 60ms, border-radius 500ms ease;
     color: white;
     text-align: center;

@@ -1,0 +1,16 @@
+{
+  "file-menu": "File",
+  "edit-menu": "Edit",
+  "diff-menu": "Difficulty",
+  "view-menu": "View",
+  "info-menu": "Chart Info",
+  "sett-menu": "Settings",
+  "new-file": "New...",
+  "open-folder": "Open Folder",
+  "open-maidata": "Open maidata.txt",
+  "open-audio": "Open Audio",
+  "download-offline": "Download Offline Assets",
+  "save-file": "Save File",
+  "undo": "Undo",
+  "redo": "Redo"
+}
