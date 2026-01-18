@@ -1,0 +1,114 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <label for="ver">Version :</label>
+    <select name="ver" id="ver">
+    </select>
+    <button id="search">Search!</button>
+    <div id="results"></div>
+
+    <script>
+        const vers = {
+            "1": "maimai",
+            "2": "maimai PLUS",
+            "2.5": "舞萌中国",
+            "3": "GreeN",
+            "4": "GreeN PLUS",
+            "5": "ORANGE",
+            "6": "ORANGE PLUS",
+            "7": "PiNK",
+            "8": "PiNK PLUS",
+            "9": "MURASAKi",
+            "10": "MURASAKi PLUS",
+            "11": "MiLK",
+            "12": "MiLK PLUS",
+            "13": "FiNALE",
+            "14": "DX",
+            "15": "DX PLUS",
+            "16": "Splash",
+            "17": "Splash PLUS",
+            "18": "UNiVERSE",
+            "19": "UNiVERSE PLUS",
+            "20": "FESTiVAL",
+            "21": "FESTiVAL PLUS",
+            "22": "BUDDiES",
+            "23": "BUDDiES PLUS",
+            "24": "PRiSM",
+            "25": "PRiSM PLUS",
+            "26": "CiRCLE"
+        };
+
+        let data;
+
+        fetch("https://dp4p6x0xfi5o9.cloudfront.net/maimai/data.json")
+            .then(response => response.json())
+            .then(d => {
+                data = d;
+                console.log(data);
+            })
+            .catch(error => console.error('Error fetching data:', error));
+
+        const verSelect = document.getElementById('ver');
+        for (const [key, value] of Object.entries(vers)) {
+            const option = document.createElement('option');
+            option.value = key;
+            option.text = `${key} - ${value}`;
+            verSelect.appendChild(option);
+        }
+
+        async function getSongMaidata(ver, song) {
+            const url = `../Other/maisquaredd/${ver.padStart(2, '0')}. ${vers[ver]}/${song.title}/maidata.txt`;
+            const epath = encodeURIComponent(url);
+            console.log('Fetching from URL:', epath);
+            try {
+                const r = await fetch(epath);
+                const contentType = r.headers.get('content-type');
+                if (contentType && contentType.indexOf('text/plain') !== -1) {
+                    const text = await r.text();
+                    console.log(`Chart Data for ${song.title}:\n`, text);
+                    return text;
+                } else {
+                    console.error('Unexpected content type:', contentType);
+                    return null;
+                }
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                return null;
+            }
+        }
+
+        document.getElementById('search').addEventListener('click', function () {
+            if (!data) {
+                console.error('Data not loaded yet.');
+                return;
+            }
+            const ver = document.getElementById('ver').value;
+            console.log(`./Other/maisquaredd/${ver.padStart(2, '0')}. ${vers[ver]}`);
+            const filtered = data.songs.filter(item => item.version === vers[ver]);
+            console.log(filtered);
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            filtered.forEach(song => {
+                const songDiv = document.createElement('div');
+                songDiv.textContent = song.title;
+                songDiv.onclick = () => {
+                    alert(`Title: ${song.title}\nArtist: ${song.artist}\nBPM: ${song.bpm}\nVersion: ${song.version}`);
+                    getSongMaidata(ver, song).then(chartData => {
+                        if (chartData) {
+                            console.log(`Chart Data for ${song.title}:\n`, chartData);
+                        }
+                    }).catch(error => console.error('Error fetching chart data:', error));
+                };
+                resultsDiv.appendChild(songDiv);
+            });
+        });
+    </script>
+</body>
+
+</html>

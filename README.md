@@ -8,9 +8,13 @@
 
 # Troubleshooting
 
+## Language switching
+
+Go to **設定 (Settings)** -> **其他 (Misc)** and you can change the **Language (語言)** from there. If you select the Chinese after select English, you may need to refresh the page for changes to take effect.
+
 ## Keyboard keeps popping up on mobile while playing
 This happens because the editor automatically focuses on the current note text.
-* **Solution**: Go to **設定 (Settings)** -> **基本 (Basics)** and turn off **文本跟隨 (Follow text while playback)**.
+* Go to **設定 (Settings)** -> **基本 (Basics)** and turn off **文本跟隨 (Follow text while playback)**.
 
 ## Playback is not smooth (Lagging)
 If you experience frame drops or stuttering, try reducing the rendering load:
