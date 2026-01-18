@@ -1,6 +1,7 @@
 import { simai_decode } from "./decode.js";
 import * as render from "./render.js";
 import { loadZipFromUrl } from "./zipLoader.js";
+import { t } from "./i18n.js";
 
 let _vite;
 try {
@@ -557,10 +558,10 @@ const settingsFormConfig = {
     ],
     other: [
         { target: settings, key: 'language', label: '語言', type: 'dropdown', options: ['Auto', '繁體中文（台灣）', 'English'], value: [0, 1, 2] },
+        { target: settings, key: 'mainColor', label: '主色', type: 'color' },
         { target: settings, key: 'showFpsCounter', label: '顯示 FPS', type: 'boolean' },
         { target: settings, key: 'showPerfBreakdown', label: '啟用性能監控', type: 'boolean' },
-        { target: settings, key: 'mainColor', label: '主色', type: 'color' },
-        { target: settings, key: 'useImgSkin', label: '使用圖片皮膚(測試中)', type: 'boolean' },
+        { target: settings, key: 'useImgSkin', label: '使用圖片皮膚', type: 'boolean' },
         { target: settings, key: 'hires', label: '高解析度', type: 'boolean' },
         { target: settings, key: 'noteSkin', label: 'Note 皮膚 (需要重新整理)', type: 'dropdown', options: ['default', 'Deluxe'], value: [0, 1] },
         { target: settings, key: 'disablePreview', label: '禁用音符預覽', type: 'boolean' },
@@ -2795,6 +2796,12 @@ document.addEventListener('DOMContentLoaded', function () {
         inSettings = true;
     });
 
+    document.querySelector('.help-menu-button').addEventListener('click', function () {
+        allDropdowns.forEach(menu => menu.classList.add('hide'));
+        // open my github page in new tab
+        window.open('https://github.com/Susuy0725/web-mai-chart?tab=readme-ov-file#troubleshooting', '_blank');
+    });
+
     document.querySelector('.info-menu-button').addEventListener('click', function () {
         allDropdowns.forEach(menu => menu.classList.add('hide'));
         generateInfoForm();
@@ -2831,7 +2838,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const fieldId = `setting-${groupKey}-${config.key}`;
             const label = document.createElement('label');
             label.htmlFor = fieldId;
-            label.textContent = (config.label || config.key) + ':';
+            label.textContent = t(config.label || config.key, `setting-${config.key}`) + ':';
             let input;
             const currentValue = (config.target && config.target[config.key] !== undefined) ? config.target[config.key] : (settings[config.key] !== undefined ? settings[config.key] : '');
 
@@ -2864,9 +2871,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     config.options.forEach((option, index) => {
                         const opt = document.createElement('option');
                         if (typeof config === 'object') {
-                            opt.value = config.value[index]; opt.textContent = option;
+                            opt.value = config.value[index]; opt.textContent = t(option, `option-${config.key}-${index}`);
                         } else {
-                            opt.value = option; opt.textContent = option;
+                            opt.value = option; opt.textContent = t(option, `option-${config.key}-${index}`);
                         }
                         if (opt.value == currentValue) opt.selected = true;
                         input.appendChild(opt);
@@ -2900,7 +2907,7 @@ document.addEventListener('DOMContentLoaded', function () {
         settingsGroupConfig.forEach((g, idx) => {
             const btn = document.createElement('div');
             btn.className = 'bookmark-btn' + (idx === 0 ? ' active' : '');
-            btn.textContent = g.title;
+            btn.textContent = t(g.title, `settings-group-${g.key}`);
             btn.dataset.group = g.key;
             sidebar.appendChild(btn);
 
@@ -2908,7 +2915,7 @@ document.addEventListener('DOMContentLoaded', function () {
             pane.className = 'bookmark-pane' + (idx === 0 ? '' : ' hide');
             pane.dataset.group = g.key;
             const h3 = document.createElement('h3');
-            h3.textContent = g.title; h3.style.marginTop = '0';
+            h3.textContent = t(g.title, `settings-group-${g.key}`); h3.style.marginTop = '0';
             pane.appendChild(h3);
 
             try {
@@ -2936,7 +2943,7 @@ document.addEventListener('DOMContentLoaded', function () {
         form.innerHTML = '';
 
         const fields = [
-            { key: '', label: '歌曲資料', title: true, noinput: true },
+            { key: 'h', label: '歌曲資料', title: true, noinput: true },
             { key: 'title', label: '標題' },
             { key: 'artist', label: '作曲' },
             { key: 'des', label: '譜師 (未指定難度)' },
@@ -2967,7 +2974,7 @@ document.addEventListener('DOMContentLoaded', function () {
         fields.forEach(f => {
             const val = data[f.key] || '';
             const label = f.title ? document.createElement('h4') : document.createElement('label');
-            label.textContent = f.label;
+            label.textContent = t(f.label, `info-${f.key || f.label}`);
             const input = document.createElement('input');
             input.name = f.key;
             input.value = val;
@@ -2990,7 +2997,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function handleSettingsClose(save) {
         if (save) {
             try {
-                ['game', 'sound', 'other'].forEach(groupKey => {
+                Object.keys(settingsFormConfig).forEach(groupKey => {
                     settingsFormConfig[groupKey].forEach(config => {
                         const input = document.getElementById(`setting-${groupKey}-${config.key}`);
                         if (!input) return;

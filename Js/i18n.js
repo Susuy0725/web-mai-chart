@@ -5,7 +5,7 @@ let currentDict = {};
 export async function loadLocale(locale) {
     if (localesCache[locale]) { currentDict = localesCache[locale]; currentLocale = locale; return; }
     try {
-        const resp = await fetch(`Other/locales/${locale}.json`);
+        const resp = await fetch(`../Other/locales/${locale}.json`);
         if (!resp.ok || resp.status === 404) throw new Error('no locale');
         const dict = await resp.json();
         localesCache[locale] = dict;
@@ -13,11 +13,12 @@ export async function loadLocale(locale) {
         currentLocale = locale;
     } catch (e) {
         console.warn('loadLocale failed', e);
+        currentDict = {};
+        currentLocale = locale;
     }
 }
 
 export function t(org, key, vars) {
-    console.log('Translating key:', key, 'with vars:', vars);
     let s = (currentDict && currentDict[key]) ? currentDict[key] : org;
     if (vars && typeof vars === 'object') {
         Object.keys(vars).forEach(k => {
@@ -44,6 +45,7 @@ export function translateDOM(root = document) {
 }
 
 export async function setLocale(locale) {
+    console.log('Setting locale to', locale);
     await loadLocale(locale);
     translateDOM();
     try { localStorage.setItem('locale', locale); } catch (e) { }

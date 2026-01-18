@@ -111,17 +111,17 @@
     <canvas id="audioRender"></canvas>
     <textarea id="editor" placeholder="-- No context, please type simai here or load maidata"></textarea>
     <div id="customMenu" class="hide">
-        <div class="menu-item" data-action="cut">剪下</div>
-        <div class="menu-item" data-action="copy">複製</div>
-        <div class="menu-item" data-action="paste">貼上</div>
-        <div class="menu-item" data-action="selectAll">全選</div>
-        <div class="menu-item" data-action="trun-upside-down">↕ 上下反轉</div>
-        <div class="menu-item" data-action="trun-left-right">↔ 左右反轉</div>
-        <div class="menu-item" data-action="trun-right">↻ 右轉 45° (順時針)</div>
-        <div class="menu-item" data-action="trun-left">↺ 左轉 45° (逆時針)</div>
-        <div class="menu-item" data-action="trun-180">⇌ 180° 轉</div>
-        <div class="menu-item" data-action="ad-rm-bk">加入/移除 break (滑星不適用)</div>
-        <div class="menu-item" data-action="ad-rm-ex">加入/移除 ex (滑星不適用)</div>
+        <div class="menu-item" data-action="cut" data-i18n="cut">剪下</div>
+        <div class="menu-item" data-action="copy" data-i18n="copy">複製</div>
+        <div class="menu-item" data-action="paste" data-i18n="paste">貼上</div>
+        <div class="menu-item" data-action="selectAll" data-i18n="selectAll">全選</div>
+        <div class="menu-item" data-action="trun-upside-down" data-i18n="mirror-upside-down">↕ 上下反轉</div>
+        <div class="menu-item" data-action="trun-left-right" data-i18n="mirror-left-right">↔ 左右反轉</div>
+        <div class="menu-item" data-action="trun-right" data-i18n="turn-right">↻ 右轉 45° (順時針)</div>
+        <div class="menu-item" data-action="trun-left" data-i18n="turn-left">↺ 左轉 45° (逆時針)</div>
+        <div class="menu-item" data-action="trun-180" data-i18n="turn-180">⇌ 180° 轉</div>
+        <div class="menu-item" data-action="ad-rm-bk" data-i18n="add-remove-break">加入/移除 break (滑星不適用)</div>
+        <div class="menu-item" data-action="ad-rm-ex" data-i18n="add-remove-ex">加入/移除 ex (滑星不適用)</div>
         <!--<div class="menu-item has-submenu">更多選項
             <div class="submenu">
                 <div class="menu-item" data-action="export-pdf">匯出 PDF</div>
@@ -153,6 +153,7 @@
         <div class="info-menu-button"><span data-i18n="info-menu">譜面資訊</span></div>
         <!-- <div class="record-button"><span data-i18n="record-button">錄製</span></div>-->
         <div class="sett-menu-button"><span data-i18n="sett-menu">設定</span></div>
+        <div class="help-menu-button"><span data-i18n="help-menu">幫助</span></div>
     </div>
     <div class="dropdownlist">
         <ul class="file-menu dropdown-content hide">
@@ -173,24 +174,24 @@
             <li data-diff="7">ORIGINAL</li>
         </ul>
         <ul class="edit-menu dropdown-content hide">
-            <li data-action="undo" data-i18n="undo">復原 undo</li>
-            <li data-action="redo" data-i18n="redo">重做 redo</li>
+            <li data-action="undo" data-i18n="undo">↩ 復原</li>
+            <li data-action="redo" data-i18n="redo">↪ 重做</li>
         </ul>
     </div>
 
     <div id="settings-overlay" class="hide"></div>
     <div id="settings-popup" class="hide">
         <form id="settings-form"></form>
-        <button type="button" id="save-settings-btn">儲存</button>
-        <button type="button" id="reset-settings-btn">重置設定</button>
-        <button type="button" id="clear-cache-btn">清除快取</button>
-        <button type="button" id="cancel-settings-btn">取消</button>
+        <button type="button" id="save-settings-btn" data-i18n="save">儲存</button>
+        <button type="button" id="reset-settings-btn" data-i18n="reset-settings">重置設定</button>
+        <button type="button" id="clear-cache-btn" data-i18n="clear-cache">清除快取</button>
+        <button type="button" id="cancel-settings-btn" data-i18n="cancel">取消</button>
     </div>
 
     <div id="info-popup" class="hide">
         <form id="info-form"></form>
-        <button type="button" id="save-info-btn">儲存</button>
-        <button type="button" id="cancel-info-btn">取消</button>
+        <button type="button" id="save-info-btn" data-i18n="save">儲存</button>
+        <button type="button" id="cancel-info-btn" data-i18n="cancel">取消</button>
     </div>
 
     <div id="imgs" class="imgs"></div>
