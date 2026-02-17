@@ -1066,3 +1066,82 @@ body.layout-minimized #bgMask {
 .loading-progress[aria-hidden="true"] {
     display: none;
 }
+
+.quick-panel {
+    position: fixed;
+    transform-origin: center center;
+    bottom: 20px;
+    right: 0px;
+    aspect-ratio: 2/1;
+    width: 15%;
+    display: none;
+    z-index: 1500;
+}
+
+#center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 5%;
+    aspect-ratio: 1 / 1; 
+    border: 2px solid #ffffffaa;
+    border-radius: 50%;
+    z-index: 1;
+}
+
+#select-up {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 25%;
+    height: 20%;
+    border: 2px solid #ffffffaa;
+    text-align: center;
+    color: #ffffffaa;
+    border-radius: 4px;
+    z-index: 0;
+}
+
+#select-down {
+    position: absolute;
+    top: 80%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 25%;
+    height: 20%;
+    border: 2px solid #ffffffaa;
+    color:#ffffffaa;
+    text-align: center;
+    border-radius: 4px;
+    z-index: 0;
+}
+
+#select-left {
+    position: absolute;
+    top: 50%;   
+    left: 30%;
+    transform: translate(-50%, -50%);
+    width: 25%;
+    height: 20%;
+    text-align: center;
+    color: #ffffffaa;
+    border: 2px solid #ffffffaa;
+    border-radius: 4px;
+    z-index: 0;
+}
+
+#select-right {
+    position: absolute;
+    top: 50%;
+    left: 70%;
+    transform: translate(-50%, -50%);
+    width: 25%;
+    height: 20%;
+    text-align: center;
+    border: 2px solid #ffffffaa;
+    color:#ffffffaa;
+    border-radius: 4px;
+    z-index: 0;
+}

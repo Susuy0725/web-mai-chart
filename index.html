@@ -16,6 +16,7 @@
     <link rel="preload" href="Fonts/SUSE-VariableFont_wght.ttf" as="font" type="font/ttf" crossorigin>
     <script src="./Js/main.js" type="module"></script>
     <script src="./Js/localStorage.js" type="module"></script>
+    <script src="./Js/flipFunction.js" type="module"></script>
     <script type="module">
         import { settings, play } from './Js/main.js';
         window.settings = settings;
@@ -193,6 +194,15 @@
         <button type="button" id="save-info-btn" data-i18n="save">儲存</button>
         <button type="button" id="cancel-info-btn" data-i18n="cancel">取消</button>
     </div>
+
+    <div id="quick-panel" class="quick-panel">
+        <div id="center"></div>
+        <div id="select-up">↕</div>
+        <div id="select-down">↺</div>
+        <div id="select-left">↔</div>
+        <div id="select-right">↻</div>
+    </div>
+    <script src="./Js/panel.js" type="module"></script>
 
     <div id="imgs" class="imgs"></div>
 </body>
