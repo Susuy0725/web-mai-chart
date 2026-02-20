@@ -2,6 +2,13 @@
 
 *[Enter](https://susuy0725.github.io/web-mai-chart)* #
 
+# - Beta Testing
+
+*[Enter](https://susuy0725.github.io/web-mai-chart-beta/)* #
+
+This beta version offers a smoother and more innovative experience.
+However, speed adjustments are not currently available.
+
 # - Simai Wiki
 
 *[Enter](https://w.atwiki.jp/simai/pages/1002.html)* #
