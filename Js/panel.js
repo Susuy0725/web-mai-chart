@@ -15,9 +15,9 @@ let mousedir = "none";
 
 const dirs = [
     { name: "right", check: a => a >= -45 && a < 45, el: selectRight },
-    { name: "down", check: a => a >= 45 && a < 135, el: selectDown },
-    { name: "left", check: a => a >= 135 || a < -135, el: selectLeft },
-    { name: "up", check: a => a >= -135 && a < -45, el: selectUp },
+    { name: "down",  check: a => a >= 45 && a < 135, el: selectDown },
+    { name: "left",  check: a => a >= 135 || a < -135, el: selectLeft },
+    { name: "up",    check: a => a >= -135 && a < -45, el: selectUp },
 ];
 
 function setActive(dirName) {
@@ -51,7 +51,7 @@ function getEditorSelection() {
 /* ---------- keyboard ---------- */
 
 window.addEventListener("keydown", (e) => {
-    if (!(e.ctrlKey && e.shiftKey)) return;
+    if (e.key !== "Control") return;
 
     mousedir = "none";
     if (ctrlDown) return;
@@ -66,12 +66,12 @@ window.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("keyup", (e) => {
-    if (!(e.key === "Control" || e.key === "Shift")) return;
-    if (e.ctrlKey && e.shiftKey) return;
+    if (e.key !== "Control") return;
 
     ctrlDown = false;
     quickPanel.style.display = "none";
 
+    /* Ctrl 放開時再計算一次方向（避免最後沒 mousemove） */
     const dx = mousePos.x - startPos.x;
     const dy = mousePos.y - startPos.y;
     const angle = Math.atan2(dy, dx) * 180 / Math.PI;
