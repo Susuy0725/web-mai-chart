@@ -1,16 +1,16 @@
 # New Version
 
-### *[Enter](https://susuy0725.github.io/web-mai-chart-x/)* #
+### *[[--Enter--]](https://susuy0725.github.io/web-mai-chart-x/)* #
 
 Currently, only Chinese is available as the language.
-
-# The Website
-
-### *[Enter](https://susuy0725.github.io/web-mai-chart)* #
 
 # Simai Wiki
 
 ### *[Enter](https://w.atwiki.jp/simai/pages/1002.html)* #
+
+# The Website
+
+### *[Enter](https://susuy0725.github.io/web-mai-chart)* #
 
 # Troubleshooting
 
