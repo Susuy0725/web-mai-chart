@@ -1,13 +1,12 @@
+# New Version
+
+### *[Enter](https://susuy0725.github.io/web-mai-chart-x/)* #
+
+Currently, only Chinese is available as the language.
+
 # The Website
 
 ### *[Enter](https://susuy0725.github.io/web-mai-chart)* #
-
-# Version 2 (Beta Testing)
-
-### *[Enter](https://susuy0725.github.io/web-mai-chart-beta/)* #
-
-This beta version offers a smoother and more innovative experience.
-However, speed adjustments are not currently available and only in Chinese.
 
 # Simai Wiki
 
